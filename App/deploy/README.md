@@ -1,7 +1,13 @@
 # Hostinger deployment
 
-Live at https://etccapps.com/carshow/, password-protected with a branded login screen
-matching SilentAuctionManager's style (see memory: silentauctionmanager-pattern).
+Live at **https://etccapps.com/apps/carshow/**, password-protected with a branded login
+screen matching SilentAuctionManager's style (see memory: silentauctionmanager-pattern).
+
+Note the `/apps/` prefix is required even though hPanel lists the FTP account's home
+directory as `public_html/carshow` (no `apps/` segment) — there's a server-level Alias
+mapping `/apps/carshow/` to that directory, matching the URL convention every other
+sub-app on this domain uses. Bare `/carshow/` 404s for everything, including brand new
+files, because it isn't a real path under the actual document root.
 
 ## Layout
 

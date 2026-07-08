@@ -1,6 +1,13 @@
 <?php
 session_start();
 
+// Belt-and-suspenders against browser/proxy caching of the gate itself —
+// this page's content depends on session state, so a cached copy (login
+// screen after you've authenticated, or vice versa) is always wrong. Relying
+// on PHP's default session cache limiter wasn't enough on this host.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
 // $PASSWORD_HASH is defined in secrets.php (gitignored, not committed — see
 // secrets.example.php for the template). Generate a new hash with:
 //   openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-password'

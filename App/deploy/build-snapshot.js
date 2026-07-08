@@ -29,6 +29,12 @@ var html = fs.readFileSync(HTML_SRC, "utf8");
 var regCsv = fs.readFileSync(regCsvPath, "utf8");
 var actCsv = fs.readFileSync(actCsvPath, "utf8");
 
+// "CSVs loaded:" should show when these exports actually happened, not
+// whenever a visitor's browser happens to load the page (the boot script
+// below re-ingests on every page view) — use the newer of the two files'
+// mtimes as the effective export time.
+var generatedAtMs = Math.max(fs.statSync(regCsvPath).mtimeMs, fs.statSync(actCsvPath).mtimeMs);
+
 // The offline-tool subtitle is accurate for ETCCCarShow.html run locally (drag
 // your own CSVs in, nothing leaves your computer) but false for this hosted
 // snapshot, which ships pre-loaded data over the network behind a login —
@@ -51,10 +57,11 @@ var snapshotScript = "\n<script>\n" +
   "(function(){\n" +
   "  var REG_CSV = " + jsStringLiteral(regCsv) + ";\n" +
   "  var ACT_CSV = " + jsStringLiteral(actCsv) + ";\n" +
+  "  var GENERATED_AT = new Date(" + generatedAtMs + ");\n" +
   "  function boot(){\n" +
   "    var reg = Papa.parse(REG_CSV, { header: true, skipEmptyLines: true }).data;\n" +
   "    var act = Papa.parse(ACT_CSV, { header: true, skipEmptyLines: true }).data;\n" +
-  "    window.__carshow.ingestRows(reg, act);\n" +
+  "    window.__carshow.ingestRows(reg, act, GENERATED_AT);\n" +
   "  }\n" +
   "  if (document.readyState === \"loading\") document.addEventListener(\"DOMContentLoaded\", boot);\n" +
   "  else boot();\n" +
@@ -67,3 +74,4 @@ fs.writeFileSync(OUT, out, "utf8");
 console.log("Wrote " + OUT + " (" + (out.length / 1024 / 1024).toFixed(2) + " MB) from:");
 console.log("  " + regCsvPath);
 console.log("  " + actCsvPath);
+console.log("CSVs loaded time will show: " + new Date(generatedAtMs).toString());

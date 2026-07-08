@@ -128,17 +128,22 @@
   // the activity file entirely), and only if nothing went wrong (a problem,
   // e.g. an unrecognized file, keeps the drop zone open so the user sees the
   // message and can retry).
-  function finishIngest(problems) {
-    regenerate();
+  function finishIngest(problems, generatedAt) {
+    regenerate(generatedAt);
     if (!problems.length && state.reg && state.act && state.result && state.result.ok) state.dropOpen = false;
     renderDrop(problems);
   }
-  function regenerate() {
+  // generatedAt defaults to "now" (correct when a person just dropped the
+  // files in), but callers with a real known ingestion time — e.g. the
+  // hosted snapshot replaying its embedded CSVs on every page load — should
+  // pass it explicitly so "CSVs loaded:" reflects when the export actually
+  // happened, not whenever a visitor happens to open the page.
+  function regenerate(generatedAt) {
     if (!state.reg) { state.result = null; renderViews(); return; }
     state.result = LOGIC.generate(state.reg.rows, state.act ? state.act.rows : [], {
       regFileName: state.reg.name,
       actFileName: state.act ? state.act.name : "",
-      generatedAt: new Date()
+      generatedAt: generatedAt || new Date()
     });
     state.sortCol = null; state.sortDir = 1;
     renderViews();
@@ -451,8 +456,7 @@
   var DETAIL_SECTIONS = [
     { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
-    { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] },
-    { title: "Shirt Selection", cols: ["FreeTShirtSize", "FreeTShirtSize Comments"] }
+    { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] }
   ];
   function openDetail(row) { state.detailRow = row; renderDetailModal(); }
   function closeDetail() { state.detailRow = null; renderDetailModal(); }
@@ -773,10 +777,10 @@
   // Debug/test hook (harmless in production): drive the app without file I/O.
   window.__carshow = {
     get state() { return state; },
-    ingestRows: function (regRows, actRows) {
+    ingestRows: function (regRows, actRows, generatedAt) {
       state.reg = { name: "registration.csv", rows: regRows };
       state.act = actRows ? { name: "activity.csv", rows: actRows } : null;
-      finishIngest([]);
+      finishIngest([], generatedAt);
     },
     showDropZone: showDropZone,
     setTab: function (t) { state.tab = t; renderViews(); },

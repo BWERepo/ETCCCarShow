@@ -57,6 +57,7 @@ var html =
 '<footer class="app-footer">\n' +
 '  <div>v' + versionString + ' &middot; Deployed ' + fmtDateTime(deployedAt) + '</div>\n' +
 '  <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>\n' +
+'  <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>\n' +
 '</footer>\n' +
 scripts.map(function (s) { return '<script>\n' + s + '\n</script>'; }).join("\n") +
 '\n</body>\n</html>\n';

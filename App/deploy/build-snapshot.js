@@ -29,6 +29,15 @@ var html = fs.readFileSync(HTML_SRC, "utf8");
 var regCsv = fs.readFileSync(regCsvPath, "utf8");
 var actCsv = fs.readFileSync(actCsvPath, "utf8");
 
+// The offline-tool subtitle is accurate for ETCCCarShow.html run locally (drag
+// your own CSVs in, nothing leaves your computer) but false for this hosted
+// snapshot, which ships pre-loaded data over the network behind a login —
+// swap it for wording that's true of *this* artifact.
+var OLD_SUBTITLE = "Offline tool · your data never leaves this computer";
+var NEW_SUBTITLE = "Hosted snapshot · view only, password-protected";
+if (html.indexOf(OLD_SUBTITLE) === -1) throw new Error("Could not find subtitle text to replace in " + HTML_SRC);
+html = html.replace(OLD_SUBTITLE, NEW_SUBTITLE);
+
 // JSON.stringify safely escapes quotes/backslashes/newlines; also guard the
 // two line-terminator code points (U+2028, U+2029) that JSON leaves
 // unescaped but that older JS engines choke on inside string literals.

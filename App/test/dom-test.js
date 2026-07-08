@@ -55,6 +55,20 @@ var w = dom.window, d = dom.window.document;
   ok(d.querySelector("#drop").classList.contains("collapsed"), "drop zone collapses after a successful load");
   ok(!d.querySelector("#drop .filecard"), "drop zone content is cleared, not just hidden");
 
+  // ---- default status filter: only Paid registrants shown on load (walk-ins are exempt) ----
+  // Fixture's 3 real rows are Open/"Not paid in time limit"/Cancelled — none literally
+  // "Paid" — so only the 25 walk-ins should be visible before anyone touches a checkbox.
+  var defaultRows = d.querySelectorAll("table.grid tbody tr");
+  ok(defaultRows.length === 25, "only walk-ins visible by default (got " + defaultRows.length + ")");
+  ok(Array.prototype.every.call(defaultRows, function (tr) { return tr.classList.contains("walkin"); }), "every default-visible row is a walk-in");
+  var defaultCount = d.querySelector("#rowcount");
+  ok(defaultCount && /25 of 28/.test(defaultCount.textContent), "row count label reflects paid-only default (got " + (defaultCount && defaultCount.textContent) + ")");
+
+  // turn on every status so the rest of this suite exercises the full fixture,
+  // same as before Paid-only became the default
+  w.__carshow.state.statusFilter = { paid: true, notpaid: true, cancelled: true, empty: true };
+  w.__carshow.setSearch("");
+
   var headers = Array.prototype.map.call(d.querySelectorAll("table.grid thead th"), function (th) { return th.textContent.replace(/[▲▼\s]+$/, "").trim(); });
   ok(headers[0] === "Last Name" && headers[1] === "First Name", "table headers start Last Name, First Name");
   ok(headers[headers.length - 1] === "Shirts", "last header is the collapsed Shirts column (got " + headers[headers.length - 1] + ")");

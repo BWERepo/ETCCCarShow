@@ -13,7 +13,7 @@
     sortDir: 1,
     search: "",
     showWalkins: true,
-    statusFilter: { paid: true, notpaid: true, cancelled: true, empty: true },
+    statusFilter: { paid: true, notpaid: false, cancelled: false, empty: false },
     tab: "reg",
     detailRow: null,  // registration row currently shown in the detail modal, or null
     dropOpen: true,   // whether the "drop the two CSVs here" card is showing

@@ -131,32 +131,50 @@ ends. The reliable path:
 
 2. **Inject the CSVs via the app's debug hook**, `window.__carshow.ingestRows(regRows,
    actRows)` — the same hook the app's own automated tests use, so it exercises the
-   exact same code path a real drag-drop would (it just skips the browser's file-reading
-   step, which isn't needed since you already have the CSV text from disk). Read both
-   CSV files with Bash, base64-encode them (avoids any quoting/escaping problems with
-   commas, quotes, or newlines inside the CSV content when building the JS string), then
-   run this via the `javascript_tool` (execute in the page, not a devtools snippet):
+   exact same code path a real drag-drop would. Get the CSV text into the page by
+   **fetching it from a second tiny server**, not by hand-copying file content into the
+   JS you send — copying a multi-thousand-character CSV by hand into a tool call
+   corrupted a row once (a `atob()`-decoded base64 blob silently dropped/mangled part of
+   one row, which only surfaced because it happened to produce an `Invalid activity
+   title ''` warning — a different corruption could easily have produced wrong numbers
+   with no warning at all). Also do NOT copy the CSVs into `App/` to serve them from
+   there — `App/` is a git repo pushed to GitHub, and Exports contains real member PII
+   (names, emails, phones, addresses) that must never land in a git-tracked directory,
+   even temporarily.
+
+   Instead, start the skill's own second server, which serves the Exports folder
+   directly and lives outside `App/` (`.claude/skills/export-carshow-data/serve-exports.js`):
+   ```
+   cd "Z:/Backup/Websites/CarShow/.claude/skills/export-carshow-data" && (nohup node serve-exports.js 5751 > /tmp/exports-serve.log 2>&1 &)
+   ```
+   Then, in the app's tab, fetch today's two files by their exact saved filenames and
+   ingest them (`javascript_tool`, with top-level `await`):
    ```js
-   function b64ToUtf8(b64) {
-     return decodeURIComponent(atob(b64).split('').map(function(c) {
-       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-     }).join(''));
-   }
-   var regRows = Papa.parse(b64ToUtf8("<base64 of registration CSV>"), { header: true, skipEmptyLines: true }).data;
-   var actRows = Papa.parse(b64ToUtf8("<base64 of activity CSV>"), { header: true, skipEmptyLines: true }).data;
+   var regCsv = await fetch('http://localhost:5751/registration_data<YYYYMMDD>.csv').then(r => r.text());
+   var actCsv = await fetch('http://localhost:5751/activity_registrant_data<YYYYMMDD>.csv').then(r => r.text());
+   var regRows = Papa.parse(regCsv, { header: true, skipEmptyLines: true }).data;
+   var actRows = Papa.parse(actCsv, { header: true, skipEmptyLines: true }).data;
    window.__carshow.ingestRows(regRows, actRows);
    var s = window.__carshow.state.result.summary;
-   ({ registrations: s.registrations, attendees: s.attendees, funds: s.funds, nextMemberNumber: s.nextMemberNumber, messages: window.__carshow.state.result.messages });
+   ({ regRowCount: regRows.length, actRowCount: actRows.length, summary: s, messages: window.__carshow.state.result.messages });
    ```
-   The returned object is your quick correctness check — read it before bothering with a
-   screenshot. Non-empty `messages` means something needs attention (see step 8 above).
+   If `fetch` fails with a CORS-looking error, confirm `serve-exports.js` is actually
+   running on 5751 (its `Access-Control-Allow-Origin` header is hardcoded to
+   `http://localhost:5750`, matching `serve.js`'s port — if either port ever changes,
+   update both files together). The returned object is your correctness check — `regRowCount`/
+   `actRowCount` should match the row counts you already logged in step 8's report, and
+   non-empty `messages` means something needs attention. Stop this second server when
+   you're done (`Stop-Process` on its node process) — no reason to leave a PII-serving
+   process running longer than the skill needs it.
 
-3. **Leave the tab and server running** when you're done — don't close them or kill the
-   server. The point of this step is the user gets a live, already-populated app window
-   they can immediately click around in, search, switch to the Summary tab, hit Print,
-   or hit Download Excel themselves. Don't click Download Excel for them unless they
-   asked for the Excel file specifically — downloading a file is their call, not an
-   automatic part of this skill.
+3. **Leave the tab and the app server (`serve.js`, port 5750) running** when you're
+   done — don't close the tab or kill that server. The point of this step is the user
+   gets a live, already-populated app window they can immediately click around in,
+   search, switch to the Summary tab, hit Print, or hit Download Excel themselves. Don't
+   click Download Excel for them unless they asked for the Excel file specifically —
+   downloading a file is their call, not an automatic part of this skill. (The *other*
+   server, `serve-exports.js` on 5751, is different — stop that one per step 2 once the
+   data is loaded; it has no reason to keep running.)
 
 4. **If you've edited anything under `App/src/`** (e.g. while fixing a new
    `activityTitleToBucket` mapping), you must run `node build.js` from the `App`

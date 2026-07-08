@@ -19,6 +19,27 @@ var scripts = [
   read("src/app.js")
 ].map(safeJs);
 
+// --- version: starts at 1.0, bumps the minor number every time this script
+// runs (each run produces the deployed ETCCCarShow.html). The stamped
+// version/date are baked into the HTML at build time — not computed at page
+// load — so they reflect when THIS artifact was actually built, not today.
+var VERSION_PATH = path.join(HERE, "version.json");
+var version = { major: 1, minor: 0 };
+if (fs.existsSync(VERSION_PATH)) {
+  try { version = JSON.parse(fs.readFileSync(VERSION_PATH, "utf8")); } catch (e) { /* fall back to 1.0 */ }
+}
+var versionString = version.major + "." + version.minor;
+var deployedAt = new Date();
+fs.writeFileSync(VERSION_PATH, JSON.stringify({
+  major: version.major, minor: version.minor + 1, lastBuilt: deployedAt.toISOString()
+}, null, 2) + "\n");
+
+function fmtDateTime(d) {
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear() + " " + h + ":" + p(d.getMinutes()) + " " + ap;
+}
+
 var html =
 '<!DOCTYPE html>\n' +
 '<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
@@ -33,6 +54,10 @@ var html =
 '  <div id="drop" class="drop"></div>\n' +
 '  <div id="app"></div>\n' +
 '</div>\n' +
+'<footer class="app-footer">\n' +
+'  <div>v' + versionString + ' &middot; Deployed ' + fmtDateTime(deployedAt) + '</div>\n' +
+'  <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>\n' +
+'</footer>\n' +
 scripts.map(function (s) { return '<script>\n' + s + '\n</script>'; }).join("\n") +
 '\n</body>\n</html>\n';
 

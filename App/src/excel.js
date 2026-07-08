@@ -47,14 +47,14 @@
       cols.forEach(function (c, ci) {
         var cell = row.getCell(ci + 1), v = rec[c];
         if (isShirt(res, c)) { cell.value = Number(v) > 0 ? Number(v) : null; cell.alignment = { horizontal: "center" }; }
-        else if (c === "Total Fee") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
+        else if (c === "Total Fee" || c === "Individual Sponsorship") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
         else if (c === "Member Number" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
         else { cell.value = (v === "" || v == null) ? null : v; }
         cell.border = border();
       });
     });
     ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: n } };
-    var widthFor = { "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Trans. Ref. Num.": 13, "Phone": 15 };
+    var widthFor = { "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
     ws.columns.forEach(function (col, i) {
       var name = cols[i];
       col.width = widthFor[name] || (isShirt(res, name) ? 7 : Math.min(Math.max(name.length + 2, 8), 20));
@@ -81,6 +81,8 @@
     kv("Registrations", s.registrations);
     ws.getCell(r, 1).value = "Funds"; ws.getCell(r, 1).font = { bold: true };
     var fv = ws.getCell(r, 2); fv.value = Number(s.funds); fv.numFmt = "$#,##0.00"; r++;
+    ws.getCell(r, 1).value = "Individual Sponsorships"; ws.getCell(r, 1).font = { bold: true };
+    var sv = ws.getCell(r, 2); sv.value = Number(s.sponsorship); sv.numFmt = "$#,##0.00"; r++;
     kv("Next Available Member Number", s.nextMemberNumber);
     r++;
     section("Shirts");

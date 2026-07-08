@@ -57,6 +57,61 @@
     return Object.prototype.hasOwnProperty.call(rows[0], name);
   }
 
+  // Aggregate attendees/funds/sponsorship/shirts/generations/clubs from a list
+  // of already-built registration records (the same shape as generate()'s
+  // `registrations` output). Kept independent of generate()'s CSV/activity
+  // matching so the app can re-run it against just the currently filtered/
+  // visible subset of records (search, status, walk-ins) for a live Summary
+  // tab, not only once against the full dataset.
+  function summarizeRecords(records, C) {
+    C = C || CONFIG;
+    var carShow = {}; // gen -> {atEvent, inCarShow}
+    C.corvetteGenerations.forEach(function (g) { carShow[g.gen] = { atEvent: 0, inCarShow: 0 }; });
+    var clubTally = {}; // name -> attendees (insertion order preserved)
+    var shirtTotals = {};
+    C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] = 0; });
+    var totalAttendees = 0, totalFunds = 0, totalSponsorship = 0;
+
+    records.forEach(function (rec) {
+      var attendee = toInt(rec["#"]) || 0;
+      totalAttendees += attendee;
+      totalFunds += toNum(rec["Total Fee"]);
+      totalSponsorship += toNum(rec[C.sponsorshipActivityTitle]);
+      C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] += Number(rec[b.col]) || 0; });
+
+      var gen = rec["Gen"];
+      if (gen && carShow[gen]) {
+        carShow[gen].atEvent += 1;
+        if (String(rec["In Car Show?"]).trim().toLowerCase() === "yes") carShow[gen].inCarShow += 1;
+      }
+
+      // walk-ins have a blank Club Name -> "Unknown" with 0 attendees, matching the VBA
+      var club = rec["Club Name"];
+      club = isBlank(club) ? "Unknown" : String(club).trim();
+      clubTally[club] = (clubTally[club] || 0) + attendee;
+    });
+
+    var clubs = Object.keys(clubTally).map(function (k) {
+      return { name: k, attendees: clubTally[k] };
+    }).sort(function (a, b) { return b.attendees - a.attendees || (a.name < b.name ? -1 : 1); });
+
+    var gens = C.corvetteGenerations.map(function (g) {
+      return { gen: g.gen, from: g.from, to: g.to,
+               atEvent: carShow[g.gen].atEvent, inCarShow: carShow[g.gen].inCarShow };
+    });
+
+    return {
+      attendees: totalAttendees,
+      registrations: records.length,
+      funds: totalFunds,
+      sponsorship: totalSponsorship,
+      judges: 0, // not tracked from CSV data in this port (carried over from the VBA field)
+      shirtTotals: shirtTotals,
+      gens: gens,
+      clubs: clubs
+    };
+  }
+
   // ---- main ----------------------------------------------------------------
   // regRows / actRows: arrays of objects keyed by CSV header.
   // opts: { regFileName, actFileName, generatedAt }
@@ -94,14 +149,6 @@
     });
 
     // --- per-registration processing -------------------------------------
-    var carShow = {}; // gen -> {atEvent, inCarShow}
-    C.corvetteGenerations.forEach(function (g) { carShow[g.gen] = { atEvent: 0, inCarShow: 0 }; });
-    var clubTally = {}; // name -> attendees (insertion order preserved)
-    var shirtTotals = {};
-    C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] = 0; });
-
-    var totalAttendees = 0, totalFunds = 0, totalJudges = 0;
-
     // optionally drop cancelled rows
     var working = regRows.filter(function (r) {
       if (!C.showCancelled && String(r.Status).trim() === "Cancelled") return false;
@@ -122,20 +169,20 @@
           attendee = 1;                       // one attendee per car-show registration
           rec["Reg Type"] = title;
           var fb = C.freeSizeMap[freeSize];    // free shirt from the registration's size
-          if (fb) { rec[bucketCol(fb)] = (rec[bucketCol(fb)] || 0) + 1; shirtTotals[fb] += 1; }
+          if (fb) rec[bucketCol(fb)] = (rec[bucketCol(fb)] || 0) + 1;
         } else if (title === C.sponsorshipActivityTitle) {
           // Bonus sponsor shirt — sized from the activity's own column, not the
           // registrant's FreeTShirtSize; does not add an attendee or use fee/unitCost.
           var sb = C.freeSizeMap[a[C.sponsorFreeShirtColumn]];
-          if (sb) { rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1; shirtTotals[sb] += 1; }
+          if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
           else messages.push("Invalid sponsor shirt size '" + a[C.sponsorFreeShirtColumn] + "'");
+          rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {
             var qty = Math.round(toNum(a["Activity Fee"]) / C.unitCost) || 0;
             if (qty <= 0) qty = 1;
             rec[bucketCol(bucket)] = (rec[bucketCol(bucket)] || 0) + qty;
-            shirtTotals[bucket] += qty;
           } else {
             messages.push("Invalid activity title '" + title + "'");
           }
@@ -151,23 +198,7 @@
           (r["Last Name"] || "") + ", " + (r["First Name"] || ""));
       }
 
-      // attendee / funds / judges
       rec["#"] = attendee;
-      totalAttendees += attendee;
-      totalFunds += toNum(r[C.totalFeeColumn]);
-
-      // car-show generation matrix
-      var judged = String(r["CarJudged"]).trim().toLowerCase() === "yes";
-      if (gen) {
-        carShow[gen].atEvent += 1;
-        if (judged) carShow[gen].inCarShow += 1;
-      }
-
-      // clubs
-      var club = r["CorvetteClubName"];
-      club = isBlank(club) ? "Unknown" : String(club).trim();
-      clubTally[club] = (clubTally[club] || 0) + attendee;
-
       return rec;
     });
 
@@ -178,8 +209,6 @@
       wr["#"] = 0;
       wr._isWalkIn = true;
       records.push(wr);
-      // walk-ins add a blank club (Unknown) with 0 attendees, matching the VBA
-      clubTally["Unknown"] = (clubTally["Unknown"] || 0);
     }
 
     var registrationsCount = records.length; // real + walk-ins (matches VBA)
@@ -207,15 +236,12 @@
       return av < bv ? -1 : av > bv ? 1 : 0;
     });
 
-    // --- summary ----------------------------------------------------------
-    var clubs = Object.keys(clubTally).map(function (k) {
-      return { name: k, attendees: clubTally[k] };
-    }).sort(function (a, b) { return b.attendees - a.attendees || (a.name < b.name ? -1 : 1); });
-
-    var gens = C.corvetteGenerations.map(function (g) {
-      return { gen: g.gen, from: g.from, to: g.to,
-               atEvent: carShow[g.gen].atEvent, inCarShow: carShow[g.gen].inCarShow };
-    });
+    // --- summary ------------------------------------------------------------
+    // Computed from the final `records` (real + walk-ins) rather than tracked
+    // inline above, so the exact same aggregation can be reused against just a
+    // filtered/visible subset of records (see summarizeRecords below).
+    var summary = summarizeRecords(records, C);
+    summary.nextMemberNumber = nextAvailableMemberNum; // capacity planning figure, not tied to any filtering
 
     var errorCount = messages.length;
     var statusMessage = errorCount === 0
@@ -228,16 +254,7 @@
       shirtColumns: shirtCols,
       registrations: records,
       messages: messages,
-      summary: {
-        attendees: totalAttendees,
-        registrations: registrationsCount,
-        funds: totalFunds,
-        nextMemberNumber: nextAvailableMemberNum,
-        judges: totalJudges,
-        shirtTotals: shirtTotals,
-        gens: gens,
-        clubs: clubs
-      },
+      summary: summary,
       meta: {
         title: C.title,
         regFileName: opts.regFileName || "",
@@ -299,7 +316,7 @@
     };
   }
 
-  var API = { generate: generate, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey };
+  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey };
   root.CarShowLogic = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -95,9 +95,9 @@
     // --- Final column order (matches today's RegistrationSheet) ---
     // Shirt columns are appended programmatically (all 24, in SHIRT_BUCKETS order).
     baseColumnOrder: [
-      "Last Name", "First Name", "Member Number", "Trans. Ref. Num.", "Reg Date",
+      "Last Name", "First Name", "Member Number", "Reg Date",
       "Reg Type", "#", "Club Name", "Phone", "Email", "Address", "City", "State",
-      "Zip", "Total Fee", "Status", "Year", "Model", "Gen", "In Car Show?",
+      "Zip", "Total Fee", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],
 

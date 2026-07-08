@@ -103,17 +103,40 @@ var w = dom.window, d = dom.window.document;
   w.__carshow.state.showWalkins = true;
   w.__carshow.setTab("reg");
 
-  // ---- print: full columns, not just what's collapsed on screen ----
+  // ---- print: full columns except the Men's/Women's shirt buckets ----
   var printBtn = Array.prototype.filter.call(d.querySelectorAll(".toolbar .btn"), function (b) { return /Print/.test(b.textContent); })[0];
   printBtn.dispatchEvent(new w.Event("click", { bubbles: true }));
   var printHeaders = Array.prototype.map.call(d.querySelectorAll("#printHost table.grid thead th"), function (th) { return th.textContent; });
-  ok(printHeaders.indexOf("Men's Free LG") !== -1, "print table includes individual shirt-bucket columns (got " + printHeaders.length + " headers)");
-  ok(printHeaders.indexOf("Shirts") === -1, "print table does not include the on-screen Shirts summary column");
+  ok(printHeaders.indexOf("Men's Free LG") === -1, "print table excludes individual Men's shirt-bucket columns (got " + printHeaders.length + " headers)");
+  ok(printHeaders.indexOf("Women's Xtra SM") === -1, "print table excludes individual Women's shirt-bucket columns");
+  ok(printHeaders.indexOf("Shirts") !== -1, "print table includes the Shirts summary column (matching the on-screen table)");
+  ok(printHeaders.indexOf("Last Name") !== -1 && printHeaders.indexOf("Total Fee") !== -1, "print table still includes non-shirt columns");
   var printRows = d.querySelectorAll("#printHost table.grid tbody tr");
   ok(printRows.length === 28, "print table has all 28 visible rows (got " + printRows.length + ")");
   var alicePrintRow = Array.prototype.filter.call(printRows, function (tr) { return /Alice/.test(tr.textContent); })[0];
-  var lgColIdx = printHeaders.indexOf("Men's Free LG"); // not Alice's size — should be blank for her row
-  ok(alicePrintRow && alicePrintRow.querySelectorAll("td")[lgColIdx].textContent === "", "print table's individual shirt columns hold real per-bucket values");
+  var shirtsColIdx = printHeaders.indexOf("Shirts");
+  ok(alicePrintRow && alicePrintRow.querySelectorAll("td")[shirtsColIdx].textContent === "W Free MED, W Xtra SM",
+    "print table's Shirts cell summarizes Alice's buckets (got " + (alicePrintRow && alicePrintRow.querySelectorAll("td")[shirtsColIdx].textContent) + ")");
+
+  // ---- zoom controls ----
+  var wrap = d.querySelector(".tablewrap");
+  ok(wrap.style.zoom === "1", "table starts at 100% zoom (got " + wrap.style.zoom + ")");
+  var zoomIn = Array.prototype.filter.call(d.querySelectorAll(".zoomgroup .btn"), function (b) { return b.textContent === "+"; })[0];
+  var zoomOut = Array.prototype.filter.call(d.querySelectorAll(".zoomgroup .btn"), function (b) { return b.textContent === "−"; })[0];
+  zoomIn.dispatchEvent(new w.Event("click", { bubbles: true }));
+  wrap = d.querySelector(".tablewrap");
+  ok(wrap.style.zoom === "1.1", "+ increases zoom to 110% (got " + wrap.style.zoom + ")");
+  ok(/110%/.test(d.querySelector(".zoomgroup .count").textContent), "zoom label shows 110%");
+  d.querySelector(".zoomgroup .btn[title='Zoom out']").dispatchEvent(new w.Event("click", { bubbles: true }));
+  d.querySelector(".zoomgroup .btn[title='Zoom out']"); // re-query not needed, but keep intent clear
+  wrap = d.querySelector(".tablewrap");
+  ok(wrap.style.zoom === "1", "− brings zoom back to 100% (got " + wrap.style.zoom + ")");
+  // jsdom doesn't do real layout (scrollWidth/clientWidth are always 0), so Fit
+  // can't compute a real ratio here — just confirm it doesn't throw and leaves
+  // zoom unchanged rather than corrupting it with a bogus 0/0 computation.
+  var fitBtn = Array.prototype.filter.call(d.querySelectorAll(".zoomgroup .btn"), function (b) { return b.textContent === "Fit"; })[0];
+  fitBtn.dispatchEvent(new w.Event("click", { bubbles: true }));
+  ok(d.querySelector(".tablewrap").style.zoom === "1", "Fit is a safe no-op when layout can't be measured (jsdom)");
 
   // ---- "Load different files" button reopens the drop zone ----
   var changeBtn = Array.prototype.filter.call(d.querySelectorAll(".toolbar .btn"), function (b) { return /Load different files/.test(b.textContent); })[0];

@@ -35,6 +35,11 @@ header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2
 header.app .sub { font-size: 13px; opacity: .9; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
+footer.app-footer {
+  text-align: center; color: var(--muted); font-size: 12px; padding: 14px 20px 20px; border-top: 1px solid var(--line);
+}
+footer.app-footer .footer-credit { font-size: 10px; margin-top: 4px; }
+
 /* drop zone */
 .drop {
   border: 2px dashed #c3ccd6; border-radius: 12px; background: var(--panel);
@@ -74,8 +79,13 @@ header.app .sub { font-size: 13px; opacity: .9; }
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; min-width: 240px; font-size: 13px;
 }
 .toolbar label { font-size: 13px; color: var(--ink); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.statusgroup { display: inline-flex; align-items: center; gap: 10px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfd; }
+.loadedinfo { font-size: 12px; color: var(--muted); margin: -2px 0 10px; }
 .spacer { flex: 1; }
 .count { font-size: 12px; color: var(--muted); }
+.zoomgroup { display: inline-flex; align-items: center; gap: 4px; }
+.zoomgroup .btn { padding: 4px 10px; line-height: 1; }
+.zoomgroup .count { min-width: 38px; text-align: center; }
 
 /* table */
 .tablewrap { overflow: auto; max-height: calc(100vh - 250px); border: 1px solid var(--line); border-radius: 10px; background: #fff; }
@@ -84,10 +94,23 @@ table.grid th, table.grid td { padding: 6px 9px; border-bottom: 1px solid var(--
 table.grid thead th {
   position: sticky; top: 0; z-index: 2; background: #eef1f4; font-weight: 700; cursor: pointer;
   border-bottom: 2px solid #d5dae0; user-select: none;
+  /* Wrap header labels instead of forcing nowrap (unlike data cells) — this lets
+     the table's auto layout size each column by its narrower data content
+     rather than by long header text, shrinking the overall row width. */
+  white-space: normal; line-height: 1.25; vertical-align: bottom;
 }
+/* Auto table layout only wraps a header when it needs to — for columns whose
+   data is much narrower than the label (a member #, a $ amount, "Yes"/"No"),
+   it otherwise just gives the header its full unwrapped width. Capping these
+   specific headers' width forces the wrap so the column follows the data. */
+table.grid th.narrow-hdr { max-width: 8ch; }
 table.grid thead th:hover { background: #e3e8ee; }
 table.grid thead th .arrow { color: var(--red); font-size: 11px; margin-left: 4px; }
-table.grid tbody tr { cursor: pointer; }
+/* Explicit (not transparent) background on every row state — .pinned cells
+   inherit this, and without it odd rows (the default, unstyled state) would
+   inherit transparent, letting the columns scrolled underneath show through
+   the sticky pinned cells. */
+table.grid tbody tr { cursor: pointer; background: #fff; }
 table.grid tbody tr:nth-child(even) { background: #fafbfc; }
 table.grid tbody tr:hover { background: #fff6e9; }
 table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -95,7 +118,8 @@ table.grid td.shirt { text-align: center; color: var(--accent); font-weight: 600
 table.grid td.shirtsum, table.grid th.shirtsum { text-align: center; }
 table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: normal; max-width: 260px; }
 tr.walkin td { color: var(--walkin); font-style: italic; }
-.pinned { position: sticky; left: 0; background: inherit; z-index: 1; }
+.pinned { position: sticky; background: inherit; z-index: 1; }
+.pin-1 { left: 0; }
 th.pinned { z-index: 3; }
 
 /* detail modal */
@@ -141,7 +165,8 @@ table.matrix td.z { color: #c2c8d0; }
 /* print */
 #printHost { display: none; }
 @media print {
-  header.app, .drop, .tabs, .toolbar, .no-print, .modal-backdrop { display: none !important; }
+  @page { size: landscape; margin: 0.3in; }
+  header.app, .drop, .tabs, .toolbar, .no-print, .modal-backdrop, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }
@@ -149,11 +174,21 @@ table.matrix td.z { color: #c2c8d0; }
   .view { display: block !important; }
   body { background: #fff; }
   /* Registration tab: hide the on-screen (collapsed-columns) table and show the
-     full-column print-only table built fresh by printRegistration() instead. */
+     full-column print-only table built fresh by printRegistration() instead.
+     47 columns is a lot for one page — table-layout:fixed + width:100% forces
+     every column to actually fit within the page width instead of Chrome's
+     default behavior of just clipping whatever runs past the right margin
+     (the bug: a first print attempt only showed the first ~14 columns because
+     nothing constrained the table to the printable area). Small font + tight
+     padding + forced wrapping keep it readable at that width. */
   .tablewrap { display: none !important; }
   #printHost { display: block !important; }
-  #printHost h2 { margin: 0 0 10px; font-size: 16px; }
-  #printHost table.grid th, #printHost table.grid td { font-size: 10px; padding: 3px 5px; }
+  #printHost h2 { margin: 0 0 8px; font-size: 14px; }
+  #printHost table.grid { table-layout: fixed; width: 100%; }
+  #printHost table.grid th, #printHost table.grid td {
+    font-size: 6px; line-height: 1.25; padding: 2px 3px;
+    white-space: normal; word-break: break-word; overflow-wrap: break-word;
+  }
 }
 
 </style>
@@ -167,6 +202,10 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="drop" class="drop"></div>
   <div id="app"></div>
 </div>
+<footer class="app-footer">
+  <div>v1.0 &middot; Deployed 7/8/2026 12:47 PM</div>
+  <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
+</footer>
 <script>
 /* @license
 Papa Parse
@@ -321,9 +360,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // --- Final column order (matches today's RegistrationSheet) ---
     // Shirt columns are appended programmatically (all 24, in SHIRT_BUCKETS order).
     baseColumnOrder: [
-      "Last Name", "First Name", "Member Number", "Trans. Ref. Num.", "Reg Date",
+      "Last Name", "First Name", "Member Number", "Reg Date",
       "Reg Type", "#", "Club Name", "Phone", "Email", "Address", "City", "State",
-      "Zip", "Total Fee", "Status", "Year", "Model", "Gen", "In Car Show?",
+      "Zip", "Total Fee", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],
 
@@ -462,6 +501,61 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return Object.prototype.hasOwnProperty.call(rows[0], name);
   }
 
+  // Aggregate attendees/funds/sponsorship/shirts/generations/clubs from a list
+  // of already-built registration records (the same shape as generate()'s
+  // `registrations` output). Kept independent of generate()'s CSV/activity
+  // matching so the app can re-run it against just the currently filtered/
+  // visible subset of records (search, status, walk-ins) for a live Summary
+  // tab, not only once against the full dataset.
+  function summarizeRecords(records, C) {
+    C = C || CONFIG;
+    var carShow = {}; // gen -> {atEvent, inCarShow}
+    C.corvetteGenerations.forEach(function (g) { carShow[g.gen] = { atEvent: 0, inCarShow: 0 }; });
+    var clubTally = {}; // name -> attendees (insertion order preserved)
+    var shirtTotals = {};
+    C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] = 0; });
+    var totalAttendees = 0, totalFunds = 0, totalSponsorship = 0;
+
+    records.forEach(function (rec) {
+      var attendee = toInt(rec["#"]) || 0;
+      totalAttendees += attendee;
+      totalFunds += toNum(rec["Total Fee"]);
+      totalSponsorship += toNum(rec[C.sponsorshipActivityTitle]);
+      C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] += Number(rec[b.col]) || 0; });
+
+      var gen = rec["Gen"];
+      if (gen && carShow[gen]) {
+        carShow[gen].atEvent += 1;
+        if (String(rec["In Car Show?"]).trim().toLowerCase() === "yes") carShow[gen].inCarShow += 1;
+      }
+
+      // walk-ins have a blank Club Name -> "Unknown" with 0 attendees, matching the VBA
+      var club = rec["Club Name"];
+      club = isBlank(club) ? "Unknown" : String(club).trim();
+      clubTally[club] = (clubTally[club] || 0) + attendee;
+    });
+
+    var clubs = Object.keys(clubTally).map(function (k) {
+      return { name: k, attendees: clubTally[k] };
+    }).sort(function (a, b) { return b.attendees - a.attendees || (a.name < b.name ? -1 : 1); });
+
+    var gens = C.corvetteGenerations.map(function (g) {
+      return { gen: g.gen, from: g.from, to: g.to,
+               atEvent: carShow[g.gen].atEvent, inCarShow: carShow[g.gen].inCarShow };
+    });
+
+    return {
+      attendees: totalAttendees,
+      registrations: records.length,
+      funds: totalFunds,
+      sponsorship: totalSponsorship,
+      judges: 0, // not tracked from CSV data in this port (carried over from the VBA field)
+      shirtTotals: shirtTotals,
+      gens: gens,
+      clubs: clubs
+    };
+  }
+
   // ---- main ----------------------------------------------------------------
   // regRows / actRows: arrays of objects keyed by CSV header.
   // opts: { regFileName, actFileName, generatedAt }
@@ -499,14 +593,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
 
     // --- per-registration processing -------------------------------------
-    var carShow = {}; // gen -> {atEvent, inCarShow}
-    C.corvetteGenerations.forEach(function (g) { carShow[g.gen] = { atEvent: 0, inCarShow: 0 }; });
-    var clubTally = {}; // name -> attendees (insertion order preserved)
-    var shirtTotals = {};
-    C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] = 0; });
-
-    var totalAttendees = 0, totalFunds = 0, totalJudges = 0;
-
     // optionally drop cancelled rows
     var working = regRows.filter(function (r) {
       if (!C.showCancelled && String(r.Status).trim() === "Cancelled") return false;
@@ -527,20 +613,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           attendee = 1;                       // one attendee per car-show registration
           rec["Reg Type"] = title;
           var fb = C.freeSizeMap[freeSize];    // free shirt from the registration's size
-          if (fb) { rec[bucketCol(fb)] = (rec[bucketCol(fb)] || 0) + 1; shirtTotals[fb] += 1; }
+          if (fb) rec[bucketCol(fb)] = (rec[bucketCol(fb)] || 0) + 1;
         } else if (title === C.sponsorshipActivityTitle) {
           // Bonus sponsor shirt — sized from the activity's own column, not the
           // registrant's FreeTShirtSize; does not add an attendee or use fee/unitCost.
           var sb = C.freeSizeMap[a[C.sponsorFreeShirtColumn]];
-          if (sb) { rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1; shirtTotals[sb] += 1; }
+          if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
           else messages.push("Invalid sponsor shirt size '" + a[C.sponsorFreeShirtColumn] + "'");
+          rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {
             var qty = Math.round(toNum(a["Activity Fee"]) / C.unitCost) || 0;
             if (qty <= 0) qty = 1;
             rec[bucketCol(bucket)] = (rec[bucketCol(bucket)] || 0) + qty;
-            shirtTotals[bucket] += qty;
           } else {
             messages.push("Invalid activity title '" + title + "'");
           }
@@ -556,23 +642,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           (r["Last Name"] || "") + ", " + (r["First Name"] || ""));
       }
 
-      // attendee / funds / judges
       rec["#"] = attendee;
-      totalAttendees += attendee;
-      totalFunds += toNum(r[C.totalFeeColumn]);
-
-      // car-show generation matrix
-      var judged = String(r["CarJudged"]).trim().toLowerCase() === "yes";
-      if (gen) {
-        carShow[gen].atEvent += 1;
-        if (judged) carShow[gen].inCarShow += 1;
-      }
-
-      // clubs
-      var club = r["CorvetteClubName"];
-      club = isBlank(club) ? "Unknown" : String(club).trim();
-      clubTally[club] = (clubTally[club] || 0) + attendee;
-
       return rec;
     });
 
@@ -583,8 +653,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       wr["#"] = 0;
       wr._isWalkIn = true;
       records.push(wr);
-      // walk-ins add a blank club (Unknown) with 0 attendees, matching the VBA
-      clubTally["Unknown"] = (clubTally["Unknown"] || 0);
     }
 
     var registrationsCount = records.length; // real + walk-ins (matches VBA)
@@ -612,15 +680,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return av < bv ? -1 : av > bv ? 1 : 0;
     });
 
-    // --- summary ----------------------------------------------------------
-    var clubs = Object.keys(clubTally).map(function (k) {
-      return { name: k, attendees: clubTally[k] };
-    }).sort(function (a, b) { return b.attendees - a.attendees || (a.name < b.name ? -1 : 1); });
-
-    var gens = C.corvetteGenerations.map(function (g) {
-      return { gen: g.gen, from: g.from, to: g.to,
-               atEvent: carShow[g.gen].atEvent, inCarShow: carShow[g.gen].inCarShow };
-    });
+    // --- summary ------------------------------------------------------------
+    // Computed from the final `records` (real + walk-ins) rather than tracked
+    // inline above, so the exact same aggregation can be reused against just a
+    // filtered/visible subset of records (see summarizeRecords below).
+    var summary = summarizeRecords(records, C);
+    summary.nextMemberNumber = nextAvailableMemberNum; // capacity planning figure, not tied to any filtering
 
     var errorCount = messages.length;
     var statusMessage = errorCount === 0
@@ -633,16 +698,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       shirtColumns: shirtCols,
       registrations: records,
       messages: messages,
-      summary: {
-        attendees: totalAttendees,
-        registrations: registrationsCount,
-        funds: totalFunds,
-        nextMemberNumber: nextAvailableMemberNum,
-        judges: totalJudges,
-        shirtTotals: shirtTotals,
-        gens: gens,
-        clubs: clubs
-      },
+      summary: summary,
       meta: {
         title: C.title,
         regFileName: opts.regFileName || "",
@@ -704,7 +760,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
 
-  var API = { generate: generate, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey };
+  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey };
   root.CarShowLogic = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -760,14 +816,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       cols.forEach(function (c, ci) {
         var cell = row.getCell(ci + 1), v = rec[c];
         if (isShirt(res, c)) { cell.value = Number(v) > 0 ? Number(v) : null; cell.alignment = { horizontal: "center" }; }
-        else if (c === "Total Fee") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
+        else if (c === "Total Fee" || c === "Individual Sponsorship") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
         else if (c === "Member Number" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
         else { cell.value = (v === "" || v == null) ? null : v; }
         cell.border = border();
       });
     });
     ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: n } };
-    var widthFor = { "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Trans. Ref. Num.": 13, "Phone": 15 };
+    var widthFor = { "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
     ws.columns.forEach(function (col, i) {
       var name = cols[i];
       col.width = widthFor[name] || (isShirt(res, name) ? 7 : Math.min(Math.max(name.length + 2, 8), 20));
@@ -794,6 +850,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     kv("Registrations", s.registrations);
     ws.getCell(r, 1).value = "Funds"; ws.getCell(r, 1).font = { bold: true };
     var fv = ws.getCell(r, 2); fv.value = Number(s.funds); fv.numFmt = "$#,##0.00"; r++;
+    ws.getCell(r, 1).value = "Individual Sponsorships"; ws.getCell(r, 1).font = { bold: true };
+    var sv = ws.getCell(r, 2); sv.value = Number(s.sponsorship); sv.numFmt = "$#,##0.00"; r++;
     kv("Next Available Member Number", s.nextMemberNumber);
     r++;
     section("Shirts");
@@ -851,15 +909,41 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     sortDir: 1,
     search: "",
     showWalkins: true,
-    showShirts: true,
+    statusFilter: { paid: true, notpaid: true, cancelled: true, empty: true },
     tab: "reg",
     detailRow: null,  // registration row currently shown in the detail modal, or null
-    dropOpen: true    // whether the "drop the two CSVs here" card is showing
+    dropOpen: true,   // whether the "drop the two CSVs here" card is showing
+    zoom: 1           // table zoom level (1 = 100%); lets all columns fit without scrolling
   };
 
-  var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
+  // These headers are far wider than their data (a few digits, "Yes"/"No") —
+  // force-wrapping them onto two lines shrinks the column to fit the data
+  // instead of the label, narrowing the overall row width.
+  var NARROW_HEADER_COLS = { "Member Number": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
+  var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
+  function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
   function isNumericCol(c) { return NUMERIC_BASE[c] || isShirtCol(c); }
+
+  // ---------- status filter ----------
+  // ClubExpress "Status" values collapse into 4 buckets for the filter: an
+  // exact "Paid"/"Cancelled" match, blank (no status), or anything else counts
+  // as Not Paid (covers "Not paid in time limit", "Open", etc.).
+  var STATUS_BUCKETS = [
+    { key: "paid", label: "Paid" },
+    { key: "notpaid", label: "Not Paid" },
+    { key: "cancelled", label: "Cancelled" },
+    { key: "empty", label: "Empty" }
+  ];
+  function classifyStatus(v) {
+    var s = String(v == null ? "" : v).trim();
+    if (!s) return "empty";
+    var low = s.toLowerCase();
+    if (low === "cancelled") return "cancelled";
+    if (low === "paid") return "paid";
+    return "notpaid";
+  }
 
   // ---------- shirts: 24 sparse columns collapsed into one summary column ----------
   var SHIRTS_COL = "__shirts";
@@ -930,12 +1014,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
   }
   // Regenerate the result, then decide whether to auto-collapse the drop zone:
-  // only once we actually have something worth looking at instead, and only if
-  // nothing went wrong (a problem, e.g. an unrecognized file, keeps the drop
-  // zone open so the user sees the message and can retry).
+  // only once BOTH files are in (registration alone already produces an "ok"
+  // result, but closing the drop zone at that point makes it easy to forget
+  // the activity file entirely), and only if nothing went wrong (a problem,
+  // e.g. an unrecognized file, keeps the drop zone open so the user sees the
+  // message and can retry).
   function finishIngest(problems) {
     regenerate();
-    if (!problems.length && state.result && state.result.ok) state.dropOpen = false;
+    if (!problems.length && state.reg && state.act && state.result && state.result.ok) state.dropOpen = false;
     renderDrop(problems);
   }
   function regenerate() {
@@ -999,6 +1085,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     app.innerHTML = "";
     app.appendChild(buildTabs());
+    if (state.tab === "reg") app.appendChild(buildLoadedInfo());
     var toolbar = state.tab === "reg" ? buildRegToolbar() : buildSummaryToolbar();
     app.appendChild(toolbar);
     app.appendChild(state.tab === "reg" ? buildRegView() : buildSummaryView());
@@ -1013,6 +1100,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return el("div", { class: "tabs no-print" }, [mk("reg", "Registration"), mk("sum", "Summary")]);
   }
 
+  // CSVs are (re)ingested synchronously right before regenerate() runs, so
+  // meta.generatedAt doubles as "when the currently-loaded CSVs were loaded".
+  function buildLoadedInfo() {
+    return el("div", { class: "loadedinfo" }, ["CSVs loaded: " + fmtDate(state.result.meta.generatedAt)]);
+  }
+
   function buildChangeFilesBtn() {
     var b = el("button", { class: "btn" }, ["📂 Load different files"]);
     b.addEventListener("click", showDropZone);
@@ -1024,21 +1117,37 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     search.addEventListener("input", function () { state.search = search.value; renderRegBody(); });
     var wk = el("input", { type: "checkbox" }); wk.checked = state.showWalkins;
     wk.addEventListener("change", function () { state.showWalkins = wk.checked; renderRegBody(); });
-    var sh = el("input", { type: "checkbox" }); sh.checked = state.showShirts;
-    sh.addEventListener("change", function () { state.showShirts = sh.checked; renderViews(); });
+
+    var statusGroup = el("span", { class: "statusgroup" }, [
+      el("span", { class: "hint" }, ["Status:"])
+    ].concat(STATUS_BUCKETS.map(function (b) {
+      var cb = el("input", { type: "checkbox" }); cb.checked = state.statusFilter[b.key];
+      cb.addEventListener("change", function () { state.statusFilter[b.key] = cb.checked; renderRegBody(); });
+      return el("label", {}, [cb, document.createTextNode(" " + b.label)]);
+    })));
 
     var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
     xls.addEventListener("click", function () { downloadExcel(); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printRegistration);
 
+    var zoomOut = el("button", { class: "btn", title: "Zoom out" }, ["−"]);
+    zoomOut.addEventListener("click", function () { setZoom(state.zoom - 0.1); });
+    var zoomIn = el("button", { class: "btn", title: "Zoom in" }, ["+"]);
+    zoomIn.addEventListener("click", function () { setZoom(state.zoom + 0.1); });
+    var zoomFit = el("button", { class: "btn", title: "Shrink just enough to fit every column on screen" }, ["Fit"]);
+    zoomFit.addEventListener("click", fitZoom);
+    var zoomLabel = el("span", { class: "count", text: Math.round(state.zoom * 100) + "%" });
+    var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
+
     var count = el("span", { class: "count", id: "rowcount" });
     return el("div", { class: "toolbar no-print" }, [
       search,
       el("label", {}, [wk, document.createTextNode(" walk-ins")]),
-      el("label", {}, [sh, document.createTextNode(" shirt columns")]),
+      statusGroup,
       count,
       el("span", { class: "spacer" }),
+      zoomGroup,
       buildChangeFilesBtn(), prn, xls
     ]);
   }
@@ -1059,15 +1168,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function printRegistration() {
     var host = $("#printHost");
     host.innerHTML = "";
-    var cols = state.result.columns; // all columns, ignoring the Shirts collapse
-    var thead = el("thead", {}, [el("tr", {}, cols.map(function (c) { return el("th", {}, [c]); }))]);
+    // All columns except the 24 individual Men's/Women's shirt-size buckets and
+    // the FreeTShirtSize columns — excluded from print entirely, per request;
+    // a "Shirts" summary column (matching the on-screen table) is appended
+    // instead of the 24 raw buckets.
+    var cols = state.result.columns.filter(function (c) {
+      return c.indexOf("Men's") !== 0 && c.indexOf("Women's") !== 0 &&
+        c !== "FreeTShirtSize" && c !== "FreeTShirtSize Comments";
+    });
+    var headerLabels = cols.concat(["Shirts"]);
+    var thead = el("thead", {}, [el("tr", {}, headerLabels.map(function (c) { return el("th", {}, [c]); }))]);
     var tbody = el("tbody", {}, visibleRows().map(function (r) {
-      return el("tr", r._isWalkIn ? { class: "walkin" } : {}, cols.map(function (c) {
-        var v = r[c];
-        if (isShirtCol(c)) v = Number(v) > 0 ? v : ""; // match the on-screen convention: hide zero shirt counts
-        else if (c === "Total Fee") v = v === "" || v == null ? "" : "$" + Number(v).toFixed(2);
+      var cells = cols.map(function (c) {
+        var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : r[c];
         return el("td", {}, [v == null ? "" : String(v)]);
-      }));
+      });
+      cells.push(el("td", { class: "shirtsum" }, [shirtSummaryText(r)]));
+      return el("tr", r._isWalkIn ? { class: "walkin" } : {}, cells);
     }));
     host.appendChild(el("h2", { text: state.result.meta.title }));
     host.appendChild(el("table", { class: "grid" }, [thead, tbody]));
@@ -1077,11 +1194,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // Base (non-shirt) columns, plus one "Shirts" summary column standing in for
   // the 24 individual shirt-size buckets (which are almost always zero) — this
   // is what shrinks the table enough to avoid horizontal scrolling for most rows.
-  // The Excel export is unaffected and still lists all 24 buckets individually,
-  // since that detail matters for ordering shirts even though it's noise on screen.
+  // FreeTShirtSize / FreeTShirtSize Comments are also dropped from the on-screen
+  // table as redundant with the Shirts summary column (still shown in the detail
+  // modal). The Excel export is unaffected and still lists everything, including
+  // all 24 individual shirt buckets, since that detail matters for ordering
+  // shirts even though it's noise on screen.
   function visibleColumns() {
-    var base = state.result.columns.filter(function (c) { return !isShirtCol(c); });
-    if (state.showShirts) base.push(SHIRTS_COL);
+    var base = state.result.columns.filter(function (c) {
+      return !isShirtCol(c) && c !== "FreeTShirtSize" && c !== "FreeTShirtSize Comments";
+    });
+    base.push(SHIRTS_COL);
     return base;
   }
 
@@ -1091,7 +1213,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     cols.forEach(function (c, idx) {
       var label = c === SHIRTS_COL ? "Shirts" : c;
       var arrow = state.sortCol === c ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
-      var th = el("th", { class: (c === SHIRTS_COL ? "shirtsum" : (isNumericCol(c) ? "num" : "")) + (idx < 2 ? " pinned" : "") },
+      var th = el("th", { class: (c === SHIRTS_COL ? "shirtsum" : (isNumericCol(c) ? "num" : "")) +
+          (NARROW_HEADER_COLS[c] ? " narrow-hdr" : "") + pinnedClass(idx) },
         [label, el("span", { class: "arrow", text: arrow })]);
       th.addEventListener("click", function () {
         if (state.sortCol === c) state.sortDir = -state.sortDir; else { state.sortCol = c; state.sortDir = 1; }
@@ -1101,9 +1224,52 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     thead.appendChild(htr);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "regbody" })]);
-    var wrap = el("div", { class: "tablewrap" }, [table]);
+    var wrap = el("div", { class: "tablewrap", style: "zoom:" + state.zoom }, [table]);
     setTimeout(renderRegBody, 0);
     return wrap;
+  }
+
+  // ---------- pinned columns (Last Name + First Name stay visible while scrolling) ----------
+  // Both are `position: sticky`, so the second one needs its `left` set to the
+  // rendered width of the first — otherwise they'd both sit at left:0 and
+  // overlap/mangle each other's text.
+  function pinnedClass(idx) {
+    if (idx === 0) return " pinned pin-1";
+    if (idx === 1) return " pinned pin-2";
+    return "";
+  }
+  function updatePinnedOffsets() {
+    var table = $(".tablewrap table.grid");
+    var headRow = table && table.querySelector("thead tr");
+    var firstCell = headRow && headRow.children[0];
+    if (!firstCell) return;
+    // getBoundingClientRect is in post-zoom (visual) px; the `zoom` CSS property
+    // re-scales inline-style lengths too, so divide back out or the offset
+    // would be applied twice.
+    var w = firstCell.getBoundingClientRect().width / state.zoom;
+    var cells = table.querySelectorAll(".pin-2");
+    for (var i = 0; i < cells.length; i++) cells[i].style.left = w + "px";
+  }
+
+  // ---------- zoom (shrink the table so all columns fit without horizontal scrolling) ----------
+  function setZoom(z) {
+    state.zoom = Math.max(0.3, Math.min(1.5, z));
+    renderViews();
+  }
+  // Measure how wide the table naturally wants to be vs. how much room is
+  // actually available, and pick a zoom level that makes every column fit —
+  // instead of making the user guess a percentage via the +/- buttons.
+  function fitZoom() {
+    var wrap = $(".tablewrap");
+    var table = wrap && wrap.querySelector("table.grid");
+    if (!wrap || !table) return;
+    var availableWidth = wrap.parentElement.clientWidth; // not itself zoomed
+    var priorZoom = wrap.style.zoom;
+    wrap.style.zoom = "1"; // measure at true scale, independent of current zoom
+    var naturalWidth = table.scrollWidth;
+    wrap.style.zoom = priorZoom;
+    if (!naturalWidth) return;
+    setZoom(availableWidth / naturalWidth);
   }
 
   function sortedRows() {
@@ -1133,6 +1299,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var q = state.search.trim().toLowerCase();
     return sortedRows().filter(function (r) {
       if (!state.showWalkins && r._isWalkIn) return false;
+      if (!r._isWalkIn && !state.statusFilter[classifyStatus(r["Status"])]) return false;
       if (!q) return true;
       return cols.some(function (c) {
         var v = c === SHIRTS_COL ? shirtSummaryText(r) : r[c];
@@ -1154,16 +1321,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       cols.forEach(function (c, idx) {
         var v, cls = "";
         if (c === SHIRTS_COL) { cls = "shirtsum"; v = shirtSummaryText(r); }
-        else if (c === "Total Fee") { cls = "num"; v = r[c]; v = v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
+        else if (CURRENCY_COLS[c]) { cls = "num"; v = fmtMoney(r[c]); }
         else if (isNumericCol(c)) { cls = "num"; v = r[c]; v = v == null ? "" : v; }
         else { v = r[c]; }
-        if (idx < 2) cls += " pinned";
+        cls += pinnedClass(idx);
         tr.appendChild(el("td", { class: cls.trim(), text: v == null ? "" : String(v) }));
       });
       frag.appendChild(tr);
     });
     body.innerHTML = "";
     body.appendChild(frag);
+    updatePinnedOffsets();
     var rc = $("#rowcount");
     if (rc) rc.textContent = rows.length + " of " + state.result.registrations.length + " rows shown";
   }
@@ -1172,7 +1340,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // Click any row to see every field for that one registration without scrolling —
   // grouped into readable sections instead of the table's 40+ side-by-side columns.
   var DETAIL_SECTIONS = [
-    { title: "Registration", cols: ["Reg Date", "Reg Type", "Trans. Ref. Num.", "Status", "Total Fee", "#"] },
+    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
     { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] },
     { title: "Shirt Selection", cols: ["FreeTShirtSize", "FreeTShirtSize Comments"] }
@@ -1217,8 +1385,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     ]);
     DETAIL_SECTIONS.forEach(function (sec) {
       var items = sec.cols.filter(function (c) { return state.result.columns.indexOf(c) !== -1; }).map(function (c) {
-        var v = r[c];
-        if (c === "Total Fee") v = v === "" || v == null ? "" : "$" + Number(v).toFixed(2);
+        var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : r[c];
         return li(c, v == null || v === "" ? "—" : String(v));
       });
       if (items.length) body.appendChild(el("div", { class: "modal-section" }, [el("h4", { text: sec.title }), el("ul", { class: "meta-list" }, items)]));
@@ -1237,8 +1404,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   // ---------- summary ----------
+  // Recomputed from whatever the Registration tab's search/status/walk-ins
+  // filters currently leave visible, rather than always the full loaded
+  // dataset — so this tab always reflects "what I've selected over there".
+  // nextMemberNumber is the one exception: it's a capacity-planning figure
+  // (next open slot overall), not something filtering should change.
   function buildSummaryView() {
-    var s = state.result.summary, m = state.result.meta, C = CONFIG;
+    var full = state.result.summary;
+    var s = LOGIC.summarizeRecords(visibleRows(), CONFIG);
+    s.nextMemberNumber = full.nextMemberNumber;
+    var m = state.result.meta, C = CONFIG;
     var container = el("div", { class: "view" });
 
     // status + meta
@@ -1248,7 +1423,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       el("ul", { class: "meta-list" }, [
         li("Generated", fmtDate(m.generatedAt) + "  —  ", el("span", { class: statusCls, text: m.statusMessage })),
         li("Registration file", m.regFileName + "  (" + m.regRows + " rows)"),
-        li("Activity file", m.actFileName ? m.actFileName + "  (" + m.actRows + " rows)" : "— none loaded —")
+        li("Activity file", m.actFileName ? m.actFileName + "  (" + m.actRows + " rows)" : "— none loaded —"),
+        li("Showing", s.registrations + " of " + full.registrations + " registrations — matches the Registration tab's current search/status/walk-ins filters")
       ])
     ]));
 
@@ -1257,6 +1433,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       card("Attendees", s.attendees),
       card("Registrations", s.registrations),
       card("Funds", "$" + Number(s.funds).toLocaleString(undefined, { minimumFractionDigits: 0 })),
+      card("Individual Sponsorships", "$" + Number(s.sponsorship).toLocaleString(undefined, { minimumFractionDigits: 0 })),
       card("Next Member #", s.nextMemberNumber)
     ]));
 

@@ -28,6 +28,11 @@ header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2
 header.app .sub { font-size: 13px; opacity: .9; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
+footer.app-footer {
+  text-align: center; color: var(--muted); font-size: 12px; padding: 14px 20px 20px; border-top: 1px solid var(--line);
+}
+footer.app-footer .footer-credit { font-size: 10px; margin-top: 4px; }
+
 /* drop zone */
 .drop {
   border: 2px dashed #c3ccd6; border-radius: 12px; background: var(--panel);
@@ -67,8 +72,13 @@ header.app .sub { font-size: 13px; opacity: .9; }
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; min-width: 240px; font-size: 13px;
 }
 .toolbar label { font-size: 13px; color: var(--ink); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.statusgroup { display: inline-flex; align-items: center; gap: 10px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfd; }
+.loadedinfo { font-size: 12px; color: var(--muted); margin: -2px 0 10px; }
 .spacer { flex: 1; }
 .count { font-size: 12px; color: var(--muted); }
+.zoomgroup { display: inline-flex; align-items: center; gap: 4px; }
+.zoomgroup .btn { padding: 4px 10px; line-height: 1; }
+.zoomgroup .count { min-width: 38px; text-align: center; }
 
 /* table */
 .tablewrap { overflow: auto; max-height: calc(100vh - 250px); border: 1px solid var(--line); border-radius: 10px; background: #fff; }
@@ -77,10 +87,23 @@ table.grid th, table.grid td { padding: 6px 9px; border-bottom: 1px solid var(--
 table.grid thead th {
   position: sticky; top: 0; z-index: 2; background: #eef1f4; font-weight: 700; cursor: pointer;
   border-bottom: 2px solid #d5dae0; user-select: none;
+  /* Wrap header labels instead of forcing nowrap (unlike data cells) — this lets
+     the table's auto layout size each column by its narrower data content
+     rather than by long header text, shrinking the overall row width. */
+  white-space: normal; line-height: 1.25; vertical-align: bottom;
 }
+/* Auto table layout only wraps a header when it needs to — for columns whose
+   data is much narrower than the label (a member #, a $ amount, "Yes"/"No"),
+   it otherwise just gives the header its full unwrapped width. Capping these
+   specific headers' width forces the wrap so the column follows the data. */
+table.grid th.narrow-hdr { max-width: 8ch; }
 table.grid thead th:hover { background: #e3e8ee; }
 table.grid thead th .arrow { color: var(--red); font-size: 11px; margin-left: 4px; }
-table.grid tbody tr { cursor: pointer; }
+/* Explicit (not transparent) background on every row state — .pinned cells
+   inherit this, and without it odd rows (the default, unstyled state) would
+   inherit transparent, letting the columns scrolled underneath show through
+   the sticky pinned cells. */
+table.grid tbody tr { cursor: pointer; background: #fff; }
 table.grid tbody tr:nth-child(even) { background: #fafbfc; }
 table.grid tbody tr:hover { background: #fff6e9; }
 table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -88,7 +111,8 @@ table.grid td.shirt { text-align: center; color: var(--accent); font-weight: 600
 table.grid td.shirtsum, table.grid th.shirtsum { text-align: center; }
 table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: normal; max-width: 260px; }
 tr.walkin td { color: var(--walkin); font-style: italic; }
-.pinned { position: sticky; left: 0; background: inherit; z-index: 1; }
+.pinned { position: sticky; background: inherit; z-index: 1; }
+.pin-1 { left: 0; }
 th.pinned { z-index: 3; }
 
 /* detail modal */
@@ -134,7 +158,8 @@ table.matrix td.z { color: #c2c8d0; }
 /* print */
 #printHost { display: none; }
 @media print {
-  header.app, .drop, .tabs, .toolbar, .no-print, .modal-backdrop { display: none !important; }
+  @page { size: landscape; margin: 0.3in; }
+  header.app, .drop, .tabs, .toolbar, .no-print, .modal-backdrop, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }
@@ -142,9 +167,19 @@ table.matrix td.z { color: #c2c8d0; }
   .view { display: block !important; }
   body { background: #fff; }
   /* Registration tab: hide the on-screen (collapsed-columns) table and show the
-     full-column print-only table built fresh by printRegistration() instead. */
+     full-column print-only table built fresh by printRegistration() instead.
+     47 columns is a lot for one page — table-layout:fixed + width:100% forces
+     every column to actually fit within the page width instead of Chrome's
+     default behavior of just clipping whatever runs past the right margin
+     (the bug: a first print attempt only showed the first ~14 columns because
+     nothing constrained the table to the printable area). Small font + tight
+     padding + forced wrapping keep it readable at that width. */
   .tablewrap { display: none !important; }
   #printHost { display: block !important; }
-  #printHost h2 { margin: 0 0 10px; font-size: 16px; }
-  #printHost table.grid th, #printHost table.grid td { font-size: 10px; padding: 3px 5px; }
+  #printHost h2 { margin: 0 0 8px; font-size: 14px; }
+  #printHost table.grid { table-layout: fixed; width: 100%; }
+  #printHost table.grid th, #printHost table.grid td {
+    font-size: 6px; line-height: 1.25; padding: 2px 3px;
+    white-space: normal; word-break: break-word; overflow-wrap: break-word;
+  }
 }

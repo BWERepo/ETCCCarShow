@@ -73,6 +73,9 @@ eq(bob["Member Number"], 8001, "Bob (non-member) assigned 8001");
 var sponsor = out.registrations.filter(function (r) { return r["First Name"] === "Sponsor"; })[0];
 eq(sponsor["Status"], "Cancelled", "Sponsor row kept (showCancelled=true)");
 eq(Number(sponsor["Total Fee"]), 140, "Sponsor fee = 140");
+eq(Number(sponsor["Individual Sponsorship"]), 100, "Sponsor's Individual Sponsorship column = 100");
+eq(alice["Individual Sponsorship"], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
+eq(out.summary.sponsorship, 100, "summary.sponsorship = 100");
 
 // walk-in numbering range 8002..8026
 var walkNums = walkins.map(function (r) { return r["Member Number"]; }).sort(function (a, b) { return a - b; });

@@ -28,19 +28,19 @@ body {
   background: var(--bg);
 }
 header.app {
-  background: linear-gradient(90deg, var(--red-dark), var(--red));
-  color: #fff; padding: 14px 20px; display: flex; align-items: baseline; gap: 14px;
+  color: #000; padding: 14px 20px; display: flex; align-items: center; justify-content: center;
+  gap: 14px; position: relative; border-bottom: 1px solid var(--line);
 }
-header.app .hdr-logo { height: 36px; width: 36px; object-fit: contain; border-radius: 6px; }
-header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; }
-header.app .sub { font-size: 13px; opacity: .9; }
-header.app .hdr-spacer { flex: 1; }
-.hdr-menu-wrap { position: relative; }
+header.app .hdr-logo { height: 72px; width: 72px; object-fit: contain; border-radius: 6px; }
+header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; color: #000; }
+header.app .sub { font-size: 13px; color: var(--muted); }
+header.app .hdr-spacer { display: none; }
+.hdr-menu-wrap { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); }
 .hamburger-btn {
-  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.5); color: #fff;
+  background: #fff; border: 1px solid var(--line); color: var(--ink);
   font-size: 16px; line-height: 1; padding: 7px 11px; border-radius: 6px; cursor: pointer;
 }
-.hamburger-btn:hover { background: rgba(255,255,255,.22); }
+.hamburger-btn:hover { background: #f3f5f8; }
 .hdr-menu {
   position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--line);
   border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 170px; overflow: hidden; z-index: 60;
@@ -235,7 +235,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.6 &middot; Deployed 7/8/2026 4:14 PM</div>
+  <div>v1.8 &middot; Deployed 7/8/2026 4:20 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>

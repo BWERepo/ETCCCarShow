@@ -25,6 +25,11 @@ var fixturesScript = "window.CarShowFixtures = { regCsv: " +
   jsStringLiteral(read("test/fixtures/registration.csv")) + ", actCsv: " +
   jsStringLiteral(read("test/fixtures/activity.csv")) + " };";
 
+// Embed the logo as a data URI so the output stays a single self-contained
+// file (no external image reference) — same source file used by the
+// Hostinger deploy's login screen (deploy/ftp-deploy.sh uploads it there).
+var logoDataUri = "data:image/png;base64," + fs.readFileSync(path.join(HERE, "assets/ETCClogoWhiteBackground.png")).toString("base64");
+
 var css = read("src/styles.css");
 var scripts = [
   read("vendor/papaparse.min.js"),
@@ -65,6 +70,7 @@ var html =
 '<title>ETCC Car Show — Registration</title>\n' +
 '<style>\n' + css + '\n</style>\n</head>\n<body>\n' +
 '<header class="app">\n' +
+'  <img src="' + logoDataUri + '" alt="ETCC Logo" class="hdr-logo">\n' +
 '  <h1>ETCC Car Show — Registration</h1>\n' +
 '  <span class="sub">Offline tool · your data never leaves this computer</span>\n' +
 '</header>\n' +

@@ -24,7 +24,9 @@ new account):
   `secrets.example.php` to `secrets.php` and fill in a real hash:
   `openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-password'`
 - `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to `_data.html`.
-- `ETCClogoWhiteBackground.png` — logo, copied from SilentAuctionManager's Images folder.
+- `ETCClogoWhiteBackground.png` — logo; canonical copy lives at `../assets/` (shared
+  with the main app, which embeds it as base64 in the header), originally copied from
+  SilentAuctionManager's Images folder.
 
 ## Refreshing the live data
 

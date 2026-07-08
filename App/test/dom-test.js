@@ -64,18 +64,21 @@ var w = dom.window, d = dom.window.document;
   ok(d.querySelector("#drop").classList.contains("collapsed"), "drop zone collapses after a successful load");
   ok(!d.querySelector("#drop .filecard"), "drop zone content is cleared, not just hidden");
 
-  // ---- default status filter: only Paid registrants shown on load (walk-ins are exempt) ----
+  // ---- defaults on load: only Paid registrants, walk-ins hidden ----
   // Fixture's 3 real rows are Open/"Not paid in time limit"/Cancelled — none literally
-  // "Paid" — so only the 25 walk-ins should be visible before anyone touches a checkbox.
+  // "Paid" — and walk-ins are off by default too, so nothing should be visible
+  // before anyone touches a checkbox.
   var defaultRows = d.querySelectorAll("table.grid tbody tr");
-  ok(defaultRows.length === 25, "only walk-ins visible by default (got " + defaultRows.length + ")");
-  ok(Array.prototype.every.call(defaultRows, function (tr) { return tr.classList.contains("walkin"); }), "every default-visible row is a walk-in");
+  ok(defaultRows.length === 0, "no rows visible by default — Paid-only + walk-ins hidden (got " + defaultRows.length + ")");
   var defaultCount = d.querySelector("#rowcount");
-  ok(defaultCount && /25 of 28/.test(defaultCount.textContent), "row count label reflects paid-only default (got " + (defaultCount && defaultCount.textContent) + ")");
+  ok(defaultCount && /0 of 28/.test(defaultCount.textContent), "row count label reflects the default filters (got " + (defaultCount && defaultCount.textContent) + ")");
+  var wkCheckbox = Array.prototype.filter.call(d.querySelectorAll(".toolbar input[type=checkbox]"), function (cb) { return /walk-ins/.test(cb.closest("label").textContent); })[0];
+  ok(wkCheckbox && wkCheckbox.checked === false, "walk-ins checkbox starts unchecked");
 
-  // turn on every status so the rest of this suite exercises the full fixture,
-  // same as before Paid-only became the default
+  // turn on every status and walk-ins so the rest of this suite exercises the
+  // full fixture, same as before these became off-by-default
   w.__carshow.state.statusFilter = { paid: true, notpaid: true, cancelled: true, empty: true };
+  w.__carshow.state.showWalkins = true;
   w.__carshow.setSearch("");
 
   var headers = Array.prototype.map.call(d.querySelectorAll("table.grid thead th"), function (th) { return th.textContent.replace(/[▲▼\s]+$/, "").trim(); });

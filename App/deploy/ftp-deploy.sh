@@ -36,15 +36,18 @@ if [ ! -f "$DIR/_data.html" ]; then
 fi
 
 upload() {
-  echo "--- Uploading $1 ---"
-  curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T "$DIR/$1" "$BASE/$1" -m 120
+  local remoteName="$1" localPath="${2:-$DIR/$1}"
+  echo "--- Uploading $remoteName ---"
+  curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T "$localPath" "$BASE/$remoteName" -m 120
 }
 
 upload "_data.html"
 upload "_login.html"
 upload "index.php"
 upload "secrets.php"
-upload "ETCClogoWhiteBackground.png"
+# canonical copy lives in ../assets/, shared with the main app's build.js (which
+# embeds it as base64) — see assets/ETCClogoWhiteBackground.png
+upload "ETCClogoWhiteBackground.png" "$DIR/../assets/ETCClogoWhiteBackground.png"
 upload ".htaccess"
 
 echo "--- Final listing ---"

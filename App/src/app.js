@@ -12,7 +12,7 @@
     sortCol: null,
     sortDir: 1,
     search: "",
-    showWalkins: true,
+    showWalkins: false,
     statusFilter: { paid: true, notpaid: false, cancelled: false, empty: false },
     tab: "reg",
     detailRow: null,  // registration row currently shown in the detail modal, or null

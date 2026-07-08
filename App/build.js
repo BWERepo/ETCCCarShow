@@ -9,6 +9,22 @@ function read(p) { return fs.readFileSync(path.join(HERE, p), "utf8"); }
 // Prevent a stray "</script>" in library text from closing our script tag.
 function safeJs(s) { return s.replace(/<\/script>/gi, "<\\/script>"); }
 
+// JSON.stringify safely escapes quotes/backslashes/newlines; also guard the
+// two line-terminator code points (U+2028, U+2029) that JSON leaves
+// unescaped but that older JS engines choke on inside string literals.
+function jsStringLiteral(s) {
+  var LS = String.fromCharCode(0x2028);
+  var PS = String.fromCharCode(0x2029);
+  return JSON.stringify(s).split(LS).join("\\u2028").split(PS).join("\\u2029");
+}
+
+// Settings -> Run Regression Tests needs the fixture CSVs available in the
+// browser with no network/file access — embed them as a global the same way
+// the deploy snapshot embeds real CSVs (see deploy/build-snapshot.js).
+var fixturesScript = "window.CarShowFixtures = { regCsv: " +
+  jsStringLiteral(read("test/fixtures/registration.csv")) + ", actCsv: " +
+  jsStringLiteral(read("test/fixtures/activity.csv")) + " };";
+
 var css = read("src/styles.css");
 var scripts = [
   read("vendor/papaparse.min.js"),
@@ -16,6 +32,8 @@ var scripts = [
   read("src/config.js"),
   read("src/logic.js"),
   read("src/excel.js"),
+  read("src/regression-tests.js"),
+  fixturesScript,
   read("src/app.js")
 ].map(safeJs);
 

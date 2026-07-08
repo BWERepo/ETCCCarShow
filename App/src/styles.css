@@ -26,6 +26,24 @@ header.app {
 }
 header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; }
 header.app .sub { font-size: 13px; opacity: .9; }
+header.app .hdr-spacer { flex: 1; }
+.hdr-menu-wrap { position: relative; }
+.hamburger-btn {
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.5); color: #fff;
+  font-size: 16px; line-height: 1; padding: 7px 11px; border-radius: 6px; cursor: pointer;
+}
+.hamburger-btn:hover { background: rgba(255,255,255,.22); }
+.hdr-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 170px; overflow: hidden; z-index: 60;
+}
+.hdr-menu.hidden { display: none; }
+.hdr-menu-item {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; background: #fff; border: none;
+  border-bottom: 1px solid var(--line); font-size: 14px; color: var(--ink); cursor: pointer;
+}
+.hdr-menu-item:last-child { border-bottom: none; }
+.hdr-menu-item:hover { background: #f3f5f8; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
 footer.app-footer {
@@ -133,6 +151,18 @@ th.pinned { z-index: 3; }
 .modal-body { padding: 4px 18px 20px; }
 .modal-section { margin-top: 14px; }
 .modal-section h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+/* settings modal */
+.settings-actions { display: flex; align-items: center; gap: 14px; margin: 10px 0 14px; flex-wrap: wrap; }
+.test-summary { font-weight: 700; margin-bottom: 10px; }
+.test-summary.good { color: var(--good); }
+.test-summary.warn { color: var(--warn); }
+.test-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.test-list li { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.test-list li:last-child { border-bottom: none; }
+.test-list li.pass { color: var(--good); }
+.test-list li.fail { color: var(--warn); background: #fff5f5; }
+.test-list .expect { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }

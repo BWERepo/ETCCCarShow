@@ -33,6 +33,24 @@ header.app {
 }
 header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; }
 header.app .sub { font-size: 13px; opacity: .9; }
+header.app .hdr-spacer { flex: 1; }
+.hdr-menu-wrap { position: relative; }
+.hamburger-btn {
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.5); color: #fff;
+  font-size: 16px; line-height: 1; padding: 7px 11px; border-radius: 6px; cursor: pointer;
+}
+.hamburger-btn:hover { background: rgba(255,255,255,.22); }
+.hdr-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 170px; overflow: hidden; z-index: 60;
+}
+.hdr-menu.hidden { display: none; }
+.hdr-menu-item {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; background: #fff; border: none;
+  border-bottom: 1px solid var(--line); font-size: 14px; color: var(--ink); cursor: pointer;
+}
+.hdr-menu-item:last-child { border-bottom: none; }
+.hdr-menu-item:hover { background: #f3f5f8; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
 footer.app-footer {
@@ -141,6 +159,18 @@ th.pinned { z-index: 3; }
 .modal-section { margin-top: 14px; }
 .modal-section h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
+/* settings modal */
+.settings-actions { display: flex; align-items: center; gap: 14px; margin: 10px 0 14px; flex-wrap: wrap; }
+.test-summary { font-weight: 700; margin-bottom: 10px; }
+.test-summary.good { color: var(--good); }
+.test-summary.warn { color: var(--warn); }
+.test-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.test-list li { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.test-list li:last-child { border-bottom: none; }
+.test-list li.pass { color: var(--good); }
+.test-list li.fail { color: var(--warn); background: #fff5f5; }
+.test-list .expect { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
@@ -203,7 +233,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.2 &middot; Deployed 7/8/2026 3:46 PM</div>
+  <div>v1.4 &middot; Deployed 7/8/2026 4:03 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -895,6 +925,129 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
 </script>
 <script>
+/* regression-tests.js — assertions against the frozen synthetic fixture,
+ * shared by the Node CLI (test/run-tests.js) and the in-app Settings ->
+ * Run Regression Tests button, so both stay in sync automatically instead
+ * of drifting apart as two hand-copied assertion lists.
+ *
+ * Fixture scenario: a judged member (Alice) with a free + paid shirt, a
+ * non-member (Bob) with no year/club, and a cancelled sponsor (Sponsor)
+ * whose Individual Sponsorship activity grants a bonus free shirt from a
+ * different column. Fabricated data, not real member info.
+ */
+(function (root) {
+  "use strict";
+  var LOGIC = root.CarShowLogic ||
+    (typeof require !== "undefined" ? require("./logic.js") : null);
+  var EXCEL = root.CarShowExcel ||
+    (typeof require !== "undefined" ? require("./excel.js") : null);
+
+  function eq(results, actual, expected, label) {
+    var ok = JSON.stringify(actual) === JSON.stringify(expected);
+    results.push({ label: label, ok: ok, expected: expected, actual: actual });
+  }
+
+  // Logic-layer assertions (generate()) against the fixture. Returns
+  // { out, results } — callers needing the Excel round-trip too pass `out`
+  // into excelAssertionList so generate() only runs once.
+  function assertionList(reg, act) {
+    var results = [];
+    var out = LOGIC.generate(reg, act, { regFileName: "registration.csv", actFileName: "activity.csv" });
+
+    eq(results, out.ok, true, "generate ok");
+    eq(results, out.meta.errorCount, 0, "zero errors");
+    eq(results, out.summary.registrations, 28, "Registrations = 28");
+    eq(results, out.summary.attendees, 3, "Attendees = 3");
+    eq(results, out.summary.funds, 245, "Funds = 245");
+    eq(results, out.summary.nextMemberNumber, 8027, "Next member # = 8027");
+
+    var s = out.summary.shirtTotals;
+    eq(results, s.MensFreeSM, 1, "Men's Free SM = 1 (sponsorship bonus shirt)");
+    eq(results, s.MensFreeLG, 1, "Men's Free LG = 1 (Bob's free shirt)");
+    eq(results, s.MensFreeXLG, 1, "Men's Free XLG = 1 (Sponsor's own free shirt)");
+    eq(results, s.WomensFreeMED, 1, "Women's Free MED = 1 (Alice's free shirt)");
+    eq(results, s.WomensXtraSM, 1, "Women's Xtra SM = 1 (Alice's paid additional shirt)");
+    var nonZero = Object.keys(s).filter(function (k) { return s[k] !== 0; }).sort();
+    eq(results, nonZero, ["MensFreeSM", "MensFreeLG", "MensFreeXLG", "WomensFreeMED", "WomensXtraSM"].sort(), "only those 5 shirt buckets non-zero");
+
+    var c6 = out.summary.gens.filter(function (g) { return g.gen === "C6"; })[0];
+    eq(results, c6.atEvent, 1, "C6 At Event = 1 (Alice, 2010)");
+    eq(results, c6.inCarShow, 1, "C6 In Car Show = 1 (Alice judged Yes)");
+    var c8 = out.summary.gens.filter(function (g) { return g.gen === "C8"; })[0];
+    eq(results, c8.atEvent, 1, "C8 At Event = 1 (Sponsor, 2022)");
+    eq(results, c8.inCarShow, 0, "C8 In Car Show = 0 (Sponsor judged No)");
+    var otherGensNonZero = out.summary.gens.filter(function (g) { return g.gen !== "C6" && g.gen !== "C8" && (g.atEvent || g.inCarShow); });
+    eq(results, otherGensNonZero.length, 0, "no other generations populated");
+
+    eq(results, out.summary.clubs, [{ name: "Sample Club", attendees: 2 }, { name: "Unknown", attendees: 1 }], "club tally");
+    eq(results, out.messages.length, 0, "no messages — sponsorship handled without warning");
+
+    eq(results, out.registrations.length, 28, "28 table rows");
+    var walkins = out.registrations.filter(function (r) { return r._isWalkIn; });
+    eq(results, walkins.length, 25, "25 walk-in rows");
+    var alice = out.registrations.filter(function (r) { return r["First Name"] === "Alice"; })[0];
+    eq(results, alice["Member Number"], 100, "Alice keeps her own member #");
+    eq(results, alice["Phone"], "(555) 555-0100", "Alice phone formatted");
+    eq(results, alice["Gen"], "C6", "Alice gen C6");
+    eq(results, alice["In Car Show?"], "Yes", "Alice In Car Show? = Yes");
+    var bob = out.registrations.filter(function (r) { return r["First Name"] === "Bob"; })[0];
+    eq(results, bob["Member Number"], 8001, "Bob (non-member) assigned 8001");
+    var sponsor = out.registrations.filter(function (r) { return r["First Name"] === "Sponsor"; })[0];
+    eq(results, sponsor["Status"], "Cancelled", "Sponsor row kept (showCancelled=true)");
+    eq(results, Number(sponsor["Total Fee"]), 140, "Sponsor fee = 140");
+    eq(results, Number(sponsor["Individual Sponsorship"]), 100, "Sponsor's Individual Sponsorship column = 100");
+    eq(results, alice["Individual Sponsorship"], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
+    eq(results, out.summary.sponsorship, 100, "summary.sponsorship = 100");
+
+    var walkNums = walkins.map(function (r) { return r["Member Number"]; }).sort(function (a, b) { return a - b; });
+    eq(results, walkNums[0], 8002, "first walk-in # 8002");
+    eq(results, walkNums[walkNums.length - 1], 8026, "last walk-in # 8026");
+
+    eq(results, out.registrations[0]["Last Name"], "Sample", "first row sorts to Sample");
+    eq(results, /^z-> Walk-In/.test(out.registrations[out.registrations.length - 1]["Last Name"]), true, "walk-ins last");
+
+    return { out: out, results: results };
+  }
+
+  // Excel export round-trip (build a workbook, reload it, check shape).
+  function excelAssertionList(out, ExcelJS) {
+    var results = [];
+    return Promise.resolve().then(function () {
+      var wb = EXCEL.build(ExcelJS, out);
+      return wb.xlsx.writeBuffer();
+    }).then(function (buf) {
+      var wb2 = new ExcelJS.Workbook();
+      return wb2.xlsx.load(buf).then(function () { return wb2; });
+    }).then(function (wb2) {
+      var reg = wb2.getWorksheet("RegistrationSheet");
+      var sum = wb2.getWorksheet("SummarySheet");
+      eq(results, !!reg, true, "RegistrationSheet exists");
+      eq(results, !!sum, true, "SummarySheet exists");
+      eq(results, reg.getCell(1, 1).value, out.meta.title, "title row A1");
+      eq(results, reg.getCell(2, 1).value, "Last Name", "header A2 = Last Name");
+      eq(results, reg.actualRowCount, 30, "reg sheet has 30 rows");
+      eq(results, !!reg.autoFilter, true, "autofilter set");
+      eq(results, reg.views[0].state, "frozen", "frozen panes");
+      var feeCol = out.columns.indexOf("Total Fee") + 1;
+      var sawMoney = false;
+      reg.eachRow(function (row) { var c = row.getCell(feeCol); if (c.numFmt && /\$/.test(c.numFmt)) sawMoney = true; });
+      eq(results, sawMoney, true, "Total Fee column has $ number format");
+      var shirtColsInExcel = out.shirtColumns.filter(function (c) { return out.columns.indexOf(c) !== -1; });
+      eq(results, shirtColsInExcel.length, 24, "Excel export still has all 24 shirt columns");
+      return results;
+    });
+  }
+
+  var API = { assertionList: assertionList, excelAssertionList: excelAssertionList };
+  root.CarShowRegressionTests = API;
+  if (typeof module !== "undefined" && module.exports) module.exports = API;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+
+</script>
+<script>
+window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Status\",\"Trans. Ref. Num.\",\"First Name\",\"Middle Initial\",\"Last Name\",\"Nickname\",\"Member Number\",\"Email\",\"Phone\",\"Address 1\",\"Address 2\",\"City\",\"State\",\"Postal Code\",\"Country\",\"Company\",\"Work Title\",\"Cell Phone\",\"Primary Member?\",\"Companion Count\",\"Member?\",\"Registrant Type\",\"Sequence Number\",\"CorvetteYear\",\"CorvetteYear Comments\",\"CorvetteModel\",\"CorvetteModel Comments\",\"CorvetteColor\",\"CorvetteColor Comments\",\"CorvetteClubName\",\"CorvetteClubName Comments\",\"FreeTShirtSize\",\"FreeTShirtSize Comments\",\"CarJudged\",\"CarJudged Comments\"\n\"Sample Car Show 2027\",\"1/1/2027 10:00:00 AM\",65.00,\"Open\",\"9001\",\"Alice\",,\"Sample\",,\"100\",\"alice.sample@example.test\",\"5555550100\",\"1 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,0,True,\"Sample Member\",,\"2010\",,\"Coupe\",,\"Blue\",,\"Sample Club\",,\"Women's Medium\",,\"Yes\",\n\"Sample Car Show 2027\",\"1/1/2027 11:00:00 AM\",40.00,\"Not paid in time limit\",\"\",\"Bob\",,\"Sample\",,\"\",\"bob.sample@example.test\",,\"2 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,0,False,\"Sample Non-Member\",,,,\"Convertible\",,\"Red\",,,,\"Men's Large\",,\"No\",\n\"Sample Car Show 2027\",\"1/1/2027 12:00:00 PM\",140.00,\"Cancelled\",\"9002\",\"Sponsor\",,\"Sample\",,\"200\",\"sponsor.sample@example.test\",\"5555550200\",\"3 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,0,True,\"Sample Member\",,\"2022\",,\"Stingray\",,\"Yellow\",,\"Sample Club\",,\"Men's Extra Large\",,\"No\",\n", actCsv: "\"Title\",\"Date/Time\",\"Status\",\"Trans. Ref. Num.\",\"Activity Fee\",\"Registrant Fees\",\"First Name\",\"Middle Initial\",\"Last Name\",\"Nickname\",\"Email\",\"Phone\",\"Address 1\",\"Address 2\",\"City\",\"State\",\"Postal Code\",\"Country\",\"Company\",\"Cell Phone\",\"Work Title\",\"Primary Member?\",\"Member?\",\"Member Number\",\"Registrant Type\",\"Primary Registrant Name\",\"Signed Datetime\",\"Activity Type\",\"Activity Title\",\"Activity Date/Time\",\"Capacity Limited?\",\"Capacity\",\"Activity Registrant id\",\"Activity Sequence Number\",\"Attended?\",\"CSFreeSponsorShirt\",\"CSFreeSponsorShirt Comments\"\n\"Sample Car Show 2027\",\"1/1/2027 10:00:00 AM\",\"Open\",\"9001\",40.00,65.00,\"Alice\",,\"Sample\",,\"alice.sample@example.test\",,\"1 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,True,\"100\",\"Sample Member\",\"Alice Sample\",,1,\"Car Show Registration\",\"1/1/2027 10:00:00 AM\",False,,900001,1,\"N/A\",,\n\"Sample Car Show 2027\",\"1/1/2027 10:00:00 AM\",\"Open\",\"9001\",25.00,65.00,\"Alice\",,\"Sample\",,\"alice.sample@example.test\",,\"1 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,True,\"100\",\"Sample Member\",\"Alice Sample\",,2,\"Women's Additional T-Shirt - Small\",\"1/1/2027 10:00:00 AM\",False,,900002,2,\"N/A\",,\n\"Sample Car Show 2027\",\"1/1/2027 11:00:00 AM\",\"Not paid in time limit\",\"\",40.00,40.00,\"Bob\",,\"Sample\",,\"bob.sample@example.test\",,\"2 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,False,\"\",\"Sample Non-Member\",\"Bob Sample\",,1,\"Car Show Registration\",\"1/1/2027 11:00:00 AM\",False,,900003,3,\"N/A\",,\n\"Sample Car Show 2027\",\"1/1/2027 12:00:00 PM\",\"Cancelled\",\"9002\",40.00,140.00,\"Sponsor\",,\"Sample\",,\"sponsor.sample@example.test\",,\"3 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,True,\"200\",\"Sample Member\",\"Sponsor Sample\",,1,\"Car Show Registration\",\"1/1/2027 12:00:00 PM\",False,,900004,4,\"N/A\",,\n\"Sample Car Show 2027\",\"1/1/2027 12:00:00 PM\",\"Cancelled\",\"9002\",100.00,140.00,\"Sponsor\",,\"Sample\",,\"sponsor.sample@example.test\",,\"3 Test Way\",,\"Sampleton\",\"TN\",\"37900\",\"USA\",,,,True,True,\"200\",\"Sample Member\",\"Sponsor Sample\",,2,\"Individual Sponsorship\",\"1/1/2027 12:00:00 PM\",False,,900005,5,\"N/A\",\"Men's Small\",\n" };
+</script>
+<script>
 /* app.js — DOM wiring, rendering, Excel export. Globals: CarShowConfig,
  * CarShowLogic, Papa, ExcelJS. */
 (function () {
@@ -914,7 +1067,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     tab: "reg",
     detailRow: null,  // registration row currently shown in the detail modal, or null
     dropOpen: true,   // whether the "drop the two CSVs here" card is showing
-    zoom: 1           // table zoom level (1 = 100%); lets all columns fit without scrolling
+    zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
+    menuOpen: false,      // hamburger dropdown
+    settingsOpen: false,  // settings modal
+    testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
+    testRunning: false,
+    testOnlyErrors: false
   };
 
   var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
@@ -1543,10 +1701,113 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     ["dragover", "drop"].forEach(function (ev) { window.addEventListener(ev, function (e) { e.preventDefault(); }); });
   }
 
+  // ---------- header menu (hamburger) / settings ----------
+  function buildHeaderMenu() {
+    var header = $("header.app");
+    if (!header) return;
+    var hamburgerBtn = el("button", { id: "hamburgerBtn", class: "hamburger-btn", title: "Menu", "aria-label": "Menu" }, ["☰"]);
+    var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
+    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" }, [settingsItem]);
+    hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
+    settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
+    document.addEventListener("click", closeMenu);
+    header.appendChild(el("div", { class: "hdr-spacer" }));
+    header.appendChild(el("div", { class: "hdr-menu-wrap" }, [hamburgerBtn, menu]));
+  }
+  function toggleMenu() { state.menuOpen = !state.menuOpen; renderHeaderMenu(); }
+  function closeMenu() { if (!state.menuOpen) return; state.menuOpen = false; renderHeaderMenu(); }
+  function renderHeaderMenu() {
+    var menu = $("#hdrMenu");
+    if (menu) menu.classList.toggle("hidden", !state.menuOpen);
+  }
+
+  function openSettings() { state.settingsOpen = true; renderSettingsModal(); }
+  function closeSettings() { state.settingsOpen = false; renderSettingsModal(); }
+
+  // Runs the same fixture-based assertions as test/run-tests.js, entirely in
+  // this tab (src/regression-tests.js + embedded fixture CSVs, both baked
+  // into the build) — it never touches whatever CSVs the user currently has
+  // loaded, since it works on its own copy of reg/act rows.
+  function runRegressionTests() {
+    if (!window.CarShowRegressionTests || !window.CarShowFixtures) {
+      state.testResults = { results: [{ label: "Regression test module not available in this build", ok: false, expected: "available", actual: "missing" }], passed: 0, failed: 1 };
+      renderSettingsModal();
+      return;
+    }
+    state.testRunning = true;
+    renderSettingsModal();
+    var F = window.CarShowFixtures;
+    var reg = Papa.parse(F.regCsv, { header: true, skipEmptyLines: true }).data;
+    var act = Papa.parse(F.actCsv, { header: true, skipEmptyLines: true }).data;
+    var built = window.CarShowRegressionTests.assertionList(reg, act);
+    return window.CarShowRegressionTests.excelAssertionList(built.out, ExcelJS).then(function (excelResults) {
+      var all = built.results.concat(excelResults);
+      var passed = all.filter(function (r) { return r.ok; }).length;
+      state.testResults = { results: all, passed: passed, failed: all.length - passed };
+      state.testRunning = false;
+      renderSettingsModal();
+    }).catch(function (err) {
+      state.testResults = { results: built.results.concat([{ label: "Excel round-trip threw", ok: false, expected: "no throw", actual: String(err && err.message || err) }]), passed: 0, failed: 1 };
+      state.testRunning = false;
+      renderSettingsModal();
+    });
+  }
+
+  function renderSettingsModal() {
+    var host = $("#settingsHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.settingsOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeSettings);
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Settings" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var runBtn = el("button", { class: "btn primary" }, [state.testRunning ? "Running…" : "Run Regression Tests"]);
+    if (state.testRunning) runBtn.setAttribute("disabled", "disabled");
+    runBtn.addEventListener("click", runRegressionTests);
+
+    var onlyErrCb = el("input", { type: "checkbox" });
+    onlyErrCb.checked = state.testOnlyErrors;
+    onlyErrCb.addEventListener("change", function () { state.testOnlyErrors = onlyErrCb.checked; renderSettingsModal(); });
+    var onlyErrLabel = el("label", {}, [onlyErrCb, document.createTextNode(" Only show errors")]);
+
+    var body = el("div", { class: "modal-body" }, [
+      el("h4", { text: "Regression Tests" }),
+      el("div", { class: "hint", style: "margin-bottom:4px" }, ["Runs this app's fixture-based test suite in this tab. It uses its own sample data and never touches whatever CSVs you currently have loaded."]),
+      el("div", { class: "settings-actions" }, [runBtn, onlyErrLabel])
+    ]);
+
+    if (state.testResults) {
+      var r = state.testResults;
+      var summaryCls = r.failed === 0 ? "good" : "warn";
+      body.appendChild(el("div", { class: "test-summary " + summaryCls }, [r.passed + " passed, " + r.failed + " failed"]));
+      var shown = state.testOnlyErrors ? r.results.filter(function (t) { return !t.ok; }) : r.results;
+      if (!shown.length) {
+        body.appendChild(el("div", { class: "hint" }, [state.testOnlyErrors ? "No errors — all checks passed." : "No results."]));
+      } else {
+        body.appendChild(el("ul", { class: "test-list" }, shown.map(function (t) {
+          var kids = [(t.ok ? "✓ " : "✗ ") + t.label];
+          if (!t.ok) kids.push(el("div", { class: "expect" }, ["expected " + JSON.stringify(t.expected) + " — got " + JSON.stringify(t.actual)]));
+          return el("li", { class: t.ok ? "pass" : "fail" }, kids);
+        })));
+      }
+    }
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeSettings);
+    host.appendChild(backdrop);
+  }
+
   function init() {
     document.body.appendChild(el("div", { id: "detailHost" }));
     document.body.appendChild(el("div", { id: "printHost" }));
+    document.body.appendChild(el("div", { id: "settingsHost" }));
+    buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (!state.detailRow) return;
       if (e.key === "Escape") closeDetail();
       else if (e.key === "ArrowLeft") stepDetail(-1);
@@ -1572,7 +1833,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     setSearch: function (q) { state.search = q; renderRegBody(); },
     openDetail: openDetail,
     closeDetail: closeDetail,
-    stepDetail: stepDetail
+    stepDetail: stepDetail,
+    openSettings: openSettings,
+    closeSettings: closeSettings,
+    runRegressionTests: runRegressionTests
   };
 })();
 

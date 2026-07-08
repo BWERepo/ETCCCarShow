@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "carshow-app",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["App/serve.js"],
+      "port": 5750
+    }
+  ]
+}

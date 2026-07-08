@@ -17,7 +17,12 @@
     tab: "reg",
     detailRow: null,  // registration row currently shown in the detail modal, or null
     dropOpen: true,   // whether the "drop the two CSVs here" card is showing
-    zoom: 1           // table zoom level (1 = 100%); lets all columns fit without scrolling
+    zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
+    menuOpen: false,      // hamburger dropdown
+    settingsOpen: false,  // settings modal
+    testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
+    testRunning: false,
+    testOnlyErrors: false
   };
 
   var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
@@ -646,10 +651,113 @@
     ["dragover", "drop"].forEach(function (ev) { window.addEventListener(ev, function (e) { e.preventDefault(); }); });
   }
 
+  // ---------- header menu (hamburger) / settings ----------
+  function buildHeaderMenu() {
+    var header = $("header.app");
+    if (!header) return;
+    var hamburgerBtn = el("button", { id: "hamburgerBtn", class: "hamburger-btn", title: "Menu", "aria-label": "Menu" }, ["☰"]);
+    var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
+    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" }, [settingsItem]);
+    hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
+    settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
+    document.addEventListener("click", closeMenu);
+    header.appendChild(el("div", { class: "hdr-spacer" }));
+    header.appendChild(el("div", { class: "hdr-menu-wrap" }, [hamburgerBtn, menu]));
+  }
+  function toggleMenu() { state.menuOpen = !state.menuOpen; renderHeaderMenu(); }
+  function closeMenu() { if (!state.menuOpen) return; state.menuOpen = false; renderHeaderMenu(); }
+  function renderHeaderMenu() {
+    var menu = $("#hdrMenu");
+    if (menu) menu.classList.toggle("hidden", !state.menuOpen);
+  }
+
+  function openSettings() { state.settingsOpen = true; renderSettingsModal(); }
+  function closeSettings() { state.settingsOpen = false; renderSettingsModal(); }
+
+  // Runs the same fixture-based assertions as test/run-tests.js, entirely in
+  // this tab (src/regression-tests.js + embedded fixture CSVs, both baked
+  // into the build) — it never touches whatever CSVs the user currently has
+  // loaded, since it works on its own copy of reg/act rows.
+  function runRegressionTests() {
+    if (!window.CarShowRegressionTests || !window.CarShowFixtures) {
+      state.testResults = { results: [{ label: "Regression test module not available in this build", ok: false, expected: "available", actual: "missing" }], passed: 0, failed: 1 };
+      renderSettingsModal();
+      return;
+    }
+    state.testRunning = true;
+    renderSettingsModal();
+    var F = window.CarShowFixtures;
+    var reg = Papa.parse(F.regCsv, { header: true, skipEmptyLines: true }).data;
+    var act = Papa.parse(F.actCsv, { header: true, skipEmptyLines: true }).data;
+    var built = window.CarShowRegressionTests.assertionList(reg, act);
+    return window.CarShowRegressionTests.excelAssertionList(built.out, ExcelJS).then(function (excelResults) {
+      var all = built.results.concat(excelResults);
+      var passed = all.filter(function (r) { return r.ok; }).length;
+      state.testResults = { results: all, passed: passed, failed: all.length - passed };
+      state.testRunning = false;
+      renderSettingsModal();
+    }).catch(function (err) {
+      state.testResults = { results: built.results.concat([{ label: "Excel round-trip threw", ok: false, expected: "no throw", actual: String(err && err.message || err) }]), passed: 0, failed: 1 };
+      state.testRunning = false;
+      renderSettingsModal();
+    });
+  }
+
+  function renderSettingsModal() {
+    var host = $("#settingsHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.settingsOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeSettings);
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Settings" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var runBtn = el("button", { class: "btn primary" }, [state.testRunning ? "Running…" : "Run Regression Tests"]);
+    if (state.testRunning) runBtn.setAttribute("disabled", "disabled");
+    runBtn.addEventListener("click", runRegressionTests);
+
+    var onlyErrCb = el("input", { type: "checkbox" });
+    onlyErrCb.checked = state.testOnlyErrors;
+    onlyErrCb.addEventListener("change", function () { state.testOnlyErrors = onlyErrCb.checked; renderSettingsModal(); });
+    var onlyErrLabel = el("label", {}, [onlyErrCb, document.createTextNode(" Only show errors")]);
+
+    var body = el("div", { class: "modal-body" }, [
+      el("h4", { text: "Regression Tests" }),
+      el("div", { class: "hint", style: "margin-bottom:4px" }, ["Runs this app's fixture-based test suite in this tab. It uses its own sample data and never touches whatever CSVs you currently have loaded."]),
+      el("div", { class: "settings-actions" }, [runBtn, onlyErrLabel])
+    ]);
+
+    if (state.testResults) {
+      var r = state.testResults;
+      var summaryCls = r.failed === 0 ? "good" : "warn";
+      body.appendChild(el("div", { class: "test-summary " + summaryCls }, [r.passed + " passed, " + r.failed + " failed"]));
+      var shown = state.testOnlyErrors ? r.results.filter(function (t) { return !t.ok; }) : r.results;
+      if (!shown.length) {
+        body.appendChild(el("div", { class: "hint" }, [state.testOnlyErrors ? "No errors — all checks passed." : "No results."]));
+      } else {
+        body.appendChild(el("ul", { class: "test-list" }, shown.map(function (t) {
+          var kids = [(t.ok ? "✓ " : "✗ ") + t.label];
+          if (!t.ok) kids.push(el("div", { class: "expect" }, ["expected " + JSON.stringify(t.expected) + " — got " + JSON.stringify(t.actual)]));
+          return el("li", { class: t.ok ? "pass" : "fail" }, kids);
+        })));
+      }
+    }
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeSettings);
+    host.appendChild(backdrop);
+  }
+
   function init() {
     document.body.appendChild(el("div", { id: "detailHost" }));
     document.body.appendChild(el("div", { id: "printHost" }));
+    document.body.appendChild(el("div", { id: "settingsHost" }));
+    buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (!state.detailRow) return;
       if (e.key === "Escape") closeDetail();
       else if (e.key === "ArrowLeft") stepDetail(-1);
@@ -675,6 +783,9 @@
     setSearch: function (q) { state.search = q; renderRegBody(); },
     openDetail: openDetail,
     closeDetail: closeDetail,
-    stepDetail: stepDetail
+    stepDetail: stepDetail,
+    openSettings: openSettings,
+    closeSettings: closeSettings,
+    runRegressionTests: runRegressionTests
   };
 })();

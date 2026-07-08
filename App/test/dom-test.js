@@ -20,12 +20,21 @@ var dom = new JSDOM(
 global.window = dom.window;
 global.document = dom.window.document;
 global.Node = dom.window.Node;
+// app.js references these two as bare globals (not passed into runInApp below),
+// so they must live on Node's real global, not just dom.window.
+global.Papa = Papa;
+global.ExcelJS = require("exceljs");
 
 // config/logic attach to Node global; bridge onto the jsdom window BEFORE app.js runs.
 var CONFIG = require("../src/config.js");
 var LOGIC = require("../src/logic.js");
 dom.window.CarShowConfig = CONFIG;
 dom.window.CarShowLogic = LOGIC;
+dom.window.CarShowRegressionTests = require("../src/regression-tests.js");
+dom.window.CarShowFixtures = {
+  regCsv: fs.readFileSync(path.join(FIXTURES, "registration.csv"), "utf8"),
+  actCsv: fs.readFileSync(path.join(FIXTURES, "activity.csv"), "utf8")
+};
 
 // load app.js source into the jsdom window context via eval so its `window`/`document` are jsdom's
 var appSrc = fs.readFileSync(path.join(__dirname, "../src/app.js"), "utf8");
@@ -170,6 +179,41 @@ var w = dom.window, d = dom.window.document;
   var matrixCells = Array.prototype.map.call(d.querySelector(".panel table.matrix").querySelectorAll("td"), function (td) { return td.textContent; });
   ok(matrixCells.indexOf("1") !== -1, "shirt matrix shows a 1");
   ok(/Successfully created 28/.test(d.querySelector(".status").textContent), "status shows success");
+
+  // ---- hamburger menu -> Settings -> Run Regression Tests ----
+  ok(!!d.querySelector("#hamburgerBtn"), "hamburger button is present in the header");
+  ok(!!d.querySelector("#hdrMenu").classList.contains("hidden"), "menu starts hidden");
+  d.querySelector("#hamburgerBtn").dispatchEvent(new w.Event("click", { bubbles: true }));
+  ok(!d.querySelector("#hdrMenu").classList.contains("hidden"), "clicking the hamburger opens the menu");
+  ok(!d.querySelector("#settingsHost .modal-backdrop"), "settings modal not open yet");
+  d.querySelector("#settingsMenuItem").dispatchEvent(new w.Event("click", { bubbles: true }));
+  ok(d.querySelector("#hdrMenu").classList.contains("hidden"), "picking Settings closes the menu");
+  ok(!!d.querySelector("#settingsHost .modal-backdrop"), "Settings item opens the settings modal");
+
+  // Running the tests exercises the real logic + Excel round-trip against the
+  // same fixture as test/run-tests.js — this should never touch the 28-row
+  // table currently loaded above (checked after, unaffected).
+  var runP = w.__carshow.runRegressionTests();
+  ok(!!runP && typeof runP.then === "function", "runRegressionTests returns a promise the caller can await");
+  await runP;
+  var summary = d.querySelector("#settingsHost .test-summary");
+  ok(!!summary && /44 passed, 0 failed/.test(summary.textContent), "in-app regression run reports 44 passed, 0 failed (got " + (summary && summary.textContent) + ")");
+  ok(d.querySelectorAll("#settingsHost .test-list li.pass").length === 44, "44 passing rows rendered");
+  ok(d.querySelectorAll("#settingsHost .test-list li.fail").length === 0, "0 failing rows rendered");
+
+  // "Only show errors" collapses an all-pass run to a friendly empty message
+  var onlyErrCb = d.querySelector("#settingsHost .settings-actions input[type=checkbox]");
+  onlyErrCb.checked = true;
+  onlyErrCb.dispatchEvent(new w.Event("change", { bubbles: true }));
+  ok(!d.querySelector("#settingsHost .test-list"), "only-errors hides the list when everything passed");
+  ok(/No errors/.test(d.querySelector("#settingsHost .modal-body").textContent), "only-errors shows the all-clear message");
+
+  // running the fixture through Settings must not disturb the real, currently
+  // loaded 28-row table underneath the modal
+  ok(d.querySelectorAll("table.grid tbody tr").length === 28, "underlying table still shows all 28 rows after running regression tests");
+
+  w.__carshow.closeSettings();
+  ok(!d.querySelector("#settingsHost .modal-backdrop"), "closeSettings closes the modal");
 
   console.log("\n" + passes + " passed, " + fails + " failed");
   process.exit(fails ? 1 : 0);

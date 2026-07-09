@@ -6,3 +6,7 @@ Thumbs.db
 # Deploy secrets and generated snapshot (contains real member PII) — never commit
 App/deploy/secrets.php
 App/deploy/_data.html
+
+# Sponsor form submissions accumulate live on the server — never committed, and never
+# overwritten by a deploy (see deploy/ftp-deploy.sh, which deliberately doesn't upload it)
+App/deploy/sponsor-submissions.json

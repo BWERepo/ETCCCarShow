@@ -45,10 +45,15 @@ upload "_data.html"
 upload "_login.html"
 upload "index.php"
 upload "secrets.php"
+upload "sponsor-form.php"
+upload "sponsor-submissions.php"
 # canonical copy lives in ../assets/, shared with the main app's build.js (which
 # embeds it as base64) — see assets/ETCClogoWhiteBackground.png
 upload "ETCClogoWhiteBackground.png" "$DIR/../assets/ETCClogoWhiteBackground.png"
 upload ".htaccess"
+# sponsor-submissions.json is deliberately never uploaded here — it's the live,
+# server-accumulated set of sponsor form submissions and has no meaningful local
+# copy to overwrite it with. It's created on first submission by sponsor-form.php.
 
 echo "--- Final listing ---"
 curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv "$BASE/" -m 20

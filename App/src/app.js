@@ -22,8 +22,28 @@
     settingsOpen: false,  // settings modal
     testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
     testRunning: false,
-    testOnlyErrors: false
+    testOnlyErrors: false,
+    sponsors: [],          // loaded from localStorage in init(); independent of the CSVs
+    sponsorSearch: "",
+    sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
+    importOpen: false      // "Import from Server" modal (pulls sponsor-form.php web submissions)
   };
+
+  // The live public sponsor form's companion read API (deploy/sponsor-submissions.php) —
+  // see App/deploy/README.md. Editable in the Import modal in case of local/staging testing.
+  var DEFAULT_IMPORT_URL = "https://etccapps.com/apps/carshow/sponsor-submissions.php";
+
+  // ---------- sponsors: storage (localStorage, independent of the CSV data) ----------
+  var SPONSORS_STORAGE_KEY = "etccCarShowSponsors_v1";
+  function loadSponsors() {
+    try {
+      var raw = window.localStorage.getItem(SPONSORS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function saveSponsors(list) {
+    try { window.localStorage.setItem(SPONSORS_STORAGE_KEY, JSON.stringify(list)); } catch (e) { /* storage unavailable (e.g. private browsing) */ }
+  }
 
   var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
@@ -188,17 +208,29 @@
   // ---------- views ----------
   function renderViews() {
     var app = $("#app");
-    if (!state.result) { app.innerHTML = ""; return; }
+    app.innerHTML = "";
+    app.appendChild(buildTabs());
+
+    // Sponsors are manually entered and independent of the loaded CSVs, so
+    // this tab works even before the two ClubExpress files have been dropped.
+    if (state.tab === "sponsors") {
+      app.appendChild(buildSponsorsToolbar());
+      app.appendChild(buildSponsorsView());
+      return;
+    }
+
+    if (!state.result) {
+      app.appendChild(el("div", { class: "empty-state" },
+        ["Drop the two ClubExpress CSVs above to see " + (state.tab === "sum" ? "the summary." : "the registration list.")]));
+      return;
+    }
     if (!state.result.ok) {
-      app.innerHTML = "";
       app.appendChild(el("div", { class: "panel" }, [
         el("h3", { text: "Could not generate" }),
         el("ul", { class: "messages" }, state.result.messages.map(function (m) { return el("li", { text: m }); }))
       ]));
       return;
     }
-    app.innerHTML = "";
-    app.appendChild(buildTabs());
     if (state.tab === "reg") app.appendChild(buildLoadedInfo());
     var toolbar = state.tab === "reg" ? buildRegToolbar() : buildSummaryToolbar();
     app.appendChild(toolbar);
@@ -211,7 +243,7 @@
       t.addEventListener("click", function () { state.tab = id; renderViews(); });
       return t;
     };
-    return el("div", { class: "tabs no-print" }, [mk("reg", "Registration"), mk("sum", "Summary")]);
+    return el("div", { class: "tabs no-print" }, [mk("sum", "Summary"), mk("reg", "Registration"), mk("sponsors", "Sponsors")]);
   }
 
   // CSVs are (re)ingested synchronously right before regenerate() runs, so
@@ -550,6 +582,14 @@
       card("Next Member #", s.nextMemberNumber)
     ]));
 
+    // sponsor cards (independent of the loaded CSVs — reads state.sponsors directly)
+    container.appendChild(el("div", { class: "panel" }, [
+      el("h3", { text: "Sponsors" }),
+      el("div", { class: "cards sponsor-cards" }, [
+        sponsorSummaryCard("individual"), sponsorSummaryCard("corporate"), sponsorSummaryCard("premier")
+      ])
+    ]));
+
     // shirts matrix
     container.appendChild(el("div", { class: "panel" }, [el("h3", { text: "Shirts" }), shirtMatrix(s)]));
 
@@ -618,6 +658,365 @@
     return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
   }
 
+  // ---------- sponsors ----------
+  // Manually entered/edited, stored in localStorage — not derived from the CSV
+  // exports, so this tab (and its data) is independent of whatever registration
+  // data happens to be loaded.
+  var SPONSOR_COLS = [
+    { key: "name", label: "Sponsor Name" },
+    { key: "contactPerson", label: "Contact Person" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "address", label: "Address" },
+    { key: "website", label: "Website" },
+    { key: "etccMember", label: "ETCC Member" },
+    { key: "sponsorType", label: "Sponsor Type" },
+    { key: "shirtSize", label: "T-Shirt" }
+  ];
+  function sponsorTypeLabel(key) {
+    var t = CONFIG.SPONSOR_TYPES.filter(function (x) { return x.key === key; })[0];
+    return t ? t.label : (key || "");
+  }
+
+  // Per-type totals + shirt-size breakdown for the Summary tab's sponsor cards.
+  // Each sponsor picks exactly one shirt (no free/xtra quantities like
+  // registrants), so this just tallies which of the 12 sizes each sponsor of
+  // this type chose.
+  function sponsorStatsByType(typeKey) {
+    var typeCfg = CONFIG.SPONSOR_TYPES.filter(function (t) { return t.key === typeKey; })[0];
+    var matches = state.sponsors.filter(function (s) { return s.sponsorType === typeKey; });
+    var sizeCounts = {};
+    CONFIG.SIZES.forEach(function (sz) { sizeCounts[sz.key] = { mens: 0, womens: 0 }; });
+    matches.forEach(function (s) {
+      var info = s.shirtSize && CONFIG.SPONSOR_SIZE_INDEX[s.shirtSize];
+      if (!info || !sizeCounts[info.sizeKey]) return;
+      if (info.gender === "Men's") sizeCounts[info.sizeKey].mens++; else sizeCounts[info.sizeKey].womens++;
+    });
+    return {
+      label: typeCfg ? typeCfg.label.replace(/\s*\(\$[\d,]+\)\s*$/, "") : typeKey,
+      count: matches.length,
+      total: matches.length * (typeCfg ? typeCfg.fee : 0),
+      sizeCounts: sizeCounts
+    };
+  }
+
+  function sponsorSummaryCard(typeKey) {
+    var stats = sponsorStatsByType(typeKey);
+    var rows = CONFIG.SIZES.map(function (sz) {
+      var c = stats.sizeCounts[sz.key];
+      return el("tr", {}, [
+        el("td", { class: "lbl", text: sz.label }),
+        el("td", { class: c.mens ? "" : "z", text: String(c.mens) }),
+        el("td", { class: c.womens ? "" : "z", text: String(c.womens) })
+      ]);
+    });
+    var table = el("table", { class: "matrix" }, [
+      el("thead", {}, [el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })])]),
+      el("tbody", {}, rows)
+    ]);
+    return el("div", { class: "sponsor-card" }, [
+      el("div", { class: "sponsor-card-head", text: stats.label + " Sponsors" }),
+      el("div", { class: "sponsor-card-stats" }, [
+        el("div", {}, [el("div", { class: "stat-v", text: String(stats.count) }), el("div", { class: "stat-k", text: stats.count === 1 ? "Sponsor" : "Sponsors" })]),
+        el("div", {}, [el("div", { class: "stat-v", text: "$" + stats.total.toLocaleString() }), el("div", { class: "stat-k", text: "Total" })])
+      ]),
+      table
+    ]);
+  }
+  function sponsorFieldText(s, colKey) {
+    if (colKey === "etccMember") return s.etccMember ? "Yes" : "No";
+    if (colKey === "sponsorType") return sponsorTypeLabel(s.sponsorType);
+    var v = s[colKey];
+    return v == null ? "" : String(v);
+  }
+  function sortedSponsors() {
+    return state.sponsors.slice().sort(function (a, b) {
+      var an = (a.name || "").toLowerCase(), bn = (b.name || "").toLowerCase();
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    });
+  }
+  function visibleSponsors() {
+    var q = state.sponsorSearch.trim().toLowerCase();
+    var list = sortedSponsors();
+    if (!q) return list;
+    return list.filter(function (s) {
+      return SPONSOR_COLS.some(function (c) { return sponsorFieldText(s, c.key).toLowerCase().indexOf(q) !== -1; });
+    });
+  }
+  function upsertSponsor(record) {
+    var idx = -1;
+    state.sponsors.forEach(function (s, i) { if (s.id === record.id) idx = i; });
+    if (idx === -1) state.sponsors.push(record); else state.sponsors[idx] = record;
+    saveSponsors(state.sponsors);
+  }
+  function removeSponsor(id) {
+    state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });
+    saveSponsors(state.sponsors);
+  }
+
+  function buildSponsorsToolbar() {
+    var search = el("input", { type: "search", placeholder: "Search sponsors…", value: state.sponsorSearch });
+    search.addEventListener("input", function () { state.sponsorSearch = search.value; renderSponsorsBody(); });
+    var count = el("span", { class: "count", id: "sponsorcount" });
+    var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
+    addBtn.addEventListener("click", function () { openSponsorForm(null); });
+    var prn = el("button", { class: "btn" }, ["🖨 Print"]);
+    prn.addEventListener("click", printSponsors);
+    var xls = el("button", { class: "btn" }, ["⬇ Download Excel"]);
+    xls.addEventListener("click", function () { downloadExcel(); });
+    var importBtn = el("button", { class: "btn" }, ["⇩ Import from Server"]);
+    importBtn.addEventListener("click", openImportModal);
+    return el("div", { class: "toolbar no-print" }, [search, count, el("span", { class: "spacer" }), prn, xls, importBtn, addBtn]);
+  }
+
+  function buildSponsorsView() {
+    var thead = el("thead", {}, [el("tr", {}, SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); })
+      .concat([el("th", { class: "no-print", text: "" })]))]);
+    var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
+    var wrap = el("div", { class: "tablewrap" }, [table]);
+    setTimeout(renderSponsorsBody, 0);
+    return wrap;
+  }
+
+  function renderSponsorsBody() {
+    if (state.tab !== "sponsors") return;
+    var body = $("#sponsorbody"); if (!body) return;
+    var rows = visibleSponsors();
+    var frag = document.createDocumentFragment();
+    rows.forEach(function (s) {
+      var tr = el("tr", {});
+      tr.title = "Click for full details";
+      tr.addEventListener("click", function () { openSponsorForm(s); });
+      SPONSOR_COLS.forEach(function (c) { tr.appendChild(el("td", { text: sponsorFieldText(s, c.key) })); });
+      tr.appendChild(el("td", { class: "no-print" }));
+      frag.appendChild(tr);
+    });
+    body.innerHTML = "";
+    body.appendChild(frag);
+    var rc = $("#sponsorcount");
+    if (rc) rc.textContent = rows.length + " of " + state.sponsors.length + " sponsors shown";
+    if (!state.sponsors.length) {
+      body.appendChild(el("tr", {}, [el("td", { class: "hint", colspan: String(SPONSOR_COLS.length + 1), text: "No sponsors yet — click “+ Add Sponsor” to add one." })]));
+    }
+  }
+
+  // ---------- sponsor add/edit form modal ----------
+  var SPONSOR_FORM_FIELDS = [
+    { key: "name", label: "Sponsor Name", required: true },
+    { key: "contactPerson", label: "Contact Person" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "address", label: "Address" },
+    { key: "website", label: "Website" }
+  ];
+  function blankSponsor() {
+    return {
+      id: null, name: "", contactPerson: "", phone: "", email: "", address: "", website: "",
+      etccMember: false, sponsorType: CONFIG.SPONSOR_TYPES[0].key, shirtSize: ""
+    };
+  }
+  function openSponsorForm(sponsor) {
+    var src = sponsor || blankSponsor();
+    var copy = {};
+    Object.keys(src).forEach(function (k) { copy[k] = src[k]; });
+    state.sponsorEditing = copy;
+    renderSponsorFormModal();
+  }
+  function closeSponsorForm() { state.sponsorEditing = null; renderSponsorFormModal(); }
+
+  function renderSponsorFormModal() {
+    var host = $("#sponsorFormHost");
+    if (!host) return;
+    host.innerHTML = "";
+    var editing = state.sponsorEditing;
+    if (!editing) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeSponsorForm);
+    var head = el("div", { class: "modal-head" }, [
+      el("h3", { text: editing.id ? "Edit Sponsor" : "Add Sponsor" }),
+      el("span", { class: "spacer" }), closeBtn
+    ]);
+
+    var body = el("div", { class: "modal-body" });
+    var fieldEls = {};
+    SPONSOR_FORM_FIELDS.forEach(function (f) {
+      var input = el("input", { type: "text", value: editing[f.key] || "" });
+      fieldEls[f.key] = input;
+      body.appendChild(el("div", { class: "form-row" }, [
+        el("span", { class: "form-label", text: f.label + (f.required ? " *" : "") }),
+        input
+      ]));
+    });
+
+    var etccCb = el("input", { type: "checkbox" });
+    etccCb.checked = !!editing.etccMember;
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "ETCC Member" }),
+      el("label", {}, [etccCb, document.createTextNode(" Yes")])
+    ]));
+
+    var typeSel = el("select", {});
+    CONFIG.SPONSOR_TYPES.forEach(function (t) {
+      var o = el("option", { value: t.key, text: t.label });
+      if (editing.sponsorType === t.key) o.setAttribute("selected", "selected");
+      typeSel.appendChild(o);
+    });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Sponsor Type" }), typeSel]));
+
+    var shirtSel = el("select", {});
+    shirtSel.appendChild(el("option", { value: "", text: "— none —" }));
+    CONFIG.SPONSOR_SHIRT_SIZES.forEach(function (sz) {
+      var o = el("option", { value: sz, text: sz });
+      if (editing.shirtSize === sz) o.setAttribute("selected", "selected");
+      shirtSel.appendChild(o);
+    });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "T-Shirt" }), shirtSel]));
+
+    var errorMsg = el("div", { class: "form-error" });
+    body.appendChild(errorMsg);
+
+    var saveBtn = el("button", { class: "btn primary" }, ["Save"]);
+    saveBtn.addEventListener("click", function () {
+      var name = fieldEls.name.value.trim();
+      if (!name) { errorMsg.textContent = "Sponsor Name is required."; return; }
+      var record = {
+        id: editing.id || ("sp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
+        name: name,
+        contactPerson: fieldEls.contactPerson.value.trim(),
+        phone: fieldEls.phone.value.trim(),
+        email: fieldEls.email.value.trim(),
+        address: fieldEls.address.value.trim(),
+        website: fieldEls.website.value.trim(),
+        etccMember: etccCb.checked,
+        sponsorType: typeSel.value,
+        shirtSize: shirtSel.value
+      };
+      upsertSponsor(record);
+      closeSponsorForm();
+      renderSponsorsBody();
+    });
+    var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
+    cancelBtn.addEventListener("click", closeSponsorForm);
+    var actions = [saveBtn, cancelBtn];
+    if (editing.id) {
+      var delBtn = el("button", { class: "btn", style: "color:var(--warn)" }, ["Delete"]);
+      delBtn.addEventListener("click", function () {
+        removeSponsor(editing.id);
+        closeSponsorForm();
+        renderSponsorsBody();
+      });
+      actions.push(delBtn);
+    }
+    body.appendChild(el("div", { class: "settings-actions" }, actions));
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeSponsorForm);
+    host.appendChild(backdrop);
+  }
+
+  // ---------- import sponsors submitted through the public web form ----------
+  // Pulls sponsor-submissions.php (password-protected, see App/deploy/README.md)
+  // and merges any records not already present locally (matched by id) into
+  // state.sponsors. The public form (deploy/sponsor-form.php) has no login, so
+  // this is the only path that data takes to reach an officer's browser.
+  function openImportModal() { state.importOpen = true; renderImportModal(); }
+  function closeImportModal() { state.importOpen = false; renderImportModal(); }
+
+  function renderImportModal() {
+    var host = $("#importHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.importOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeImportModal);
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Import from Server" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var urlInput = el("input", { type: "text", value: DEFAULT_IMPORT_URL });
+    var pwInput = el("input", { type: "password", value: "" });
+    var statusMsg = el("div", { class: "form-error" });
+
+    var body = el("div", { class: "modal-body" }, [
+      el("div", { class: "hint", style: "margin-bottom:10px" },
+        ["Pulls sponsorships submitted through the public web form into this browser's Sponsors list. Requires the site password."]),
+      el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Server URL" }), urlInput]),
+      el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Site Password" }), pwInput]),
+      statusMsg
+    ]);
+
+    var importBtn = el("button", { class: "btn primary" }, ["Import"]);
+    importBtn.addEventListener("click", function () {
+      var url = urlInput.value.trim();
+      var pw = pwInput.value;
+      statusMsg.style.color = "var(--warn)";
+      if (!url) { statusMsg.textContent = "Server URL is required."; return; }
+      if (!pw) { statusMsg.textContent = "Password is required."; return; }
+      statusMsg.textContent = "";
+      importBtn.setAttribute("disabled", "disabled");
+      importBtn.textContent = "Importing…";
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw })
+      }).then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      }).then(function (r) {
+        importBtn.removeAttribute("disabled");
+        importBtn.textContent = "Import";
+        if (!r.ok || !r.data || !r.data.ok) {
+          statusMsg.style.color = "var(--warn)";
+          statusMsg.textContent = (r.data && r.data.error) ? r.data.error : "Import failed.";
+          return;
+        }
+        var incoming = r.data.sponsors || [];
+        var existingIds = {};
+        state.sponsors.forEach(function (s) { existingIds[s.id] = true; });
+        var added = 0;
+        incoming.forEach(function (s) {
+          if (s && s.id && !existingIds[s.id]) { state.sponsors.push(s); existingIds[s.id] = true; added++; }
+        });
+        if (added) saveSponsors(state.sponsors);
+        statusMsg.style.color = "var(--good)";
+        statusMsg.textContent = added
+          ? "Imported " + added + " new sponsor" + (added === 1 ? "" : "s") + "."
+          : "No new submissions to import.";
+        renderSponsorsBody();
+      }).catch(function () {
+        importBtn.removeAttribute("disabled");
+        importBtn.textContent = "Import";
+        statusMsg.style.color = "var(--warn)";
+        statusMsg.textContent = "Could not reach the server. Check the URL and your connection.";
+      });
+    });
+    var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
+    cancelBtn.addEventListener("click", closeImportModal);
+    body.appendChild(el("div", { class: "settings-actions" }, [importBtn, cancelBtn]));
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeImportModal);
+    host.appendChild(backdrop);
+  }
+
+  // Print-only table (mirrors the on-screen columns; sponsors don't have the
+  // Registration tab's 24-shirt-column collapsing problem, so no separate
+  // "full column" build is needed the way printRegistration() has).
+  function printSponsors() {
+    var host = $("#printHost");
+    host.innerHTML = "";
+    var thead = el("thead", {}, [el("tr", {}, SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); }))]);
+    var tbody = el("tbody", {}, visibleSponsors().map(function (s) {
+      return el("tr", {}, SPONSOR_COLS.map(function (c) { return el("td", { text: sponsorFieldText(s, c.key) }); }));
+    }));
+    host.appendChild(el("h2", { text: "Car Show Sponsors" }));
+    host.appendChild(el("table", { class: "grid" }, [thead, tbody]));
+    window.print();
+  }
+
   function fmtDate(d) {
     d = d instanceof Date ? d : new Date(d);
     function p(n) { return (n < 10 ? "0" : "") + n; }
@@ -627,8 +1026,9 @@
 
   // ---------- Excel export (ExcelJS) ----------
   function downloadExcel() {
-    var res = state.result; if (!res || !res.ok) return;
-    var wb = window.CarShowExcel.build(ExcelJS, res);
+    var res = state.result && state.result.ok ? state.result : null;
+    if (!res && !state.sponsors.length) return;
+    var wb = window.CarShowExcel.build(ExcelJS, res, state.sponsors);
     wb.xlsx.writeBuffer().then(function (buf) {
       var blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       var a = document.createElement("a");
@@ -759,9 +1159,14 @@
     document.body.appendChild(el("div", { id: "detailHost" }));
     document.body.appendChild(el("div", { id: "printHost" }));
     document.body.appendChild(el("div", { id: "settingsHost" }));
+    document.body.appendChild(el("div", { id: "sponsorFormHost" }));
+    document.body.appendChild(el("div", { id: "importHost" }));
+    state.sponsors = loadSponsors();
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
+      if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
+      if (e.key === "Escape" && state.importOpen) { closeImportModal(); return; }
       if (!state.detailRow) return;
       if (e.key === "Escape") closeDetail();
       else if (e.key === "ArrowLeft") stepDetail(-1);
@@ -790,6 +1195,10 @@
     stepDetail: stepDetail,
     openSettings: openSettings,
     closeSettings: closeSettings,
-    runRegressionTests: runRegressionTests
+    runRegressionTests: runRegressionTests,
+    openSponsorForm: openSponsorForm,
+    closeSponsorForm: closeSponsorForm,
+    openImportModal: openImportModal,
+    closeImportModal: closeImportModal
   };
 })();

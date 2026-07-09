@@ -38,6 +38,22 @@
     });
   });
 
+  // Sponsors tab: a sponsor picks one shirt (no Free/Xtra distinction like
+  // registrants), so build the 12 "Men's/Women's Small..3XL" strings from the
+  // same SIZES table used everywhere else, plus a reverse lookup from that
+  // string back to { gender, sizeKey } for tallying the Summary tab's
+  // per-sponsor-type shirt-size cards.
+  var SPONSOR_GENDERS = ["Men's", "Women's"];
+  var SPONSOR_SHIRT_SIZES = [];
+  var SPONSOR_SIZE_INDEX = {};
+  SPONSOR_GENDERS.forEach(function (g) {
+    SIZES.forEach(function (s) {
+      var label = g + " " + s.label;
+      SPONSOR_SHIRT_SIZES.push(label);
+      SPONSOR_SIZE_INDEX[label] = { gender: g, sizeKey: s.key };
+    });
+  });
+
   var CONFIG = {
     // --- Variables (Configuration sheet: Variables table) ---
     title: "2026 Car Show Registration List",
@@ -168,7 +184,16 @@
     // Derived tables (exposed for UI/logic):
     SIZES: SIZES,
     GROUPS: GROUPS,
-    SHIRT_BUCKETS: SHIRT_BUCKETS
+    SHIRT_BUCKETS: SHIRT_BUCKETS,
+
+    // --- Sponsors tab (manually entered, not derived from the CSV exports) ---
+    SPONSOR_TYPES: [
+      { key: "premier", label: "Premier ($250)", fee: 250 },
+      { key: "corporate", label: "Corporate ($100)", fee: 100 },
+      { key: "individual", label: "Individual ($100)", fee: 100 }
+    ],
+    SPONSOR_SHIRT_SIZES: SPONSOR_SHIRT_SIZES,
+    SPONSOR_SIZE_INDEX: SPONSOR_SIZE_INDEX
   };
 
   root.CarShowConfig = CONFIG;

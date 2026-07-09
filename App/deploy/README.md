@@ -23,10 +23,31 @@ new account):
 - `secrets.php` — **not committed** — defines `$PASSWORD_HASH`. Copy
   `secrets.example.php` to `secrets.php` and fill in a real hash:
   `openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-password'`
-- `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to `_data.html`.
+- `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to `_data.html`
+  and `sponsor-submissions.json`.
 - `ETCClogoWhiteBackground.png` — logo; canonical copy lives at `../assets/` (shared
   with the main app, which embeds it as base64 in the header), originally copied from
   SilentAuctionManager's Images folder.
+- `sponsor-form.php` — **public, no login** — a standalone "Become a Sponsor" form with
+  the same fields as the app's Sponsors tab. Meant to be linked/embedded from another
+  website (e.g. the club's main site) so sponsors can submit their own info. Appends
+  each submission to `sponsor-submissions.json` (gitignored, contains PII — created on
+  first submission, blocked from direct HTTP access by `.htaccess`).
+- `sponsor-submissions.php` — password-protected JSON API (checks the site password on
+  every request, since the caller — the offline app — has no shared PHP session) that
+  returns the accumulated list from `sponsor-submissions.json`. Used by the Sponsors
+  tab's "Import from Server" button to pull new web submissions into the app.
+
+## Sponsor form submissions
+
+`sponsor-form.php` is public by design — it needs its own URL that works for a sponsor
+visiting from another website, with no password. Submitted data only ever leaves the
+server through `sponsor-submissions.php`, which requires the site password. In the app,
+Sponsors tab → "Import from Server" prompts for that password, fetches, and merges any
+submissions not already present locally (matched by id) into the local sponsor list.
+
+`sponsor-submissions.json` is never touched by `ftp-deploy.sh` — it accumulates live on
+the server and a deploy must not overwrite it.
 
 ## Refreshing the live data
 

@@ -153,6 +153,15 @@ th.pinned { z-index: 3; }
 .modal-section { margin-top: 14px; }
 .modal-section h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
+/* sponsor form */
+.form-row { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+.form-row .form-label { min-width: 140px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.form-row input[type=text], .form-row select {
+  flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit;
+}
+.form-row label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+.form-error { color: var(--warn); font-size: 12px; min-height: 16px; margin-top: 4px; }
+
 /* settings modal */
 .settings-actions { display: flex; align-items: center; gap: 14px; margin: 10px 0 14px; flex-wrap: wrap; }
 .test-summary { font-weight: 700; margin-bottom: 10px; }
@@ -170,6 +179,15 @@ th.pinned { z-index: 3; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .card .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .card .v { font-size: 26px; font-weight: 700; margin-top: 4px; }
+
+.sponsor-cards { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 0; }
+.sponsor-card { background: #fbfcfd; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.sponsor-card-head { font-size: 14px; font-weight: 700; color: var(--red-dark); margin-bottom: 10px; }
+.sponsor-card-stats { display: flex; gap: 22px; margin-bottom: 12px; }
+.sponsor-card-stats .stat-v { font-size: 22px; font-weight: 700; }
+.sponsor-card-stats .stat-k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.sponsor-card table.matrix { width: 100%; background: #fff; }
+.sponsor-card table.matrix th, .sponsor-card table.matrix td { padding: 4px 8px; font-size: 12px; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
 .panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--red-dark); }
 table.matrix { border-collapse: collapse; }

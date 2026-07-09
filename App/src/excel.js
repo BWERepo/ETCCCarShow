@@ -20,13 +20,53 @@
   }
   function isShirt(res, c) { return res.shirtColumns.indexOf(c) !== -1; }
 
-  function build(ExcelJS, res) {
+  // sponsors is optional (Sponsors tab data, independent of the CSV-driven res).
+  function build(ExcelJS, res, sponsors) {
     var wb = new ExcelJS.Workbook();
     wb.creator = "ETCC Car Show app";
-    regSheet(wb, res);
-    summarySheet(wb, res);
-    if (res.messages && res.messages.length) messageSheet(wb, res);
+    if (res) {
+      regSheet(wb, res);
+      summarySheet(wb, res);
+    }
+    if (sponsors && sponsors.length) sponsorSheet(wb, sponsors);
+    if (res && res.messages && res.messages.length) messageSheet(wb, res);
     return wb;
+  }
+
+  function sponsorTypeLabel(key) {
+    var t = CONFIG.SPONSOR_TYPES.filter(function (x) { return x.key === key; })[0];
+    return t ? t.label : (key || "");
+  }
+
+  var SPONSOR_COLS = [
+    { key: "name", label: "Sponsor Name", width: 22 },
+    { key: "contactPerson", label: "Contact Person", width: 18 },
+    { key: "phone", label: "Phone", width: 15 },
+    { key: "email", label: "Email", width: 26 },
+    { key: "address", label: "Address", width: 24 },
+    { key: "website", label: "Website", width: 22 },
+    { key: "etccMember", label: "ETCC Member", width: 12 },
+    { key: "sponsorType", label: "Sponsor Type", width: 18 },
+    { key: "shirtSize", label: "T-Shirt", width: 18 }
+  ];
+
+  function sponsorSheet(wb, sponsors) {
+    var ws = wb.addWorksheet("SponsorsSheet", { views: [{ state: "frozen", ySplit: 1 }] });
+    SPONSOR_COLS.forEach(function (c, i) {
+      var cell = ws.getCell(1, i + 1);
+      cell.value = c.label; cell.font = { bold: true }; cell.fill = GREY; cell.border = border();
+      ws.getColumn(i + 1).width = c.width;
+    });
+    sponsors.forEach(function (s, ri) {
+      SPONSOR_COLS.forEach(function (c, ci) {
+        var v = c.key === "etccMember" ? (s.etccMember ? "Yes" : "No") :
+          c.key === "sponsorType" ? sponsorTypeLabel(s.sponsorType) : s[c.key];
+        var cell = ws.getCell(2 + ri, ci + 1);
+        cell.value = v || ""; cell.border = border();
+      });
+    });
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: SPONSOR_COLS.length } };
+    return ws;
   }
 
   function regSheet(wb, res) {

@@ -45,6 +45,15 @@ header.app .hdr-spacer { display: none; }
 }
 .hdr-menu-item:last-child { border-bottom: none; }
 .hdr-menu-item:hover { background: #f3f5f8; }
+.hdr-dev-row { display: flex; gap: 6px; cursor: default; }
+.hdr-dev-row:hover { background: #fff; }
+.hdr-dev-pw {
+  flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px;
+  font-size: 13px; font-family: inherit; color: var(--ink); background: #fff;
+}
+.hdr-dev-row .btn { flex: none; padding: 6px 10px; font-size: 13px; }
+.hdr-dev-error { padding: 0 14px 10px; color: var(--red-dark); font-size: 12px; border-bottom: 1px solid var(--line); }
+.hdr-dev-error:last-child { border-bottom: none; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
 footer.app-footer {

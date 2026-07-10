@@ -52,6 +52,15 @@ header.app .hdr-spacer { display: none; }
 }
 .hdr-menu-item:last-child { border-bottom: none; }
 .hdr-menu-item:hover { background: #f3f5f8; }
+.hdr-dev-row { display: flex; gap: 6px; cursor: default; }
+.hdr-dev-row:hover { background: #fff; }
+.hdr-dev-pw {
+  flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px;
+  font-size: 13px; font-family: inherit; color: var(--ink); background: #fff;
+}
+.hdr-dev-row .btn { flex: none; padding: 6px 10px; font-size: 13px; }
+.hdr-dev-error { padding: 0 14px 10px; color: var(--red-dark); font-size: 12px; border-bottom: 1px solid var(--line); }
+.hdr-dev-error:last-child { border-bottom: none; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
 footer.app-footer {
@@ -253,7 +262,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.26 &middot; Deployed 7/10/2026 5:00 AM</div>
+  <div>v1.27 &middot; Deployed 7/10/2026 6:30 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1168,7 +1177,10 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     sponsorSyncError: null, // set when a LIVE-mode push to the server fails; shown in the Sponsors tab
     clearSponsorsOpen: false, // "Remove All Sponsors" confirmation modal
     sponsorSelected: {},    // id -> true, for the Sponsors tab's row checkboxes
-    deleteSelectedOpen: false // "Delete selected sponsors" confirmation modal
+    deleteSelectedOpen: false, // "Delete selected sponsors" confirmation modal
+    developerOpen: false,      // hamburger's "Developer" password prompt expanded
+    developerUnlocked: false,  // password verified this page load — reveals Import Members/Registrations
+    developerError: null       // developer password error message, or null
   };
 
   // Set only when this page was served by deploy/index.php (the hosted site) — that
@@ -1475,8 +1487,6 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       return el("label", {}, [cb, document.createTextNode(" " + b.label)]);
     })));
 
-    var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
-    xls.addEventListener("click", function () { downloadExcel(); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printRegistration);
 
@@ -1490,22 +1500,39 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
 
     var count = el("span", { class: "count", id: "rowcount" });
-    return el("div", { class: "toolbar no-print" }, [
+    var kids = [
       search,
       el("label", {}, [wk, document.createTextNode(" walk-ins")]),
       statusGroup,
       count,
       el("span", { class: "spacer" }),
-      zoomGroup,
-      buildChangeFilesBtn(), prn, xls
-    ]);
+      zoomGroup
+    ];
+    // On the hosted site, CSVs are always loaded server-side (see index.php) and
+    // there's no reason to re-export what the app already reads live — both
+    // buttons stay for the offline tool, which has no other way to load data
+    // or get a workbook out.
+    if (!LIVE) kids.push(buildChangeFilesBtn());
+    kids.push(prn);
+    if (!LIVE) {
+      var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
+      xls.addEventListener("click", function () { downloadExcel(); });
+      kids.push(xls);
+    }
+    return el("div", { class: "toolbar no-print" }, kids);
   }
   function buildSummaryToolbar() {
-    var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
-    xls.addEventListener("click", function () { downloadExcel(); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", function () { clearPrintHost(); window.print(); });
-    return el("div", { class: "toolbar no-print" }, [el("span", { class: "spacer" }), buildChangeFilesBtn(), prn, xls]);
+    var kids = [el("span", { class: "spacer" })];
+    if (!LIVE) kids.push(buildChangeFilesBtn());
+    kids.push(prn);
+    if (!LIVE) {
+      var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
+      xls.addEventListener("click", function () { downloadExcel(); });
+      kids.push(xls);
+    }
+    return el("div", { class: "toolbar no-print" }, kids);
   }
 
   // ---------- print (Registration tab: print every column, not just what's on screen) ----------
@@ -2429,37 +2456,104 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   }
 
   // ---------- header menu (hamburger) / settings ----------
+  // Order (LIVE mode): Logout, Developer (password-gated — reveals Import
+  // Members / Import Registrations once unlocked), Settings, Become a Car
+  // Show Sponsor. Offline tool only ever has Settings — everything else here
+  // needs the hosted site's session/server.
   function buildHeaderMenu() {
     var header = $("header.app");
     if (!header) return;
     var hamburgerBtn = el("button", { id: "hamburgerBtn", class: "hamburger-btn", title: "Menu", "aria-label": "Menu" }, ["☰"]);
-    var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
-    var items = [settingsItem];
-    if (LIVE) {
-      // Only meaningful on the hosted site — the offline tool has no server-side
-      // member roster to manage.
-      var membersItem = el("a", { class: "hdr-menu-item", href: "members-import.php", target: "_blank", rel: "noopener" }, ["👥 Member Database"]);
-      membersItem.addEventListener("click", closeMenu);
-      items.push(membersItem);
-      var sponsorFormItem = el("a", { class: "hdr-menu-item", href: "sponsor-form.php", target: "_blank", rel: "noopener" }, ["🏆 Become a Car Show Sponsor"]);
-      sponsorFormItem.addEventListener("click", closeMenu);
-      items.push(sponsorFormItem);
-      var logoutItem = el("a", { class: "hdr-menu-item", href: "logout.php" }, ["🚪 Logout"]);
-      logoutItem.addEventListener("click", closeMenu);
-      items.push(logoutItem);
-    }
-    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" }, items);
+    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" });
     hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
-    settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
     document.addEventListener("click", closeMenu);
     header.appendChild(el("div", { class: "hdr-spacer" }));
     header.appendChild(el("div", { class: "hdr-menu-wrap" }, [hamburgerBtn, menu]));
+    renderHeaderMenu();
   }
   function toggleMenu() { state.menuOpen = !state.menuOpen; renderHeaderMenu(); }
-  function closeMenu() { if (!state.menuOpen) return; state.menuOpen = false; renderHeaderMenu(); }
+  function closeMenu() {
+    if (!state.menuOpen && !state.developerOpen) return;
+    state.menuOpen = false;
+    state.developerOpen = false;
+    state.developerError = null;
+    renderHeaderMenu();
+  }
+  // Client-side gate reusing the site's existing login endpoint (action=login
+  // on location.pathname — the same request _login.html's JS makes) to check
+  // the entered password without ever exposing the hash to this script. Every
+  // Import Members/Registrations link is still independently session-gated
+  // server-side (see members-import.php/registrations-import.php) — this
+  // step is only about hiding those links from the menu until asked for.
+  function submitDeveloperPassword(password) {
+    return fetch(location.pathname, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "action=login&password=" + encodeURIComponent(password)
+    }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (r) {
+        if (r.ok && r.data && r.data.success) {
+          state.developerUnlocked = true;
+          state.developerOpen = false;
+          state.developerError = null;
+        } else {
+          state.developerError = "Incorrect password.";
+        }
+        renderHeaderMenu();
+      })
+      .catch(function () {
+        state.developerError = "Could not verify — check your connection and try again.";
+        renderHeaderMenu();
+      });
+  }
+  function buildDeveloperMenuItems() {
+    if (state.developerUnlocked) {
+      var importMembers = el("a", { class: "hdr-menu-item", href: "members-import.php", target: "_blank", rel: "noopener" }, ["👥 Import Members"]);
+      importMembers.addEventListener("click", closeMenu);
+      var importRegs = el("a", { class: "hdr-menu-item", href: "registrations-import.php", target: "_blank", rel: "noopener" }, ["📋 Import Registrations"]);
+      importRegs.addEventListener("click", closeMenu);
+      return [importMembers, importRegs];
+    }
+    if (!state.developerOpen) {
+      var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
+      devBtn.addEventListener("click", function (e) { e.stopPropagation(); state.developerOpen = true; renderHeaderMenu(); });
+      return [devBtn];
+    }
+    var pwInput = el("input", { type: "password", class: "hdr-dev-pw", placeholder: "Developer password" });
+    var goBtn = el("button", { class: "btn" }, ["Unlock"]);
+    var submit = function () { submitDeveloperPassword(pwInput.value); };
+    goBtn.addEventListener("click", function (e) { e.stopPropagation(); submit(); });
+    pwInput.addEventListener("click", function (e) { e.stopPropagation(); });
+    pwInput.addEventListener("keydown", function (e) { e.stopPropagation(); if (e.key === "Enter") submit(); });
+    var out = [el("div", { class: "hdr-menu-item hdr-dev-row" }, [pwInput, goBtn])];
+    if (state.developerError) out.push(el("div", { class: "hdr-dev-error" }, [state.developerError]));
+    return out;
+  }
   function renderHeaderMenu() {
     var menu = $("#hdrMenu");
-    if (menu) menu.classList.toggle("hidden", !state.menuOpen);
+    if (!menu) return;
+    menu.classList.toggle("hidden", !state.menuOpen);
+    menu.innerHTML = "";
+    var items = [];
+    if (LIVE) {
+      var logoutItem = el("a", { class: "hdr-menu-item", href: "logout.php" }, ["🚪 Logout"]);
+      logoutItem.addEventListener("click", closeMenu);
+      items.push(logoutItem);
+      items = items.concat(buildDeveloperMenuItems());
+    }
+    var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
+    settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
+    items.push(settingsItem);
+    if (LIVE) {
+      var sponsorFormItem = el("a", { class: "hdr-menu-item", href: "sponsor-form.php", target: "_blank", rel: "noopener" }, ["🏆 Become a Car Show Sponsor"]);
+      sponsorFormItem.addEventListener("click", closeMenu);
+      items.push(sponsorFormItem);
+    }
+    items.forEach(function (it) { menu.appendChild(it); });
+    if (state.menuOpen && state.developerOpen && !state.developerUnlocked) {
+      var pw = menu.querySelector(".hdr-dev-pw");
+      if (pw) pw.focus();
+    }
   }
 
   function openSettings() { state.settingsOpen = true; renderSettingsModal(); }

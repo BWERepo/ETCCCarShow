@@ -108,8 +108,30 @@ new account):
   — no separate password prompt, but you must already be logged in) page with a file
   upload form for an ETCC membership roster CSV (needs `last_name`/`first_name`
   columns — spacing/underscore/case-insensitive, so "Last Name" also works). Stores
-  the parsed names as `members-data.json`. Linked directly from the app's hamburger
-  menu (only shown when viewing the hosted site).
+  the parsed names as `members-data.json`. Linked from the hamburger menu's
+  password-gated "Developer" submenu (see below).
+- `registrations-import.php` — **officer-only**, same session gate as
+  `members-import.php` — a browser-based sibling of `registrations-upload.php`: pick a
+  Registration Data CSV (required) and Activity Registrant Data CSV (optional), submit,
+  and it writes `registrations-data.json` directly (same shape/destination as the CLI
+  upload flow). Exists so a data refresh doesn't require running
+  `upload-registrations.js` from a terminal. Also linked from the hamburger's
+  "Developer" submenu.
+
+## Hamburger menu (LIVE mode)
+
+Order: **Logout**, **Developer**, **Settings**, **Become a Car Show Sponsor**. Settings
+and Become a Car Show Sponsor are always visible; Logout and Developer only appear in
+LIVE mode (the offline tool has no session and only ever shows Settings).
+
+"Developer" is a client-side password gate, not a separate account or secret — clicking
+it expands an inline password field in the menu that POSTs to `location.pathname` with
+the same `action=login` request `_login.html` uses (checked against `secrets.php`'s
+`$PASSWORD_HASH`, same as the main login). Getting it right just reveals two more menu
+items, **Import Members** and **Import Registrations**, linking to `members-import.php`
+and `registrations-import.php` — both of which are already independently session-gated
+server-side regardless of this UI step. The point of "Developer" is to keep those two
+links out of the way for everyday use, not to add a second real credential.
 
 ## Member roster validation on the sponsor form
 
@@ -151,9 +173,12 @@ ClubExpress has no live API (see `AUTOPULL-NOTES.md`) — a person still has to 
 refresh by exporting CSVs. What's different from the old flow is where that data lands:
 
 1. Export fresh CSVs (`/export-carshow-data` skill, or manually into the Exports folder).
-2. `CARSHOW_SITE_PASSWORD=... node deploy/upload-registrations.js` — picks the newest
-   CSVs automatically (or pass explicit paths), POSTs them to the live
-   `registrations-upload.php`.
+2. Either:
+   - `CARSHOW_SITE_PASSWORD=... node deploy/upload-registrations.js` — picks the newest
+     CSVs automatically (or pass explicit paths), POSTs them to the live
+     `registrations-upload.php`; or
+   - hamburger menu → Developer (site password) → Import Registrations →
+     `registrations-import.php`, and pick the two files by hand in the browser.
 3. Done. The **very next** page load of the hosted site reflects the new data — no
    `build.js`, no `build-snapshot.js`, no `ftp-deploy.sh`.
 
@@ -172,10 +197,11 @@ them has no effect on which registration data is being served.
 
    Either way it uploads the bundle as `app-bundle.html`, plus `index.php`, `lib.php`,
    `sponsor-form.php`, `sponsor-submissions.php`, `registrations-upload.php`,
-   `members-import.php`, `forgot-password.php`, `reset-password.php`, `_login.html`,
-   the logo, and `.htaccess`. Never touches `secrets.php` (see above — deliberately
-   excluded so it can't revert a live password reset), `registrations-data.json`,
-   `sponsor-submissions.json`, `members-data.json`, or `password-reset.json`.
+   `members-import.php`, `registrations-import.php`, `forgot-password.php`,
+   `reset-password.php`, `logout.php`, `_login.html`, the logo, and `.htaccess`. Never
+   touches `secrets.php` (see above — deliberately excluded so it can't revert a live
+   password reset), `registrations-data.json`, `sponsor-submissions.json`,
+   `members-data.json`, or `password-reset.json`.
 
 Dropping CSVs into the *offline* tool (`ETCCCarShow.html` run locally) never touches the
 server either way — that's a fully separate, private experience by design.

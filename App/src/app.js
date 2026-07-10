@@ -211,15 +211,29 @@
   }
   function syncSponsorsFromRegistrations() {
     if (!state.result || !state.result.ok) return;
-    var existingIds = {};
-    state.sponsors.forEach(function (s) { existingIds[s.id] = true; });
+    var byId = {};
+    state.sponsors.forEach(function (s) { byId[s.id] = s; });
     state.result.registrations.forEach(function (rec) {
       if (rec._isWalkIn) return;
       var fee = rec["Individual Sponsorship"];
       if (fee === "" || fee == null || Number(fee) <= 0) return;
       var id = csvSponsorId(rec);
-      if (existingIds[id]) return;
-      existingIds[id] = true;
+      var existing = byId[id];
+      if (existing) {
+        // Backfill Reg Date on sponsors synced before that column existed.
+        // Safe to patch unconditionally here — unlike every other field,
+        // which stays insert-only so an officer's hand-edit (e.g. adding a
+        // website) is never overwritten — because Reg Date is derived,
+        // system-set data that's never edited by hand.
+        if (!existing.regDate && rec["Reg Date"]) {
+          var patched = {};
+          Object.keys(existing).forEach(function (k) { patched[k] = existing[k]; });
+          patched.regDate = rec["Reg Date"];
+          byId[id] = patched;
+          upsertSponsor(patched);
+        }
+        return;
+      }
       var cityStateZip = [rec["City"], rec["State"]].filter(Boolean).join(", ") + (rec["Zip"] ? " " + rec["Zip"] : "");
       var sponsorName = (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : "");
       var isMember = Number(rec["Member Number"]) < CONFIG.firstNonMember;

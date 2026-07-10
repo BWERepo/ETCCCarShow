@@ -171,6 +171,7 @@ th.pinned { z-index: 3; }
   background: #fff; border-radius: 12px; width: 100%; max-width: 640px; max-height: 88vh;
   overflow: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
 }
+.modal.wide { max-width: 980px; }
 .modal-head {
   display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--line);
   position: sticky; top: 0; background: #fff; border-radius: 12px 12px 0 0;
@@ -201,6 +202,17 @@ th.pinned { z-index: 3; }
 .test-list li.pass { color: var(--good); }
 .test-list li.fail { color: var(--warn); background: #fff5f5; }
 .test-list .expect { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+/* change log modal (Developer submenu, LIVE mode) */
+.changelog-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 6px 0 16px; }
+.changelog-stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.changelog-stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.changelog-stat .value { font-size: 15px; font-weight: 700; margin-top: 2px; word-break: break-word; }
+.changelog-table-wrap { max-height: 55vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.changelog-table-wrap table.grid th, .changelog-table-wrap table.grid td { white-space: normal; vertical-align: top; }
+.changelog-body { color: var(--muted); font-size: 11px; margin-top: 4px; line-height: 1.5; white-space: pre-wrap; }
+.changelog-ver { font-size: 11px; background: #dbeafe; padding: 2px 6px; border-radius: 10px; display: inline-block; }
+.changelog-sha { font-family: monospace; font-size: 11px; color: var(--accent); }
 
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }

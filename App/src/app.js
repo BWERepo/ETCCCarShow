@@ -34,7 +34,12 @@
     deleteSelectedOpen: false, // "Delete selected sponsors" confirmation modal
     developerOpen: false,      // hamburger's "Developer" password prompt expanded
     developerUnlocked: false,  // password verified this page load — reveals Import Members/Registrations
-    developerError: null       // developer password error message, or null
+    developerError: null,      // developer password error message, or null
+    changelogOpen: false,      // "Change Log" modal (Developer submenu, LIVE mode)
+    changelogLoading: false,
+    changelogError: null,
+    changelogMeta: null,       // { repo, ftp, files, filesDeployed, loc, totalChanges } once loaded
+    changelogCommits: null     // [{ sha, date, time, subject, body, version }] once loaded
   };
 
   // Set only when this page was served by deploy/index.php (the hosted site) — that
@@ -1393,9 +1398,9 @@
 
   // ---------- header menu (hamburger) / settings ----------
   // Order (LIVE mode): Logout, Developer (password-gated — reveals Import
-  // Members / Import Registrations / Run Regression Tests once unlocked).
-  // Offline tool only ever has Settings — everything else here needs the
-  // hosted site's session/server.
+  // Members / Import Registrations / Run Regression Tests / Change Log once
+  // unlocked). Offline tool only ever has Settings — everything else here
+  // needs the hosted site's session/server.
   function buildHeaderMenu() {
     var header = $("header.app");
     if (!header) return;
@@ -1460,7 +1465,9 @@
       importRegs.addEventListener("click", closeMenu);
       var regTests = el("button", { class: "hdr-menu-item" }, ["🧪 Run Regression Tests"]);
       regTests.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
-      return [importMembers, importRegs, regTests];
+      var changelog = el("button", { class: "hdr-menu-item" }, ["📋 Change Log"]);
+      changelog.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openChangelog(); });
+      return [importMembers, importRegs, regTests, changelog];
     }
     if (!state.developerOpen) {
       var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
@@ -1590,10 +1597,183 @@
     host.appendChild(backdrop);
   }
 
+  // Change Log (Developer submenu, LIVE mode only) — modeled on
+  // SilentAuctionManager's Change Log screen: pulls commit history straight
+  // from the public GitHub repo's REST API (no server endpoint of our own
+  // needed) and shows the same repo-stats + commit-table shape. Re-fetched
+  // fresh every time the modal opens, same as SAM.
+  var CHANGELOG_OWNER = "BWERepo";
+  var CHANGELOG_REPO = "ETCCCarShow";
+  var CHANGELOG_FTP = "ftp.etccapps.com → /apps/carshow/";
+  // Basenames ftp-deploy.sh actually uploads (see that file) — used to count
+  // "Files Deployed" out of the repo's full file tree.
+  var CHANGELOG_DEPLOYED_FILES = [
+    "ETCCCarShow.html", "_login.html", "index.php", "lib.php", "sponsor-form.php",
+    "sponsor-submissions.php", "registrations-upload.php", "members-import.php",
+    "registrations-import.php", "forgot-password.php", "reset-password.php",
+    "logout.php", "ETCClogoWhiteBackground.png", ".htaccess"
+  ];
+  var CHANGELOG_TEXT_EXTS = ["html", "js", "css", "md", "php", "json", "txt", "sh", "htaccess"];
+
+  function openChangelog() {
+    state.changelogOpen = true;
+    renderChangelogModal();
+    loadChangelogData();
+  }
+  function closeChangelog() { state.changelogOpen = false; renderChangelogModal(); }
+
+  // Exact total commit count via GitHub's pagination Link header: request one
+  // commit per page, then read the rel="last" page number (= total commits).
+  function fetchTotalCommitCount(base) {
+    return fetch(base + "/commits?per_page=1").then(function (res) {
+      if (!res.ok) return null;
+      var link = res.headers.get("Link");
+      if (link) {
+        var m = link.match(/[?&]page=(\d+)>;\s*rel="last"/);
+        if (m) return parseInt(m[1], 10);
+      }
+      return res.json().then(function (arr) { return Array.isArray(arr) ? arr.length : 0; });
+    }).catch(function () { return null; });
+  }
+
+  function loadChangelogData() {
+    state.changelogLoading = true;
+    state.changelogError = null;
+    renderChangelogModal();
+    var base = "https://api.github.com/repos/" + CHANGELOG_OWNER + "/" + CHANGELOG_REPO;
+    var commits, fileCount = "—", deployedCount = "—";
+
+    Promise.all([
+      fetch(base + "/commits?per_page=100"),
+      fetch(base + "/git/trees/HEAD?recursive=1")
+    ]).then(function (results) {
+      var commitsRes = results[0], treeRes = results[1];
+      if (!commitsRes.ok) throw new Error("GitHub API error: " + commitsRes.status);
+      return commitsRes.json().then(function (c) {
+        commits = c;
+        if (!treeRes.ok) return [];
+        return treeRes.json().then(function (tree) {
+          var blobs = (tree.tree || []).filter(function (n) { return n.type === "blob"; });
+          fileCount = blobs.length;
+          deployedCount = blobs.filter(function (n) {
+            var name = n.path.split("/").pop();
+            return CHANGELOG_DEPLOYED_FILES.indexOf(name) !== -1;
+          }).length;
+          return blobs.filter(function (n) {
+            var ext = n.path.split(".").pop().toLowerCase();
+            return CHANGELOG_TEXT_EXTS.indexOf(ext) !== -1;
+          });
+        });
+      });
+    }).then(function (textBlobs) {
+      return Promise.all(textBlobs.map(function (n) {
+        return fetch(base + "/git/blobs/" + n.sha, { headers: { Accept: "application/vnd.github.raw+json" } })
+          .then(function (r) { return r.ok ? r.text() : ""; })
+          .catch(function () { return ""; });
+      }));
+    }).then(function (blobTexts) {
+      var loc = blobTexts.reduce(function (sum, txt) {
+        return sum + (txt.match(/\n/g) || []).length + (txt ? 1 : 0);
+      }, 0);
+      return fetchTotalCommitCount(base).then(function (totalCommits) {
+        state.changelogMeta = {
+          repo: CHANGELOG_OWNER + "/" + CHANGELOG_REPO,
+          ftp: CHANGELOG_FTP,
+          files: String(fileCount),
+          filesDeployed: String(deployedCount),
+          loc: loc.toLocaleString(),
+          totalChanges: (totalCommits != null) ? String(totalCommits) : (commits.length + (commits.length === 100 ? "+" : ""))
+        };
+        state.changelogCommits = commits.map(function (c) {
+          var d = new Date(c.commit.author.date);
+          var lines = c.commit.message.split("\n");
+          var subject = lines[0];
+          var verMatch = subject.match(/\(v[\d.]+\)/);
+          var version = verMatch ? verMatch[0].replace(/[()]/g, "") : "";
+          var body = lines.slice(1).filter(function (l) {
+            return !/^\s*(Co-Authored-By|Signed-off-by):/i.test(l);
+          }).join("\n").trim();
+          return { sha: c.sha.substring(0, 7), date: d, subject: subject, body: body, version: version, fullSha: c.sha };
+        });
+        state.changelogLoading = false;
+        renderChangelogModal();
+      });
+    }).catch(function (err) {
+      state.changelogLoading = false;
+      state.changelogError = "Failed to load change log: " + (err && err.message || err);
+      renderChangelogModal();
+    });
+  }
+
+  function fmtChangelogDate(d) {
+    var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + h + ":" + p(d.getMinutes()) + " " + ap;
+  }
+
+  function renderChangelogModal() {
+    var host = $("#changelogHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.changelogOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeChangelog);
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Change Log" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var body = el("div", { class: "modal-body" }, []);
+
+    if (state.changelogMeta) {
+      var m = state.changelogMeta;
+      var statDefs = [
+        ["Repository", m.repo], ["FTP Deployment Path", m.ftp], ["Files in Repo", m.files],
+        ["Files Deployed", m.filesDeployed], ["Lines of Code", m.loc], ["Total Changes", m.totalChanges]
+      ];
+      body.appendChild(el("div", { class: "changelog-meta" }, statDefs.map(function (s) {
+        return el("div", { class: "changelog-stat" }, [
+          el("div", { class: "label" }, [s[0]]),
+          el("div", { class: "value" }, [s[1]])
+        ]);
+      })));
+    }
+
+    if (state.changelogLoading) {
+      body.appendChild(el("div", { class: "hint" }, ["Loading commits…"]));
+    } else if (state.changelogError) {
+      body.appendChild(el("div", { class: "form-error" }, [state.changelogError]));
+    } else if (state.changelogCommits) {
+      var table = el("table", { class: "grid" }, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", {}, ["Date"]), el("th", {}, ["Version"]), el("th", {}, ["Message"]), el("th", {}, ["SHA"])
+        ])]),
+        el("tbody", {}, state.changelogCommits.map(function (c) {
+          var msgKids = [el("div", { style: "font-weight:600" }, [c.subject])];
+          if (c.body) msgKids.push(el("div", { class: "changelog-body" }, [c.body]));
+          var link = el("a", { href: "https://github.com/" + CHANGELOG_OWNER + "/" + CHANGELOG_REPO + "/commit/" + c.fullSha, target: "_blank", rel: "noopener", class: "changelog-sha" }, [c.sha]);
+          return el("tr", {}, [
+            el("td", {}, [fmtChangelogDate(c.date)]),
+            el("td", {}, c.version ? [el("span", { class: "changelog-ver" }, [c.version])] : []),
+            el("td", { style: "white-space:normal" }, msgKids),
+            el("td", {}, [link])
+          ]);
+        }))
+      ]);
+      body.appendChild(el("div", { class: "changelog-table-wrap" }, [table]));
+    }
+
+    var modal = el("div", { class: "modal wide" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeChangelog);
+    host.appendChild(backdrop);
+  }
+
   function init() {
     document.body.appendChild(el("div", { id: "detailHost" }));
     document.body.appendChild(el("div", { id: "printHost" }));
     document.body.appendChild(el("div", { id: "settingsHost" }));
+    document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
     document.body.appendChild(el("div", { id: "importHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
@@ -1606,6 +1786,7 @@
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
+      if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.importOpen) { closeImportModal(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }

@@ -82,10 +82,10 @@ new account):
   `ftp-deploy.sh` and has no role in what `index.php` serves.
 - `members-import.php` — **officer-only** (gated by the same PHP session as `index.php`
   — no separate password prompt, but you must already be logged in) page with a file
-  upload form for an ETCC membership roster CSV (needs "Last Name" and "First Name"
-  columns, matching the ClubExpress export convention). Stores the parsed names as
-  `members-data.json`. Linked from the app's hamburger menu → Settings (only shown when
-  viewing the hosted site).
+  upload form for an ETCC membership roster CSV (needs `last_name`/`first_name`
+  columns — spacing/underscore/case-insensitive, so "Last Name" also works). Stores
+  the parsed names as `members-data.json`. Linked directly from the app's hamburger
+  menu (only shown when viewing the hosted site).
 
 ## Member roster validation on the sponsor form
 

@@ -1,6 +1,7 @@
 <?php
 // Officer-only page to import the ETCC membership roster (a CSV export with
-// "Last Name" and "First Name" columns) into members-data.json (gitignored,
+// last_name/first_name columns — spacing/underscore/case-insensitive, so
+// "Last Name" or "LastName" work too) into members-data.json (gitignored,
 // contains member PII, blocked from direct HTTP access by .htaccess).
 // sponsor-form.php reads that file to populate the ETCC Member Name
 // datalist/autocomplete and to validate submissions against it.
@@ -36,13 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['members_csv'])) {
             $header = str_getcsv(array_shift($lines));
             $lastIdx = null;
             $firstIdx = null;
+            // Normalize away spaces/underscores/case so "Last Name", "last_name",
+            // "LastName", etc. all match — different exports name these differently.
             foreach ($header as $i => $h) {
-                $h = strtolower(trim($h));
-                if ($h === 'last name') $lastIdx = $i;
-                if ($h === 'first name') $firstIdx = $i;
+                $h = str_replace([' ', '_'], '', strtolower(trim($h)));
+                if ($h === 'lastname') $lastIdx = $i;
+                if ($h === 'firstname') $firstIdx = $i;
             }
             if ($lastIdx === null || $firstIdx === null) {
-                $errors[] = 'CSV must have "Last Name" and "First Name" columns (matching the ClubExpress export format).';
+                $errors[] = 'CSV must have "last_name" and "first_name" (or "Last Name" / "First Name") columns.';
             } else {
                 $members = [];
                 $seen = [];
@@ -113,7 +116,7 @@ $current = carshow_read_json_list($MEMBERS_FILE);
     <div class="count">Current roster: <strong><?php echo count($current); ?></strong> member name<?php echo count($current) === 1 ? '' : 's'; ?>.</div>
     <form method="post" enctype="multipart/form-data">
       <div class="form-row">
-        <label for="f-csv">Member CSV</label>
+        <label for="f-csv">Member CSV (needs last_name and first_name columns)</label>
         <input type="file" id="f-csv" name="members_csv" accept=".csv" required>
       </div>
       <button type="submit" class="btn">Import</button>

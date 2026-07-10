@@ -1216,7 +1216,15 @@
     if (!header) return;
     var hamburgerBtn = el("button", { id: "hamburgerBtn", class: "hamburger-btn", title: "Menu", "aria-label": "Menu" }, ["☰"]);
     var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
-    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" }, [settingsItem]);
+    var items = [settingsItem];
+    if (LIVE) {
+      // Only meaningful on the hosted site — the offline tool has no server-side
+      // member roster to manage.
+      var membersItem = el("a", { class: "hdr-menu-item", href: "members-import.php", target: "_blank", rel: "noopener" }, ["👥 Member Database"]);
+      membersItem.addEventListener("click", closeMenu);
+      items.push(membersItem);
+    }
+    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" }, items);
     hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
     settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
     document.addEventListener("click", closeMenu);
@@ -1301,13 +1309,6 @@
           return el("li", { class: t.ok ? "pass" : "fail" }, kids);
         })));
       }
-    }
-
-    if (LIVE) {
-      body.appendChild(el("h4", { style: "margin-top:18px", text: "Member Database" }));
-      body.appendChild(el("div", { class: "hint", style: "margin-bottom:6px" },
-        ["Import the ETCC membership roster used to validate the public sponsor form's ETCC Member Name field."]));
-      body.appendChild(el("a", { class: "btn", href: "members-import.php", target: "_blank", rel: "noopener" }, ["Manage Member Database →"]));
     }
 
     var modal = el("div", { class: "modal" }, [head, body]);

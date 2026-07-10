@@ -41,7 +41,7 @@ header.app .hdr-spacer { display: none; }
 .hdr-menu.hidden { display: none; }
 .hdr-menu-item {
   display: block; width: 100%; text-align: left; padding: 10px 14px; background: #fff; border: none;
-  border-bottom: 1px solid var(--line); font-size: 14px; color: var(--ink); cursor: pointer;
+  border-bottom: 1px solid var(--line); font-size: 14px; color: var(--ink); cursor: pointer; text-decoration: none;
 }
 .hdr-menu-item:last-child { border-bottom: none; }
 .hdr-menu-item:hover { background: #f3f5f8; }

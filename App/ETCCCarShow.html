@@ -215,6 +215,20 @@ th.pinned { z-index: 3; }
 .changelog-sha { font-family: monospace; font-size: 11px; color: var(--accent); }
 @media (max-width: 700px) { .changelog-meta { grid-template-columns: repeat(2, 1fr); } }
 
+/* Developer > API — same full-page shape as Change Log above (independent
+   rules, not shared classes, matching this app's existing small-duplication-
+   over-premature-abstraction style — see excel.js's SPONSOR_COLS). */
+.api-page { position: fixed; inset: 0; background: #fff; z-index: 300; display: flex; flex-direction: column; }
+.api-page-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.api-page-head h2 { margin: 0; font-size: 18px; flex: 1; }
+.api-page-body { flex: 1; overflow: auto; padding: 20px; }
+.api-page-inner { max-width: 900px; margin: 0 auto; }
+.api-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; padding: 14px 16px; }
+.api-card h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.api-card p { margin: 0; font-size: 13px; line-height: 1.5; }
+.api-url-input { font-family: monospace; font-size: 12px; }
+.api-response { background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 12px; max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
@@ -249,7 +263,7 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }
@@ -285,7 +299,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.59 &middot; Deployed 7/10/2026 6:44 PM</div>
+  <div>v1.60 &middot; Deployed 7/10/2026 7:13 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1373,11 +1387,18 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       walkinFirstNonMember: 2000,
       walkInCarShowFee: 50,
       walkInNonCarShowFee: 0,
-      preregistrationFee: 40
+      preregistrationFee: 40,
+      externalApiKey: ""
     },
     appSettingsSaving: false,
     appSettingsError: null,   // set when a Settings save fails; shown in the Settings modal
     appSettingsSaved: false,  // brief "Saved" confirmation after a successful save
+    apiPageOpen: false,       // Developer > API full-page screen
+    apiKeyRevealed: false,
+    apiTesting: false,
+    apiTestResult: null,      // { status, ok, bodyText } | null
+    apiRotating: false,
+    apiRotateError: null,
     deletedCsvKeys: {},       // csvRegKey(rec) -> true, for CSV-derived rows removed via the
                                // Registration tab's checkbox/bulk-delete — filled by
                                // ingestDeletedRegistrations(); excluded from state.result.registrations
@@ -1500,6 +1521,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     }
     state.sortCol = null; state.sortDir = 1;
     syncSponsorsFromRegistrations();
+    syncPaidRegistrationsCache();
     renderViews();
   }
 
@@ -1819,6 +1841,37 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     return (state.result ? state.result.registrations : []).concat(state.walkins);
   }
 
+  // Keeps the external Paid Registrations API's server-side cache in sync
+  // with whatever this browser currently shows. There's no PHP port of
+  // logic.js's generate() pipeline (see regenerate() above) — rather than
+  // duplicate that whole thing server-side, this pushes a filtered snapshot
+  // to paid-registrations-cache.php every time something registration-status-
+  // related changes (CSV import, a Status edit, a Walk-In add/edit/delete, a
+  // bulk delete). Fire-and-forget, same as the other *ToServer pushes below —
+  // the external API just serves a slightly stale snapshot until the next
+  // successful sync if this fails. See deploy/paid-registrations-cache.php
+  // and deploy/paid-registrations-api.php.
+  function syncPaidRegistrationsCache() {
+    if (!SITE_CONFIG.paidRegistrationsCacheApiUrl) return;
+    var registrations = allRegistrations()
+      .filter(function (r) { return classifyStatus(r["Status"]) === "paid"; })
+      .map(function (r) {
+        var mn = r["Member Number"];
+        return {
+          memberNumber: mn === "" || mn == null ? null : Number(mn),
+          firstName: r["First Name"] || "",
+          lastName: r["Last Name"] || "",
+          phone: r["Phone"] || "",
+          email: r["Email"] || ""
+        };
+      });
+    fetch(SITE_CONFIG.paidRegistrationsCacheApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save", registrations: registrations })
+    }).catch(function () { /* best-effort — see comment above */ });
+  }
+
   // Stable selection/deletion key for any registration row — a walk-in's own
   // .id if it has one, otherwise its csvRegKey(). Used by the Registration
   // tab's row checkboxes and by deleteSelectedReg() to route each selected
@@ -1868,6 +1921,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       pushDeletedRegistrationsToServer(csvKeysDeleted);
     }
     state.regSelected = {};
+    syncPaidRegistrationsCache();
     renderViews();
   }
   function pushDeletedRegistrationsToServer(keys) {
@@ -2138,6 +2192,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     }
     state.detailRow = merged;
     state.detailEditing = false;
+    syncPaidRegistrationsCache();
     renderDetailModal();
     if (state.tab === "reg") renderRegBody();
   }
@@ -2477,10 +2532,12 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     state.walkins.forEach(function (w, i) { if (w.id === record.id) idx = i; });
     if (idx === -1) state.walkins.push(record); else state.walkins[idx] = record;
     pushWalkinToServer("upsert", { registration: record });
+    syncPaidRegistrationsCache();
   }
   function removeWalkin(id) {
     state.walkins = state.walkins.filter(function (w) { return w.id !== id; });
     pushWalkinToServer("delete", { id: id });
+    syncPaidRegistrationsCache();
   }
   function pushWalkinToServer(action, payload) {
     if (!SITE_CONFIG.walkinsApiUrl) return;
@@ -3093,7 +3150,9 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       regTests.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
       var changelog = el("button", { class: "hdr-menu-item" }, ["📋 Change Log"]);
       changelog.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openChangelog(); });
-      return [importMembers, importRegs, settings, regTests, changelog];
+      var apiItem = el("button", { class: "hdr-menu-item" }, ["🔌 API"]);
+      apiItem.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openApiPage(); });
+      return [importMembers, importRegs, settings, regTests, changelog, apiItem];
     }
     if (!state.developerOpen) {
       var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
@@ -3467,11 +3526,154 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     host.appendChild(page);
   }
 
+  // Developer > API — a full page (same reasoning as Change Log above) for
+  // testing/handing out the URL another website uses to read this event's
+  // paid registrations. There's no server-side compute for this endpoint to
+  // trigger (see syncPaidRegistrationsCache()) — this page just shows the
+  // already-live URL/key and lets an officer fire the exact same request an
+  // external caller would make.
+  function openApiPage() { state.apiPageOpen = true; state.apiTestResult = null; renderApiPage(); }
+  function closeApiPage() { state.apiPageOpen = false; renderApiPage(); }
+
+  // The absolute URL another website calls — built from this page's own
+  // location so it's correct on any host this app is deployed to, not
+  // hardcoded to etccapps.com.
+  function apiUrl(key) {
+    return location.href.slice(0, location.href.lastIndexOf("/") + 1) +
+      "paid-registrations-api.php?key=" + encodeURIComponent(key || "");
+  }
+
+  // Fires the literal request an external caller would make — credentials
+  // "omit" so this browser's own login session cookie is never sent, same as
+  // a cross-origin server would experience (the endpoint only ever checks
+  // the API key, never the session, but this keeps the test honest).
+  function testApiUrl() {
+    state.apiTesting = true;
+    state.apiTestResult = null;
+    renderApiPage();
+    fetch(apiUrl(state.appSettings.externalApiKey), { credentials: "omit" }).then(function (res) {
+      return res.text().then(function (text) {
+        var pretty = text;
+        try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) { /* show raw text as-is */ }
+        state.apiTestResult = { status: res.status, ok: res.ok, bodyText: pretty };
+        state.apiTesting = false;
+        renderApiPage();
+      });
+    }).catch(function (err) {
+      state.apiTestResult = { status: 0, ok: false, bodyText: "Request failed: " + (err && err.message || err) };
+      state.apiTesting = false;
+      renderApiPage();
+    });
+  }
+
+  // Rotating generates a brand-new key server-side (see app-settings.php's
+  // rotate_api_key action) and immediately invalidates the old one — any
+  // website still using the old URL starts getting 401s right away.
+  function rotateApiKey() {
+    if (!SITE_CONFIG.appSettingsApiUrl) return;
+    state.apiRotating = true;
+    state.apiRotateError = null;
+    renderApiPage();
+    fetch(SITE_CONFIG.appSettingsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rotate_api_key" })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (data && data.ok && data.settings && data.settings.externalApiKey) {
+        state.appSettings.externalApiKey = data.settings.externalApiKey;
+      }
+      state.apiRotating = false;
+      state.apiTestResult = null;
+      renderApiPage();
+    }).catch(function () {
+      state.apiRotating = false;
+      state.apiRotateError = "Could not rotate — check your connection and try again.";
+      renderApiPage();
+    });
+  }
+
+  function renderApiPage() {
+    var host = $("#apiHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.apiPageOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
+    closeBtn.addEventListener("click", closeApiPage);
+    var head = el("div", { class: "api-page-head" }, [closeBtn, el("h2", { text: "Paid Registrations API" })]);
+
+    var body = el("div", { class: "api-page-inner" });
+
+    body.appendChild(el("div", { class: "api-card" }, [
+      el("p", {}, ["Read-only feed for another website to consume. Returns Member Number, First " +
+        "Name, Last Name, Phone, and Email for every registration currently showing a Paid status " +
+        "(CSV-imported and Walk-In alike). This app pushes a fresh snapshot to the server automatically " +
+        "whenever an officer has it open and something paid-related changes, so the feed stays current " +
+        "as long as this app gets opened regularly."])
+    ]));
+
+    var key = state.appSettings.externalApiKey || "";
+    var url = apiUrl(key);
+    var urlInput = el("input", { type: "text", readonly: "readonly", value: url, class: "api-url-input" });
+    urlInput.addEventListener("click", function () { urlInput.select(); });
+    var copyUrlBtn = el("button", { class: "btn" }, ["Copy URL"]);
+    copyUrlBtn.addEventListener("click", function () {
+      urlInput.select();
+      if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function () {});
+    });
+    body.appendChild(el("div", { class: "api-card" }, [
+      el("h4", { text: "URL for the other website to call" }),
+      el("div", { class: "form-row" }, [urlInput, copyUrlBtn])
+    ]));
+
+    var keyInput = el("input", {
+      type: state.apiKeyRevealed ? "text" : "password", readonly: "readonly", value: key, class: "api-url-input"
+    });
+    var toggleBtn = el("button", { class: "btn" }, [state.apiKeyRevealed ? "Hide" : "Show"]);
+    toggleBtn.addEventListener("click", function () { state.apiKeyRevealed = !state.apiKeyRevealed; renderApiPage(); });
+    var rotateBtn = el("button", { class: "btn" }, [state.apiRotating ? "Rotating…" : "Rotate Key"]);
+    if (state.apiRotating) rotateBtn.setAttribute("disabled", "disabled");
+    rotateBtn.addEventListener("click", rotateApiKey);
+    var keyCardKids = [
+      el("h4", { text: "API Key" }),
+      el("div", { class: "hint", style: "margin-bottom:4px" },
+        ["Rotating immediately invalidates the old key — update the other website's copy of the URL " +
+         "above right after rotating, or its requests will start failing."]),
+      el("div", { class: "form-row" }, [keyInput, toggleBtn, rotateBtn])
+    ];
+    if (state.apiRotateError) keyCardKids.push(el("div", { class: "form-error" }, [state.apiRotateError]));
+    body.appendChild(el("div", { class: "api-card" }, keyCardKids));
+
+    var testBtn = el("button", { class: "btn primary" }, [state.apiTesting ? "Testing…" : "Test This URL"]);
+    if (state.apiTesting) testBtn.setAttribute("disabled", "disabled");
+    testBtn.addEventListener("click", testApiUrl);
+    var testCardKids = [
+      el("h4", { text: "Test" }),
+      el("div", { class: "hint", style: "margin-bottom:4px" },
+        ["Fires the exact same request another website would make (no login session involved) and shows the raw response."]),
+      el("div", { class: "settings-actions" }, [testBtn])
+    ];
+    if (state.apiTestResult) {
+      var t = state.apiTestResult;
+      testCardKids.push(el("div", { class: t.ok ? "test-summary good" : "test-summary warn" }, ["HTTP " + t.status]));
+      testCardKids.push(el("pre", { class: "api-response" }, [t.bodyText]));
+    }
+    body.appendChild(el("div", { class: "api-card" }, testCardKids));
+
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
+  }
+
   function init() {
     document.body.appendChild(el("div", { id: "detailHost" }));
     document.body.appendChild(el("div", { id: "printHost" }));
     document.body.appendChild(el("div", { id: "settingsHost" }));
     document.body.appendChild(el("div", { id: "changelogHost" }));
+    document.body.appendChild(el("div", { id: "apiHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
     document.body.appendChild(el("div", { id: "addRegHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
@@ -3484,6 +3686,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
+      if (e.key === "Escape" && state.apiPageOpen) { closeApiPage(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.addRegOpen) { closeAddRegistration(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }

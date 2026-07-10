@@ -12,11 +12,22 @@
 //  - preregistrationFee: reference value only (what a CSV-preregistered
 //    attendee pays) — not applied anywhere in the UI, since preregistered
 //    people come from the CSV import, not this form.
+//  - externalApiKey: credential for the EXTERNAL Paid Registrations API
+//    (paid-registrations-api.php) — a separate, narrower credential than
+//    this app's own site password, meant to be handed to another website's
+//    developer rather than an officer. Generated at random
+//    (bin2hex(random_bytes(16))) the first time it's read (here or in
+//    index.php's boot script, whichever runs first persists it) — never
+//    hardcoded, since this file is committed to a public repo. Rotated via
+//    action=rotate_api_key, from the Developer > API screen.
 //
-// Actions: get (default), save.
+// Actions: get (default), save, rotate_api_key.
 //
 // Auth via lib.php's carshow_authed() — same PHP-session-or-password dual
-// check every endpoint here uses.
+// check every endpoint here uses (including rotate_api_key — this gates on
+// the SITE's own password, same as every other Developer action; the api
+// key itself is a completely separate credential for the EXTERNAL caller of
+// paid-registrations-api.php, not for reaching this endpoint).
 session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Access-Control-Allow-Origin: *');
@@ -52,6 +63,10 @@ $defaults = [
 if ($action === 'get') {
     $raw = is_file($file) ? json_decode(file_get_contents($file), true) : [];
     $settings = array_merge($defaults, is_array($raw) ? $raw : []);
+    if (empty($settings['externalApiKey'])) {
+        $settings['externalApiKey'] = bin2hex(random_bytes(16));
+        carshow_write_json($file, $settings);
+    }
     echo json_encode(['ok' => true, 'settings' => $settings]);
     exit;
 }
@@ -65,6 +80,22 @@ if ($action === 'save') {
     }
     $raw = is_file($file) ? json_decode(file_get_contents($file), true) : [];
     $settings = array_merge($defaults, is_array($raw) ? $raw : [], $incoming);
+    if (!carshow_write_json($file, $settings)) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'Could not save.']);
+        exit;
+    }
+    echo json_encode(['ok' => true, 'settings' => $settings]);
+    exit;
+}
+
+// Regenerates externalApiKey (see comment above) — a separate action rather
+// than a special case of save, so the client never has to round-trip the
+// old key value just to replace it.
+if ($action === 'rotate_api_key') {
+    $raw = is_file($file) ? json_decode(file_get_contents($file), true) : [];
+    $settings = array_merge($defaults, is_array($raw) ? $raw : []);
+    $settings['externalApiKey'] = bin2hex(random_bytes(16));
     if (!carshow_write_json($file, $settings)) {
         http_response_code(500);
         echo json_encode(['ok' => false, 'error' => 'Could not save.']);

@@ -303,6 +303,52 @@ are its first two sections, regression tests are the third). Current settings:
 - **Preregistration** (default $40) — reference figure only, not applied anywhere in the
   UI. CSV-preregistered attendees' fees come from the ClubExpress export itself, not
   this setting.
+- **externalApiKey** — not an editable form field here; see "Paid Registrations API"
+  below. Stored in the same `app-settings.json`, generated automatically.
+
+## Paid Registrations API: Developer → 🔌 API
+
+A read-only, external-facing feed of paid registrations for another website to consume
+— e.g. `https://etccapps.com/apps/carshow/paid-registrations-api.php?key=<key>`. Returns
+Member Number, First Name, Last Name, Phone, and Email for every current registration
+(CSV-imported or Walk-In) whose Status classifies as "Paid" (same `classifyStatus()`
+bucketing the Registration tab's own Paid/Not Paid/Cancelled/Empty filter checkboxes
+use).
+
+**Why this isn't computed server-side on request:** `logic.js`'s `generate()` pipeline
+(shirt buckets, Corvette generation, non-member numbering, activity matching, deletions,
+detail-modal edit overrides, Walk-Ins) is 100% client-side JavaScript with no PHP port —
+see "Registrations: one always-current dataset" above. Rather than duplicate that whole
+pipeline in PHP (a second implementation that would inevitably drift from the first),
+the officer's browser — which already computes the fully-merged, always-current
+registration list via `allRegistrations()` — pushes a filtered snapshot to the server
+every time something paid-status-related changes: a CSV (re-)import, a detail-modal
+Status edit, a Walk-In add/edit/delete, or a bulk delete. This means the feed is only as
+fresh as the last time *any* officer had the app open when something changed — in
+practice, at most a page-load's worth stale, since a fresh page load re-syncs it
+unconditionally too (see `regenerate()`).
+
+**Two files, two separate credentials:**
+
+- **`paid-registrations-cache.php`** (internal) — POST-only, same PHP-session-or-password
+  dual auth (`carshow_authed()`) as every other endpoint here. Called automatically by
+  `app.js`'s `syncPaidRegistrationsCache()`; not meant to be called by hand. Writes
+  `paid-registrations-cache.json` (denied by `.htaccess`, like every other data file).
+- **`paid-registrations-api.php`** (external) — GET-only, the actual URL handed to
+  another website. Authenticated by a **separate, narrower** key
+  (`app-settings.json`'s `externalApiKey`), not the site password — accepted as either
+  an `X-Api-Key` header or a `?key=` query param, checked with `hash_equals()`. Never
+  touches PHP sessions. Just serves whatever `paid-registrations-cache.php` last wrote.
+
+The key is generated at random (`bin2hex(random_bytes(16))`) the first time it's needed
+— by whichever of `index.php`'s boot script or `app-settings.php`'s `get` action runs
+first — and persisted from then on. It is **never hardcoded** in source, since this repo
+is public. The Developer → 🔌 API screen (`app.js`'s `renderApiPage()`) shows the exact
+URL (with a Copy button), the key itself (masked by default, with a Show toggle), a
+Rotate Key button (`app-settings.php`'s `rotate_api_key` action — generates a fresh key
+and immediately invalidates the old one), and a Test button that fires the literal
+request another website would make (`credentials: "omit"`, so this browser's own login
+session is never involved) and shows the raw HTTP status + response body.
 
 ## Registration tab: row checkboxes + bulk delete
 

@@ -208,6 +208,20 @@ th.pinned { z-index: 3; }
 .changelog-sha { font-family: monospace; font-size: 11px; color: var(--accent); }
 @media (max-width: 700px) { .changelog-meta { grid-template-columns: repeat(2, 1fr); } }
 
+/* Developer > API — same full-page shape as Change Log above (independent
+   rules, not shared classes, matching this app's existing small-duplication-
+   over-premature-abstraction style — see excel.js's SPONSOR_COLS). */
+.api-page { position: fixed; inset: 0; background: #fff; z-index: 300; display: flex; flex-direction: column; }
+.api-page-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.api-page-head h2 { margin: 0; font-size: 18px; flex: 1; }
+.api-page-body { flex: 1; overflow: auto; padding: 20px; }
+.api-page-inner { max-width: 900px; margin: 0 auto; }
+.api-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; padding: 14px 16px; }
+.api-card h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.api-card p { margin: 0; font-size: 13px; line-height: 1.5; }
+.api-url-input { font-family: monospace; font-size: 12px; }
+.api-response { background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 12px; max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
@@ -242,7 +256,7 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }

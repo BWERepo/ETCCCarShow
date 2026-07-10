@@ -54,7 +54,7 @@ if ($bundle === false) {
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
 // this one, has already run) sees window.__carshowSite already set.
-$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\" };</script>\n";
+$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\" };</script>\n";
 $bundle = str_replace('<head>', '<head>' . "\n" . $siteConfigScript, $bundle);
 
 $bootParts = [];
@@ -81,7 +81,8 @@ $members = carshow_read_json_list(__DIR__ . '/members-data.json');
 $bootParts[] = "    window.__carshow.ingestMembers(" . carshow_safe_inline_json($members) . ");\n";
 
 // App-wide settings — defaults here MUST match app-settings.php's $defaults.
-$appSettingsRaw = is_file(__DIR__ . '/app-settings.json') ? json_decode(file_get_contents(__DIR__ . '/app-settings.json'), true) : [];
+$appSettingsFile = __DIR__ . '/app-settings.json';
+$appSettingsRaw = is_file($appSettingsFile) ? json_decode(file_get_contents($appSettingsFile), true) : [];
 $appSettingsDefaults = [
     'walkinFirstNonMember' => 2000,
     'walkInCarShowFee' => 50,
@@ -89,6 +90,15 @@ $appSettingsDefaults = [
     'preregistrationFee' => 40
 ];
 $appSettings = array_merge($appSettingsDefaults, is_array($appSettingsRaw) ? $appSettingsRaw : []);
+// externalApiKey has no static default above — this file is committed to a
+// public repo, so a hardcoded key would be visible to anyone. Generate one
+// at random the first time it's missing and persist it immediately, so it's
+// stable from then on (app-settings.php's own `get` action does the same
+// thing, for whichever of the two runs first on a fresh deploy).
+if (empty($appSettings['externalApiKey'])) {
+    $appSettings['externalApiKey'] = bin2hex(random_bytes(16));
+    carshow_write_json($appSettingsFile, $appSettings);
+}
 $bootParts[] = "    window.__carshow.ingestAppSettings(" . carshow_safe_inline_json($appSettings) . ");\n";
 
 // MUST run before the ingestRows() call below — regenerate() (triggered by

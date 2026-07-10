@@ -1,11 +1,16 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-10 (session in progress — latest committed hash `39ccf56`).
-**Everything built this session is now live** via `ftp-deploy.sh` (user said "ftp" 6
-times total). **Git and the live site are still out of sync** — the live site has **all**
-the work below, but git only has commit `39ccf56` (the Shirts-column row-height fix from
-earlier in this session). **No changes have been committed to git yet.** Say "checkpoint"
-to commit the 6+ uncommitted rounds and bring git/live in sync.
+Last updated: 2026-07-10 (session in progress — latest committed hash `20e74a2`).
+**Git and the live site were brought back in sync this session** — commit `20e74a2`
+(covering the "+ Add Registration"/Walk-In feature and everything through the test-suite
+overhaul below) was committed, pushed, and is live. Since that checkpoint: a small
+`CSSponsorName`→Individual Sponsorship Text CSV mapping was implemented, tested ("test"),
+and deployed via `ftp-deploy.sh`, then folded into that same `20e74a2` commit before it
+was pushed — so git and live are **fully in sync as of `20e74a2`**. Most recently, a new
+**Paid Registrations API** feature (external read-only endpoint + Developer > 🔌 API
+screen) was implemented and built but is **not yet deployed or committed** — see "This
+session's work (Paid Registrations API...)" below. Say "checkpoint" to commit it, "ftp"
+to deploy it (or both).
 
 This file exists so a brand-new Claude Code session can pick up this project with no
 prior conversation history. Read this fully before making changes. Previous revisions
@@ -879,6 +884,75 @@ files), all 58 `run-tests.js` assertions passing, built successfully (`node buil
 1145 KB `ETCCCarShow.html`, confirmed via `grep` that the new column names and
 `applySponsorshipTextDefault` appear in the bundle). Not yet deployed or committed.
 
+## This session's work (Paid Registrations API, 2026-07-10, uncommitted)
+
+Added a read-only external API — `paid-registrations-api.php?key=...` — for another
+website to consume this event's paid registrations (Member Number, First Name, Last
+Name, Phone, Email — confirmed with the user via AskUserQuestion, who chose this exact
+field set over two more conservative "public-safe" presets offered), plus a new
+Developer → 🔌 API full-page screen (modeled on the Change Log's `.api-page` full-page
+overlay, not the small Settings modal) to display/test/rotate it.
+
+**Key architectural decision:** there is no PHP port of `logic.js`'s `generate()`
+pipeline (shirt buckets, Corvette generation, non-member numbering, activity matching,
+deletions, detail-modal overrides, Walk-Ins) — it's 100% client-side JS. Rather than
+duplicate that whole pipeline in PHP (a second implementation that would inevitably
+drift from the first), the officer's browser — which already computes the fully-merged,
+always-current list via `allRegistrations()` — pushes a filtered "paid" snapshot to the
+server every time something paid-status-related changes (CSV import, a detail-modal
+Status edit, a Walk-In add/edit/delete, a bulk delete). The external endpoint just
+serves whatever was last pushed — freshness depends on an officer having the app open
+when something changes (in practice, at most a page-load stale, since a fresh load
+re-syncs unconditionally too).
+
+Concretely:
+- **`app.js`** — new `syncPaidRegistrationsCache()`, called from every registration-
+  mutating point (`regenerate()`, `deleteSelectedReg()`, `saveDetailEdit()`,
+  `upsertWalkin()`, `removeWalkin()`): filters `allRegistrations()` to rows where
+  `classifyStatus(r["Status"]) === "paid"` (the same bucketing the Registration tab's own
+  Paid/Not Paid/Cancelled/Empty filter checkboxes already use), maps to the 5-field
+  camelCase shape, and POSTs it to `paid-registrations-cache.php`. New Developer → 🔌 API
+  full-page screen (`openApiPage`/`renderApiPage`/`closeApiPage`, `#apiHost`, Escape-key
+  wired in `init()`): shows the exact external URL (with Copy), the API key (masked, with
+  Show/Hide), a Rotate Key button, and a Test button that fires the literal request
+  another website would make (`credentials:"omit"`) and shows the raw HTTP status +
+  response.
+- **New `deploy/paid-registrations-cache.php`** — internal writer, POST-only, same
+  session/password dual auth (`carshow_authed()`) as every other endpoint. Writes
+  `paid-registrations-cache.json`.
+- **New `deploy/paid-registrations-api.php`** — external reader, GET-only, **not**
+  gated by the site password at all — a completely separate, narrower credential
+  (`app-settings.json`'s `externalApiKey`), checked via `hash_equals()`, accepted as an
+  `X-Api-Key` header or `?key=` query param. Just serves the cache file's contents.
+- **`app-settings.php`** — `externalApiKey` generated at random
+  (`bin2hex(random_bytes(16))`) the first time it's missing (in `get`, and mirrored in
+  `index.php`'s boot script — whichever runs first persists it) — deliberately **never**
+  hardcoded, since this repo is public. New `rotate_api_key` action generates and
+  persists a fresh key, immediately invalidating the old one.
+- **`deploy/index.php`** — injects `paidRegistrationsCacheApiUrl`; mirrors the
+  generate-if-missing `externalApiKey` logic so a brand-new deploy has a real key from
+  its very first page load, not just after someone opens the API screen once.
+- **`.htaccess`/`ftp-deploy.sh`** — `paid-registrations-cache.json` denied;
+  `paid-registrations-cache.php`/`paid-registrations-api.php` added to the upload list.
+- **`styles.css`** — new `.api-page*`/`.api-card`/`.api-url-input`/`.api-response` rules,
+  independently defined (not shared classes) alongside the near-identical
+  `.changelog-page*` rules — matches this codebase's existing small-duplication-over-
+  premature-abstraction style.
+- **`deploy/README.md`** — new "Paid Registrations API" section.
+
+**Not done / deliberately out of scope:** no automated test coverage (this all lives in
+`app.js`/PHP, neither of which has any automated suite — see Testing below); no rate
+limiting or request logging on the external endpoint; no way to scope the key to fewer
+fields or add additional consumers with separate keys (one key, one field set, for now).
+
+**Status:** implemented, syntax-checked (`node --check` on `app.js`; every inline
+`<script>` block in the built bundle parse-checked via `new Function()`, since no local
+PHP interpreter exists to lint the new/changed PHP files — same limitation as every
+other PHP file in this repo), built successfully (`node build.js` → 1155 KB
+`ETCCCarShow.html`), `node test/run-tests.js` still 58/58 (this feature doesn't touch
+`logic.js`/`config.js`, so no new assertions were added — see Testing below). Not yet
+deployed or committed.
+
 ## Testing
 
 This session, the user said a bare "test" — per this project's rule (see Workflow rules
@@ -953,40 +1027,24 @@ as-is. What happened:
   (2026-07-08 exports) is now stale; the Exports folder's newest files are the
   2026-07-10 ones referenced throughout this doc.
 
-## **CRITICAL: Current Deployment State (as of 2026-07-10 22:26 UTC)**
+## **CRITICAL: Current Deployment State**
 
-**Live site (`https://etccapps.com/apps/carshow/`) is fully up to date with all six
-rounds of features built this session.** Final FTP deployment completed at 22:26.
+**Git and the live site are in sync at commit `20e74a2`.** That checkpoint covers
+everything through the test-suite overhaul and the `CSSponsorName` mapping (both
+committed, pushed to `origin/main`, and deployed via `ftp-deploy.sh` in the same
+session).
 
-**Git is at `39ccf56` (Shirts-column row-height fix).** Six major feature rounds since
-then are **not yet committed**. To bring git and live in sync, run `git add -A && git
-commit` with a comprehensive message covering all six rounds (or ask a session to do it).
-The user should say **"checkpoint"** in a Claude Code session to trigger this commit.
+**Since `20e74a2`, one new feature is implemented + built locally but NOT yet deployed
+or committed:** the **Paid Registrations API** (external read-only endpoint at
+`paid-registrations-api.php?key=...`, plus a new Developer > 🔌 API screen to
+show/test/rotate the key) — see "This session's work (Paid Registrations API...)"
+above for the full breakdown. New/changed files: `App/src/app.js`, `App/src/styles.css`,
+`App/deploy/index.php`, `App/deploy/app-settings.php`, `App/deploy/.htaccess`,
+`App/deploy/ftp-deploy.sh`, `App/deploy/README.md`, plus two new PHP files
+(`App/deploy/paid-registrations-cache.php`, `App/deploy/paid-registrations-api.php`)
+and the rebuilt `App/ETCCCarShow.html`.
 
-### What's live but not in git:
-
-1. **"+ Add Registration" form** (Walk-In Member/Nonmember)
-2. **Member lookup with auto-fill** (name lookup by roster, auto-fills phone/email/
-   address/city/state/zip/corvette details)
-3. **Settings screen** (Developer > ⚙ Settings) — Walk-In numbering pool + registration
-   fees
-4. **Checkbox/bulk-delete on Registration tab** (CSV rows excluded via
-   `deleted-registrations.json`, Walk-Ins deleted via server API)
-5. **Fee logic refactor** (In Car Show? field drives fee instead of separate Registration
-   Type dropdown)
-6. **Editable detail-modal fields** (all rows, CSV and Walk-In, via field-patch
-   persistence layer `registration-overrides.json`)
-7. **Individual Sponsorship Text + Spouse First Name columns** with auto-default name
-   feature
-8. **Test suite overhaul** (58/58 assertions passing; `dom-test.js` deleted)
-
-All PHP endpoints (`walkin-registrations.php`, `registration-overrides.php`,
-`deleted-registrations.php`, enhanced `members-import.php`) are deployed and live.
-
-### Next session: say "checkpoint" to commit these changes and bring git in sync.
-
-If the user asks for a brand-new feature instead, tell them the git state is behind live,
-and ask whether they want that committed first before proceeding (most likely yes, to
-avoid losing work). If they say commit/checkpoint, run git status + git diff to review,
-stage the files, and create a detailed commit message covering all six rounds from this
-session.
+### Next session: say "checkpoint" to commit, "ftp" to deploy (or both) the Paid
+Registrations API work above. If the user asks for a brand-new feature instead, mention
+this one round is still uncommitted/undeployed and ask whether they want it
+checkpointed first (most likely yes, to avoid losing work).

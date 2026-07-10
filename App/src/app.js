@@ -25,6 +25,7 @@
     testOnlyErrors: false,
     sponsors: [],          // loaded from localStorage in init() UNLESS LIVE mode (see below)
     sponsorSearch: "",
+    sponsorTypeFilter: { premier: true, corporate: true, individual: true },
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
     importOpen: false,     // "Import from Server" modal (offline tool only — see LIVE below)
     sponsorSyncError: null, // set when a LIVE-mode push to the server fails; shown in the Sponsors tab
@@ -225,6 +226,7 @@
       upsertSponsor({
         id: id,
         name: sponsorName,
+        regDate: rec["Reg Date"] || "",
         contactPerson: "",
         phone: rec["Phone"] || "",
         email: rec["Email"] || "",
@@ -749,6 +751,7 @@
   // data happens to be loaded.
   var SPONSOR_COLS = [
     { key: "name", label: "Sponsor Name" },
+    { key: "regDate", label: "Reg Date" },
     { key: "contactPerson", label: "Contact Person" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
@@ -810,6 +813,17 @@
   }
   function sponsorFieldText(s, colKey) {
     if (colKey === "sponsorType") return sponsorTypeLabel(s.sponsorType);
+    // regDate isn't a single stored field — it depends on where the sponsor
+    // came from: the CSV auto-sync stores the registration's own "Reg Date"
+    // (already a formatted string, see syncSponsorsFromRegistrations), while
+    // a "Become a Car Show Sponsor" web submission has no CSV row at all, so
+    // it uses sponsor-form.php's submittedAt (ISO string) instead, formatted
+    // to match. Manually-added sponsors with neither show blank.
+    if (colKey === "regDate") {
+      if (s.regDate) return String(s.regDate);
+      if (s.submittedAt) return fmtDate(s.submittedAt);
+      return "";
+    }
     var v = s[colKey];
     return v == null ? "" : String(v);
   }
@@ -821,7 +835,7 @@
   }
   function visibleSponsors() {
     var q = state.sponsorSearch.trim().toLowerCase();
-    var list = sortedSponsors();
+    var list = sortedSponsors().filter(function (s) { return state.sponsorTypeFilter[s.sponsorType] !== false; });
     if (!q) return list;
     return list.filter(function (s) {
       return SPONSOR_COLS.some(function (c) { return sponsorFieldText(s, c.key).toLowerCase().indexOf(q) !== -1; });
@@ -978,6 +992,12 @@
   function buildSponsorsToolbar() {
     var search = el("input", { type: "search", placeholder: "Search sponsors…", value: state.sponsorSearch });
     search.addEventListener("input", function () { state.sponsorSearch = search.value; renderSponsorsBody(); });
+    var typeGroup = el("span", { class: "statusgroup" }, CONFIG.SPONSOR_TYPES.map(function (t) {
+      var cb = el("input", { type: "checkbox" }); cb.checked = state.sponsorTypeFilter[t.key];
+      cb.addEventListener("change", function () { state.sponsorTypeFilter[t.key] = cb.checked; renderSponsorsBody(); });
+      var label = t.label.replace(/\s*\(\$[\d,]+\)\s*$/, "");
+      return el("label", {}, [cb, document.createTextNode(" " + label)]);
+    }));
     var count = el("span", { class: "count", id: "sponsorcount" });
     // Adding a sponsor goes through the same public "Become a Car Show
     // Sponsor" form (sponsor-form.php) anyone else uses, instead of the
@@ -989,7 +1009,7 @@
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
     delBtn.addEventListener("click", openDeleteSelectedConfirm);
-    var kids = [search, count, el("span", { class: "spacer" })];
+    var kids = [search, typeGroup, count, el("span", { class: "spacer" })];
     if (LIVE) {
       // Always current already — every edit here already went to the server,
       // so there's nothing to pull; a manual Import step would be redundant.
@@ -1136,6 +1156,10 @@
       var record = {
         id: editing.id || ("sp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
         name: name,
+        // Not editable here — carried through so editing a sponsor's contact
+        // info doesn't blank out its Reg Date column (see sponsorFieldText).
+        regDate: editing.regDate || "",
+        submittedAt: editing.submittedAt,
         contactPerson: fieldEls.contactPerson.value.trim(),
         phone: fieldEls.phone.value.trim(),
         email: fieldEls.email.value.trim(),
@@ -1393,14 +1417,13 @@
       logoutItem.addEventListener("click", closeMenu);
       items.push(logoutItem);
       items = items.concat(buildDeveloperMenuItems());
-    }
-    var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
-    settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
-    items.push(settingsItem);
-    if (LIVE) {
-      var sponsorFormItem = el("a", { class: "hdr-menu-item", href: "sponsor-form.php", target: "_blank", rel: "noopener" }, ["🏆 Become a Car Show Sponsor"]);
-      sponsorFormItem.addEventListener("click", closeMenu);
-      items.push(sponsorFormItem);
+    } else {
+      // Settings (regression tests, zoom presets) has no LIVE-mode equivalent
+      // need — Logout/Developer replaced it there; the offline tool still
+      // needs a way to reach it.
+      var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
+      settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
+      items.push(settingsItem);
     }
     items.forEach(function (it) { menu.appendChild(it); });
     if (state.menuOpen && state.developerOpen && !state.developerUnlocked) {

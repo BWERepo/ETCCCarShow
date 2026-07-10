@@ -1393,9 +1393,9 @@
 
   // ---------- header menu (hamburger) / settings ----------
   // Order (LIVE mode): Logout, Developer (password-gated — reveals Import
-  // Members / Import Registrations once unlocked), Settings, Become a Car
-  // Show Sponsor. Offline tool only ever has Settings — everything else here
-  // needs the hosted site's session/server.
+  // Members / Import Registrations / Run Regression Tests once unlocked).
+  // Offline tool only ever has Settings — everything else here needs the
+  // hosted site's session/server.
   function buildHeaderMenu() {
     var header = $("header.app");
     if (!header) return;
@@ -1458,7 +1458,9 @@
       importMembers.addEventListener("click", closeMenu);
       var importRegs = el("a", { class: "hdr-menu-item", href: "registrations-import.php", target: "_blank", rel: "noopener" }, ["📋 Import Registrations"]);
       importRegs.addEventListener("click", closeMenu);
-      return [importMembers, importRegs];
+      var regTests = el("button", { class: "hdr-menu-item" }, ["🧪 Run Regression Tests"]);
+      regTests.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
+      return [importMembers, importRegs, regTests];
     }
     if (!state.developerOpen) {
       var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);

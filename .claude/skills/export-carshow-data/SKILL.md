@@ -1,18 +1,18 @@
 ---
 name: export-carshow-data
-description: Automates the two manual ClubExpress admin CSV exports (Registration Data, Activity Registrant Data) for the ETCC car show, saves them into the Exports folder with the right filenames, then loads them into the ETCCCarShow.html app so the user sees the generated Registration table and Summary dashboard immediately. Use this whenever the user wants to "export the car show data," "pull the ClubExpress CSVs," "get today's registration/activity export," "grab the latest signups," "refresh the registration list/dashboard," or otherwise wants current car-show signup data — even if they don't say "ClubExpress" or "CSV" explicitly, e.g. "get the latest car show signups" or "show me who's registered so far." Do NOT use this for anything involving logging into ClubExpress, changing ClubExpress settings, or exporting data for events other than the car show.
+description: Automates the two manual ClubExpress admin CSV exports (Registration Data, Activity Registrant Data) for the ETCC car show and saves them into the Exports folder with the right filenames. Use this whenever the user wants to "export the car show data," "pull the ClubExpress CSVs," "get today's registration/activity export," "grab the latest signups," "refresh the registration list/dashboard," or otherwise wants current car-show signup data — even if they don't say "ClubExpress" or "CSV" explicitly, e.g. "get the latest car show signups" or "show me who's registered so far." Do NOT use this for anything involving logging into ClubExpress, changing ClubExpress settings, or exporting data for events other than the car show.
 ---
 
-# Export Car Show Data (ClubExpress → CSV → App)
+# Export Car Show Data (ClubExpress → CSV)
 
 ## What this replaces
 
 The manual process (documented in the workbook's Instructions sheet) is: log into
 ClubExpress, open the event, click Admin Options → Exports → "Registration Data" →
-Export → save; then repeat for "Activity Registrant Data"; then open the app and drop
-the two files in. This skill drives the browser through the ClubExpress clicks AND loads
-the results into the app, so the user goes from one command to seeing the finished
-Registration table and Summary dashboard.
+Export → save; then repeat for "Activity Registrant Data". This skill drives the browser
+through those ClubExpress clicks and saves the two files into the Exports folder with
+the right names — it stops there. Loading the CSVs into the app (or the hosted site) is
+a separate step the user triggers themselves.
 
 ## Hard rule: never touch login
 
@@ -91,97 +91,13 @@ this only runs a couple of times a year.
    re-running this same day), overwrite it — today's export supersedes an earlier one
    from the same day.
 
-7. **Load the two files into the app** so the user sees the generated screens instead of
-   just having CSVs on disk. See "Loading data into the app" below for exactly how —
-   it's not drag-and-drop (browser automation can't drag a file, and can't navigate to
-   `file://` either), it's a small local server plus a debug hook already built into the
-   app for this purpose. After loading, take a screenshot of both the Registration tab
-   and the Summary tab to confirm real data rendered (row counts, dollar figures, the
-   shirt matrix — not a blank drop zone).
-
-8. **Report back** exactly what happened: the two source filenames as downloaded, the
-   two destination filenames/paths they were saved as, each file's row count, and the
-   headline numbers from the Summary screen (registrations, attendees, funds, next
-   member #). If anything didn't work — a ClubExpress step couldn't find its element, a
-   download didn't appear, a file didn't look like the right export, or the app showed
-   an error/warning message instead of a clean summary — report exactly where it stopped
-   instead of declaring success. If the app's message log shows something like
-   `Invalid activity title 'X'`, surface that to the user by name — it usually means a
-   new ClubExpress activity type needs a mapping added to `App/src/config.js` (see the
-   "Individual Sponsorship" case handled on 2026-07-07 for the pattern to follow), not
-   that anything about the export itself failed.
-
-## Loading data into the app
-
-The app (`App/ETCCCarShow.html`) is designed to be opened as a local file and have CSVs
-dragged onto it — but browser automation can't perform a real drag-and-drop, and (found
-during testing) the `navigate` tool and even `location.href` mangle `file://` URLs into
-a broken `https://file///...` address that Chrome tries to resolve via DNS. Both dead
-ends. The reliable path:
-
-1. **Serve the app over local HTTP** instead of opening it as a file. A tiny
-   zero-dependency static server lives at `App/serve.js` for exactly this. Check if it's
-   already running (e.g. `curl -s -o /dev/null -w "%{http_code}" http://localhost:5750/`
-   — a `200` means it's up); if not, start it in the background:
-   ```
-   cd "Z:/Backup/Websites/CarShow/App" && (nohup node serve.js 5750 > /tmp/carshow-serve.log 2>&1 &)
-   ```
-   Then navigate the browser tab to `http://localhost:5750/ETCCCarShow.html` (a normal
-   `http://` URL — this one navigates fine).
-
-2. **Inject the CSVs via the app's debug hook**, `window.__carshow.ingestRows(regRows,
-   actRows)` — the same hook the app's own automated tests use, so it exercises the
-   exact same code path a real drag-drop would. Get the CSV text into the page by
-   **fetching it from a second tiny server**, not by hand-copying file content into the
-   JS you send — copying a multi-thousand-character CSV by hand into a tool call
-   corrupted a row once (a `atob()`-decoded base64 blob silently dropped/mangled part of
-   one row, which only surfaced because it happened to produce an `Invalid activity
-   title ''` warning — a different corruption could easily have produced wrong numbers
-   with no warning at all). Also do NOT copy the CSVs into `App/` to serve them from
-   there — `App/` is a git repo pushed to GitHub, and Exports contains real member PII
-   (names, emails, phones, addresses) that must never land in a git-tracked directory,
-   even temporarily.
-
-   Instead, start the skill's own second server, which serves the Exports folder
-   directly and lives outside `App/` (`.claude/skills/export-carshow-data/serve-exports.js`):
-   ```
-   cd "Z:/Backup/Websites/CarShow/.claude/skills/export-carshow-data" && (nohup node serve-exports.js 5751 > /tmp/exports-serve.log 2>&1 &)
-   ```
-   Then, in the app's tab, fetch today's two files by their exact saved filenames and
-   ingest them (`javascript_tool`, with top-level `await`):
-   ```js
-   var regCsv = await fetch('http://localhost:5751/registration_data<YYYYMMDD>.csv').then(r => r.text());
-   var actCsv = await fetch('http://localhost:5751/activity_registrant_data<YYYYMMDD>.csv').then(r => r.text());
-   var regRows = Papa.parse(regCsv, { header: true, skipEmptyLines: true }).data;
-   var actRows = Papa.parse(actCsv, { header: true, skipEmptyLines: true }).data;
-   window.__carshow.ingestRows(regRows, actRows);
-   var s = window.__carshow.state.result.summary;
-   ({ regRowCount: regRows.length, actRowCount: actRows.length, summary: s, messages: window.__carshow.state.result.messages });
-   ```
-   If `fetch` fails with a CORS-looking error, confirm `serve-exports.js` is actually
-   running on 5751 (its `Access-Control-Allow-Origin` header is hardcoded to
-   `http://localhost:5750`, matching `serve.js`'s port — if either port ever changes,
-   update both files together). The returned object is your correctness check — `regRowCount`/
-   `actRowCount` should match the row counts you already logged in step 8's report, and
-   non-empty `messages` means something needs attention. Stop this second server when
-   you're done (`Stop-Process` on its node process) — no reason to leave a PII-serving
-   process running longer than the skill needs it.
-
-3. **Leave the tab and the app server (`serve.js`, port 5750) running** when you're
-   done — don't close the tab or kill that server. The point of this step is the user
-   gets a live, already-populated app window they can immediately click around in,
-   search, switch to the Summary tab, hit Print, or hit Download Excel themselves. Don't
-   click Download Excel for them unless they asked for the Excel file specifically —
-   downloading a file is their call, not an automatic part of this skill. (The *other*
-   server, `serve-exports.js` on 5751, is different — stop that one per step 2 once the
-   data is loaded; it has no reason to keep running.)
-
-4. **If you've edited anything under `App/src/`** (e.g. while fixing a new
-   `activityTitleToBucket` mapping), you must run `node build.js` from the `App`
-   directory before this step — `ETCCCarShow.html` is a pre-built bundle and does NOT
-   pick up source edits automatically. Forgetting this was a real bug during
-   development: the same "Invalid activity title" warning kept appearing even after the
-   source fix, purely because the bundle was stale. Rebuild, then re-inject to confirm.
+7. **Stop here and report back** exactly what happened: the two source filenames as
+   downloaded, the two destination filenames/paths they were saved as, and each file's
+   row count. Do not open the app, start `serve.js`, or load the CSVs anywhere — saving
+   the two files into the Exports folder is the entire job. If anything didn't work — a
+   ClubExpress step couldn't find its element, a download didn't appear, or a file
+   didn't look like the right export — report exactly where it stopped instead of
+   declaring success.
 
 ## Finding the downloaded file
 

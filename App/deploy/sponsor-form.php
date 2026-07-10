@@ -160,6 +160,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   .checkbox-row input { width:auto; }
   .btn { background: var(--red); border: 1px solid var(--red-dark); color:#fff; padding: 11px 18px; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; width:100%; margin-top:10px; }
   .btn:hover { background: var(--red-dark); }
+  .btn-row { display:flex; gap:10px; }
+  .btn-row .btn { margin-top:10px; }
+  .btn-secondary { background:#fff; border:1px solid var(--line); color: var(--ink); }
+  .btn-secondary:hover { background:#f4f6f8; }
   .errors { background:#fff5f5; border-left:4px solid var(--red); border-radius:6px; padding:10px 14px; margin-bottom:14px; color:var(--red-dark); font-size:13px; }
   .errors ul { margin:4px 0 0; padding-left:18px; }
   .success { background:#f2fbf5; border:1px solid #bfe2c9; border-radius:10px; padding:24px; text-align:center; color: var(--good); font-weight:600; }
@@ -234,7 +238,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <?php endforeach; ?>
         </select>
       </div>
-      <button type="submit" class="btn">Submit Sponsorship</button>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" onclick="history.back()">Cancel</button>
+        <button type="submit" class="btn">Submit Sponsorship</button>
+      </div>
     </form>
   <?php endif; ?>
   </div>

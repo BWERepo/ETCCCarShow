@@ -199,6 +199,8 @@ th.pinned { z-index: 3; }
 .sponsor-card table.matrix th, .sponsor-card table.matrix td { padding: 4px 8px; font-size: 12px; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
 .panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--red-dark); }
+.shirt-matrices { display: flex; gap: 28px; flex-wrap: wrap; }
+.shirt-matrix-sub { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 table.matrix { border-collapse: collapse; }
 table.matrix th, table.matrix td { border: 1px solid var(--line); padding: 6px 12px; text-align: center; }
 table.matrix th { background: #f3f5f8; }

@@ -206,6 +206,8 @@ th.pinned { z-index: 3; }
 .sponsor-card table.matrix th, .sponsor-card table.matrix td { padding: 4px 8px; font-size: 12px; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
 .panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--red-dark); }
+.shirt-matrices { display: flex; gap: 28px; flex-wrap: wrap; }
+.shirt-matrix-sub { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 table.matrix { border-collapse: collapse; }
 table.matrix th, table.matrix td { border: 1px solid var(--line); padding: 6px 12px; text-align: center; }
 table.matrix th { background: #f3f5f8; }
@@ -262,7 +264,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.31 &middot; Deployed 7/10/2026 8:21 AM</div>
+  <div>v1.32 &middot; Deployed 7/10/2026 8:26 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1838,8 +1840,18 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       ])
     ]));
 
-    // shirts matrix
-    container.appendChild(el("div", { class: "panel" }, [el("h3", { text: "Shirts" }), shirtMatrix(s)]));
+    // shirts matrix — registration-only, plus a combined (registration +
+    // sponsor) matrix side by side
+    container.appendChild(el("div", { class: "panel" }, [
+      el("h3", { text: "Registration Shirts" }),
+      el("div", { class: "shirt-matrices" }, [
+        el("div", {}, [shirtMatrix(s)]),
+        el("div", {}, [
+          el("h4", { class: "shirt-matrix-sub", text: "Combined (Registration + Sponsors)" }),
+          combinedShirtMatrix(s)
+        ])
+      ])
+    ]));
 
     // car show matrix
     container.appendChild(el("div", { class: "panel" }, [
@@ -1887,6 +1899,43 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
         cells.push(el("td", { class: val ? "" : "z", text: val ? String(val) : "0" }));
       });
       return el("tr", {}, cells);
+    });
+    return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
+  }
+  // Every sponsor of any type picks one shirt (no Free/Xtra distinction like
+  // registrants — see CONFIG.SPONSOR_SIZE_INDEX), so this tallies all of
+  // state.sponsors regardless of sponsorType, unlike sponsorStatsByType()
+  // which is per-type for the Sponsors summary cards.
+  function allSponsorShirtCounts() {
+    var counts = {};
+    CONFIG.SIZES.forEach(function (sz) { counts[sz.key] = { mens: 0, womens: 0 }; });
+    state.sponsors.forEach(function (sp) {
+      var info = sp.shirtSize && CONFIG.SPONSOR_SIZE_INDEX[sp.shirtSize];
+      if (!info || !counts[info.sizeKey]) return;
+      if (info.gender === "Men's") counts[info.sizeKey].mens++; else counts[info.sizeKey].womens++;
+    });
+    return counts;
+  }
+  // Registration shirts (Free+Xtra collapsed to just gender) plus sponsor
+  // shirts, per size — the "how many actual shirts of each size do we need"
+  // number, as opposed to the registration-only breakdown in shirtMatrix().
+  function combinedShirtMatrix(s) {
+    var C = CONFIG;
+    var sponsorCounts = allSponsorShirtCounts();
+    var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
+    var body = C.SIZES.map(function (sz) {
+      var regMens = 0, regWomens = 0;
+      C.GROUPS.forEach(function (g) {
+        var val = s.shirtTotals[g.key + sz.key] || 0;
+        if (g.gender === "Men's") regMens += val; else regWomens += val;
+      });
+      var mens = regMens + sponsorCounts[sz.key].mens;
+      var womens = regWomens + sponsorCounts[sz.key].womens;
+      return el("tr", {}, [
+        el("td", { class: "lbl", text: sz.label }),
+        el("td", { class: mens ? "" : "z", text: String(mens) }),
+        el("td", { class: womens ? "" : "z", text: String(womens) })
+      ]);
     });
     return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
   }

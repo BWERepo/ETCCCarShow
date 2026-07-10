@@ -691,8 +691,18 @@
       ])
     ]));
 
-    // shirts matrix
-    container.appendChild(el("div", { class: "panel" }, [el("h3", { text: "Shirts" }), shirtMatrix(s)]));
+    // shirts matrix — registration-only, plus a combined (registration +
+    // sponsor) matrix side by side
+    container.appendChild(el("div", { class: "panel" }, [
+      el("h3", { text: "Registration Shirts" }),
+      el("div", { class: "shirt-matrices" }, [
+        el("div", {}, [shirtMatrix(s)]),
+        el("div", {}, [
+          el("h4", { class: "shirt-matrix-sub", text: "Combined (Registration + Sponsors)" }),
+          combinedShirtMatrix(s)
+        ])
+      ])
+    ]));
 
     // car show matrix
     container.appendChild(el("div", { class: "panel" }, [
@@ -740,6 +750,43 @@
         cells.push(el("td", { class: val ? "" : "z", text: val ? String(val) : "0" }));
       });
       return el("tr", {}, cells);
+    });
+    return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
+  }
+  // Every sponsor of any type picks one shirt (no Free/Xtra distinction like
+  // registrants — see CONFIG.SPONSOR_SIZE_INDEX), so this tallies all of
+  // state.sponsors regardless of sponsorType, unlike sponsorStatsByType()
+  // which is per-type for the Sponsors summary cards.
+  function allSponsorShirtCounts() {
+    var counts = {};
+    CONFIG.SIZES.forEach(function (sz) { counts[sz.key] = { mens: 0, womens: 0 }; });
+    state.sponsors.forEach(function (sp) {
+      var info = sp.shirtSize && CONFIG.SPONSOR_SIZE_INDEX[sp.shirtSize];
+      if (!info || !counts[info.sizeKey]) return;
+      if (info.gender === "Men's") counts[info.sizeKey].mens++; else counts[info.sizeKey].womens++;
+    });
+    return counts;
+  }
+  // Registration shirts (Free+Xtra collapsed to just gender) plus sponsor
+  // shirts, per size — the "how many actual shirts of each size do we need"
+  // number, as opposed to the registration-only breakdown in shirtMatrix().
+  function combinedShirtMatrix(s) {
+    var C = CONFIG;
+    var sponsorCounts = allSponsorShirtCounts();
+    var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
+    var body = C.SIZES.map(function (sz) {
+      var regMens = 0, regWomens = 0;
+      C.GROUPS.forEach(function (g) {
+        var val = s.shirtTotals[g.key + sz.key] || 0;
+        if (g.gender === "Men's") regMens += val; else regWomens += val;
+      });
+      var mens = regMens + sponsorCounts[sz.key].mens;
+      var womens = regWomens + sponsorCounts[sz.key].womens;
+      return el("tr", {}, [
+        el("td", { class: "lbl", text: sz.label }),
+        el("td", { class: mens ? "" : "z", text: String(mens) }),
+        el("td", { class: womens ? "" : "z", text: String(womens) })
+      ]);
     });
     return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
   }

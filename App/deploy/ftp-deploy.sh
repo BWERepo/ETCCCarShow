@@ -26,7 +26,14 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CRED_FILE="$DIR/.ftp-credentials"
 if [ -z "${FTP_HOST:-}" ] && [ -f "$CRED_FILE" ]; then
-  while IFS='=' read -r key value; do
+  # `|| [ -n "$key" ]` keeps the loop's last iteration even if the file has no
+  # trailing newline (read exits nonzero on that final line but still
+  # populates $key/$value — without this, the last KEY=VALUE line is silently
+  # dropped). Stripping a trailing \r handles files saved with Windows line
+  # endings (Notepad etc.), which would otherwise leave it stuck on the value.
+  while IFS='=' read -r key value || [ -n "$key" ]; do
+    key="${key%$'\r'}"
+    value="${value%$'\r'}"
     case "$key" in
       FTP_HOST) FTP_HOST="$value" ;;
       FTP_USER) FTP_USER="$value" ;;

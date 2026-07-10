@@ -18,3 +18,4 @@ App/deploy/.ftp-credentials
 App/deploy/sponsor-submissions.json
 App/deploy/registrations-data.json
 App/deploy/members-data.json
+App/deploy/password-reset.json

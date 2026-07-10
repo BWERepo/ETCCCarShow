@@ -73,21 +73,29 @@ upload "app-bundle.html" "$DIR/../ETCCCarShow.html"
 upload "_login.html"
 upload "index.php"
 upload "lib.php"
-upload "secrets.php"
 upload "sponsor-form.php"
 upload "sponsor-submissions.php"
 upload "registrations-upload.php"
 upload "members-import.php"
+upload "forgot-password.php"
+upload "reset-password.php"
 # canonical copy lives in ../assets/, shared with the main app's build.js (which
 # embeds it as base64) — see assets/ETCClogoWhiteBackground.png
 upload "ETCClogoWhiteBackground.png" "$DIR/../assets/ETCClogoWhiteBackground.png"
 upload ".htaccess"
-# sponsor-submissions.json, registrations-data.json, and members-data.json are
-# deliberately never uploaded here — they're the live, server-accumulated data
-# (sponsor edits/submissions, uploaded registrations, imported member roster)
-# and have no meaningful local copy to overwrite them with. See
-# upload-registrations.js, members-import.php, and the Sponsors tab for how
-# those actually get refreshed.
+# secrets.php is deliberately NEVER uploaded here (unlike earlier versions of this
+# script) — reset-password.php now rewrites the LIVE copy directly when someone
+# uses the "Forgot password?" flow. If this script kept uploading the local copy
+# on every ordinary code deploy, it would silently overwrite (revert) any password
+# changed that way with whatever stale hash happens to be sitting in the local
+# repo. To push a manually-generated hash (openssl passwd, see README.md) instead
+# of using the reset flow, upload it by hand:
+#   curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T deploy/secrets.php "$BASE/secrets.php"
+# sponsor-submissions.json, registrations-data.json, members-data.json, and
+# password-reset.json are likewise deliberately never uploaded here — they're
+# live, server-accumulated data with no meaningful local copy to overwrite them
+# with. See upload-registrations.js, members-import.php, and the Sponsors tab for
+# how those actually get refreshed.
 
 echo "--- Final listing ---"
 curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv "$BASE/" -m 20

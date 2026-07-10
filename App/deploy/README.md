@@ -47,12 +47,30 @@ new account):
   `App/ETCCCarShow.html`, uploaded by `ftp-deploy.sh`. Carries **no** baked-in data
   (unlike the old `_data.html`, which no longer exists in this flow) — `index.php`
   supplies data at request time instead.
-- `_login.html` — the branded password screen (ETCC logo, purple gradient).
-- `secrets.php` — **not committed** — defines `$PASSWORD_HASH`. Copy
-  `secrets.example.php` to `secrets.php` and fill in a real hash:
-  `openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-password'`
+- `_login.html` — the branded password screen (ETCC logo, purple gradient), with a
+  "Forgot password?" link to `forgot-password.php`.
+- `secrets.php` — **not committed, and no longer uploaded by `ftp-deploy.sh`** —
+  defines `$PASSWORD_HASH`. Two ways to change it: use the "Forgot password?" flow
+  below (which rewrites the live copy directly), or generate a hash locally
+  (`openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-password'`, same template
+  as `secrets.example.php`) and upload it by hand (see the comment in
+  `ftp-deploy.sh`) — **do not** re-add it to the automatic upload list, or the next
+  ordinary code deploy will silently revert any password set via the reset flow.
+- `forgot-password.php` — **public, no login** — emails a time-limited (1 hour)
+  reset link to a fixed admin address (hardcoded in the file, currently
+  `etccwebsite.webmanager@gmail.com`), not to an address the visitor supplies. This
+  site has one shared password, not per-user accounts, so there's no identity to
+  check beyond "do you control that inbox" — which is a reasonable proxy here.
+  Stores the token in `password-reset.json` (gitignored, blocked by `.htaccess`).
+  Uses PHP's `mail()`; if delivery doesn't work on this host, fall back to the
+  manual `secrets.php` method above.
+- `reset-password.php` — validates the emailed token and lets you set a new
+  password, writing a fresh hash straight into `secrets.php` on the server (not a
+  file you get back — it never leaves the server). One-time use; the token is
+  deleted after a successful reset or once it expires.
 - `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to
-  `sponsor-submissions.json`, `registrations-data.json`, and `members-data.json`.
+  `sponsor-submissions.json`, `registrations-data.json`, `members-data.json`, and
+  `password-reset.json`.
 - `ETCClogoWhiteBackground.png` — logo; canonical copy lives at `../assets/` (shared
   with the main app, which embeds it as base64 in the header), originally copied from
   SilentAuctionManager's Images folder.
@@ -146,10 +164,11 @@ them has no effect on which registration data is being served.
      at all in that case.
 
    Either way it uploads the bundle as `app-bundle.html`, plus `index.php`, `lib.php`,
-   `secrets.php`, `sponsor-form.php`, `sponsor-submissions.php`,
-   `registrations-upload.php`, `members-import.php`, `_login.html`, the logo, and
-   `.htaccess`. Never touches `registrations-data.json`, `sponsor-submissions.json`,
-   or `members-data.json`.
+   `sponsor-form.php`, `sponsor-submissions.php`, `registrations-upload.php`,
+   `members-import.php`, `forgot-password.php`, `reset-password.php`, `_login.html`,
+   the logo, and `.htaccess`. Never touches `secrets.php` (see above — deliberately
+   excluded so it can't revert a live password reset), `registrations-data.json`,
+   `sponsor-submissions.json`, `members-data.json`, or `password-reset.json`.
 
 Dropping CSVs into the *offline* tool (`ETCCCarShow.html` run locally) never touches the
 server either way — that's a fully separate, private experience by design.

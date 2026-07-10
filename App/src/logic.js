@@ -173,10 +173,16 @@
         } else if (title === C.sponsorshipActivityTitle) {
           // Bonus sponsor shirt — sized from the activity's own column, not the
           // registrant's FreeTShirtSize; does not add an attendee or use fee/unitCost.
-          var sb = C.freeSizeMap[a[C.sponsorFreeShirtColumn]];
+          var sponsorShirtRaw = a[C.sponsorFreeShirtColumn];
+          var sb = C.freeSizeMap[sponsorShirtRaw];
           if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
-          else messages.push("Invalid sponsor shirt size '" + a[C.sponsorFreeShirtColumn] + "'");
+          else messages.push("Invalid sponsor shirt size '" + sponsorShirtRaw + "'");
           rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
+          // Not a real CSV column (like _isWalkIn) — the app reads this to auto-add
+          // a Sponsors-tab entry for this registrant without having to guess their
+          // shirt size back out of the (possibly ambiguous, if it matches their own
+          // free shirt's size) aggregated shirt buckets above.
+          rec._sponsorShirtSize = sb ? sponsorShirtRaw : "";
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {

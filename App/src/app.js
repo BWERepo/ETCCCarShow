@@ -23,14 +23,29 @@
     testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
     testRunning: false,
     testOnlyErrors: false,
-    sponsors: [],          // loaded from localStorage in init(); independent of the CSVs
+    sponsors: [],          // loaded from localStorage in init() UNLESS LIVE mode (see below)
     sponsorSearch: "",
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
-    importOpen: false      // "Import from Server" modal (pulls sponsor-form.php web submissions)
+    importOpen: false,     // "Import from Server" modal (offline tool only — see LIVE below)
+    sponsorSyncError: null, // set when a LIVE-mode push to the server fails; shown in the Sponsors tab
+    clearSponsorsOpen: false // "Remove All Sponsors" confirmation modal
   };
 
-  // The live public sponsor form's companion read API (deploy/sponsor-submissions.php) —
-  // see App/deploy/README.md. Editable in the Import modal in case of local/staging testing.
+  // Set only when this page was served by deploy/index.php (the hosted site) — that
+  // template injects `window.__carshowLive = { sponsorsApiUrl: "..." }` as the very
+  // first inline script, before app.js runs, specifically so it's visible here. It's
+  // never present in the offline ETCCCarShow.html build. When set, the Sponsors tab is
+  // server-authoritative: state.sponsors is fetched fresh (via ingestSponsors(), called
+  // by index.php's boot script) instead of read from localStorage, and every
+  // add/edit/delete is pushed straight to sponsorsApiUrl instead of saved locally — so
+  // every officer viewing the hosted site sees the same live list, with no separate
+  // Import step. The offline tool is untouched: LIVE stays null there, and it keeps
+  // using localStorage + the manual "Import from Server" pull exactly as before.
+  var LIVE = null;
+
+  // The public sponsor form's companion read API (deploy/sponsor-submissions.php) —
+  // see App/deploy/README.md. Used only by the offline tool's "Import from Server"
+  // (LIVE mode doesn't need it — the hosted site is already always current).
   var DEFAULT_IMPORT_URL = "https://etccapps.com/apps/carshow/sponsor-submissions.php";
 
   // ---------- sponsors: storage (localStorage, independent of the CSV data) ----------
@@ -166,7 +181,53 @@
       generatedAt: generatedAt || new Date()
     });
     state.sortCol = null; state.sortDir = 1;
+    syncSponsorsFromRegistrations();
     renderViews();
+  }
+
+  // Any registrant with a nonzero Individual Sponsorship fee becomes a real
+  // row in the Sponsors tab (type "individual"), so they're counted in the
+  // Summary tab's Individual Sponsors card instead of a separate raw-CSV
+  // figure. Insert-only, matched by a stable id — reloading the same CSVs
+  // never creates duplicates, and never overwrites a sponsor an officer has
+  // since edited by hand (e.g. added a website).
+  //
+  // The id is derived from Reg Date + name, NOT Member Number: non-member
+  // registrants get a Member Number auto-assigned fresh by generate() on
+  // every load (see regenerate() -> LOGIC.generate()), and that assignment
+  // depends on row order, so the same numeric value could mean a different
+  // person on a re-export. Reg Date (the registration transaction's own
+  // timestamp) plus name is stable for the same person's same registration
+  // across exports, and distinct across different people.
+  function csvSponsorId(rec) {
+    var raw = String(rec["Reg Date"] || "") + "_" + String(rec["Last Name"] || "") + "_" + String(rec["First Name"] || "");
+    return "csvind_" + raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+  function syncSponsorsFromRegistrations() {
+    if (!state.result || !state.result.ok) return;
+    var existingIds = {};
+    state.sponsors.forEach(function (s) { existingIds[s.id] = true; });
+    state.result.registrations.forEach(function (rec) {
+      if (rec._isWalkIn) return;
+      var fee = rec["Individual Sponsorship"];
+      if (fee === "" || fee == null || Number(fee) <= 0) return;
+      var id = csvSponsorId(rec);
+      if (existingIds[id]) return;
+      existingIds[id] = true;
+      var cityStateZip = [rec["City"], rec["State"]].filter(Boolean).join(", ") + (rec["Zip"] ? " " + rec["Zip"] : "");
+      upsertSponsor({
+        id: id,
+        name: (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : ""),
+        contactPerson: "",
+        phone: rec["Phone"] || "",
+        email: rec["Email"] || "",
+        address: [rec["Address"], cityStateZip].filter(Boolean).join(", "),
+        website: "",
+        etccMember: Number(rec["Member Number"]) < CONFIG.firstNonMember,
+        sponsorType: "individual",
+        shirtSize: rec._sponsorShirtSize || ""
+      });
+    });
   }
 
   // ---------- drop zone ----------
@@ -342,9 +403,12 @@
   // is what shrinks the table enough to avoid horizontal scrolling for most rows.
   // FreeTShirtSize / FreeTShirtSize Comments are also dropped from the on-screen
   // table as redundant with the Shirts summary column (still shown in the detail
-  // modal). The Excel export is unaffected and still lists everything, including
-  // all 24 individual shirt buckets, since that detail matters for ordering
-  // shirts even though it's noise on screen.
+  // modal). Individual Sponsorship stays visible here (unlike the Summary tab's
+  // card, which was removed) even though those registrants are also synced into
+  // the Sponsors tab (see syncSponsorsFromRegistrations) — both views are kept
+  // in sync from the same CSV data. The Excel export is unaffected and still
+  // lists everything, including all 24 individual shirt buckets, since that
+  // detail matters for ordering shirts even though it's noise on screen.
   function visibleColumns() {
     var base = state.result.columns.filter(function (c) {
       return !isShirtCol(c) && c !== "FreeTShirtSize" && c !== "FreeTShirtSize Comments";
@@ -578,7 +642,6 @@
       card("Attendees", s.attendees),
       card("Registrations", s.registrations),
       card("Funds", "$" + Number(s.funds).toLocaleString(undefined, { minimumFractionDigits: 0 })),
-      card("Individual Sponsorships", "$" + Number(s.sponsorship).toLocaleString(undefined, { minimumFractionDigits: 0 })),
       card("Next Member #", s.nextMemberNumber)
     ]));
 
@@ -743,15 +806,96 @@
       return SPONSOR_COLS.some(function (c) { return sponsorFieldText(s, c.key).toLowerCase().indexOf(q) !== -1; });
     });
   }
+  // Local state is updated optimistically either way; in LIVE mode the write
+  // additionally (asynchronously) goes to the server instead of localStorage —
+  // every officer viewing the hosted site reads that same server copy on
+  // their next page load, so no separate Import step is needed there.
   function upsertSponsor(record) {
     var idx = -1;
     state.sponsors.forEach(function (s, i) { if (s.id === record.id) idx = i; });
     if (idx === -1) state.sponsors.push(record); else state.sponsors[idx] = record;
-    saveSponsors(state.sponsors);
+    if (LIVE) pushSponsorToServer("upsert", { sponsor: record });
+    else saveSponsors(state.sponsors);
   }
   function removeSponsor(id) {
     state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });
-    saveSponsors(state.sponsors);
+    if (LIVE) pushSponsorToServer("delete", { id: id });
+    else saveSponsors(state.sponsors);
+  }
+  // Fire-and-forget (with a visible failure indicator) rather than blocking the
+  // UI on a round-trip — the local list already reflects the change immediately.
+  // No re-fetch/merge afterward: two officers editing at the exact same moment
+  // is rare enough for this club-sized app that "last write wins, reload to see
+  // others' changes" is an acceptable tradeoff versus building real-time sync.
+  function pushSponsorToServer(action, payload) {
+    if (!LIVE || !LIVE.sponsorsApiUrl) return;
+    var body = { action: action };
+    Object.keys(payload).forEach(function (k) { body[k] = payload[k]; });
+    fetch(LIVE.sponsorsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.sponsorSyncError = null;
+      if (state.tab === "sponsors") renderViews();
+    }).catch(function () {
+      state.sponsorSyncError = "Could not save that change to the server — check your connection and try again.";
+      if (state.tab === "sponsors") renderViews();
+    });
+  }
+
+  // ---------- remove all sponsors ----------
+  function openClearSponsorsConfirm() { state.clearSponsorsOpen = true; renderClearSponsorsConfirm(); }
+  function closeClearSponsorsConfirm() { state.clearSponsorsOpen = false; renderClearSponsorsConfirm(); }
+  function clearAllSponsors() {
+    state.sponsors = [];
+    if (LIVE) {
+      fetch(LIVE.sponsorsApiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear" })
+      }).then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        state.sponsorSyncError = null;
+        if (state.tab === "sponsors") renderViews();
+      }).catch(function () {
+        state.sponsorSyncError = "Could not clear sponsors on the server — check your connection and try again.";
+        if (state.tab === "sponsors") renderViews();
+      });
+    } else {
+      saveSponsors(state.sponsors);
+    }
+    renderViews();
+  }
+  function renderClearSponsorsConfirm() {
+    var host = $("#confirmHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.clearSponsorsOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeClearSponsorsConfirm);
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Remove All Sponsors?" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var count = state.sponsors.length;
+    var yesBtn = el("button", { class: "btn primary", style: "background:var(--warn);border-color:var(--red-dark)" },
+      ["Yes, Remove All"]);
+    yesBtn.addEventListener("click", function () { closeClearSponsorsConfirm(); clearAllSponsors(); });
+    var noBtn = el("button", { class: "btn" }, ["Cancel"]);
+    noBtn.addEventListener("click", closeClearSponsorsConfirm);
+
+    var body = el("div", { class: "modal-body" }, [
+      el("p", {}, ["This permanently removes all " + count + " sponsor" + (count === 1 ? "" : "s") +
+        (LIVE ? " from the server" : "") + ". This cannot be undone."]),
+      el("div", { class: "settings-actions" }, [yesBtn, noBtn])
+    ]);
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeClearSponsorsConfirm);
+    host.appendChild(backdrop);
   }
 
   function buildSponsorsToolbar() {
@@ -764,18 +908,34 @@
     prn.addEventListener("click", printSponsors);
     var xls = el("button", { class: "btn" }, ["⬇ Download Excel"]);
     xls.addEventListener("click", function () { downloadExcel(); });
-    var importBtn = el("button", { class: "btn" }, ["⇩ Import from Server"]);
-    importBtn.addEventListener("click", openImportModal);
-    return el("div", { class: "toolbar no-print" }, [search, count, el("span", { class: "spacer" }), prn, xls, importBtn, addBtn]);
+    var kids = [search, count, el("span", { class: "spacer" })];
+    if (LIVE) {
+      // Always current already — every edit here already went to the server,
+      // so there's nothing to pull; a manual Import step would be redundant.
+      kids.push(el("span", { class: "count", title: "This list is read from and saved straight to the server." }, ["🔄 Live"]));
+    } else {
+      var importBtn = el("button", { class: "btn" }, ["⇩ Import from Server"]);
+      importBtn.addEventListener("click", openImportModal);
+      kids.push(importBtn);
+    }
+    var clearBtn = el("button", { class: "btn" }, ["🗑 Remove All"]);
+    if (!state.sponsors.length) clearBtn.setAttribute("disabled", "disabled");
+    clearBtn.addEventListener("click", openClearSponsorsConfirm);
+    kids.push(prn, xls, clearBtn, addBtn);
+    return el("div", { class: "toolbar no-print" }, kids);
   }
 
   function buildSponsorsView() {
+    var container = el("div", { class: "view" });
+    if (state.sponsorSyncError) {
+      container.appendChild(el("div", { class: "messages", style: "margin-bottom:10px" }, [state.sponsorSyncError]));
+    }
     var thead = el("thead", {}, [el("tr", {}, SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); })
       .concat([el("th", { class: "no-print", text: "" })]))]);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
-    var wrap = el("div", { class: "tablewrap" }, [table]);
+    container.appendChild(el("div", { class: "tablewrap" }, [table]));
     setTimeout(renderSponsorsBody, 0);
-    return wrap;
+    return container;
   }
 
   function renderSponsorsBody() {
@@ -1161,12 +1321,19 @@
     document.body.appendChild(el("div", { id: "settingsHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
     document.body.appendChild(el("div", { id: "importHost" }));
-    state.sponsors = loadSponsors();
+    document.body.appendChild(el("div", { id: "confirmHost" }));
+    // window.__carshowLive is set (by index.php, before this script runs) only
+    // when served from the hosted site — see the LIVE comment near its
+    // declaration above. Read it here, not at module-load time, since init()
+    // is what's guaranteed to run after every inline script in the document.
+    LIVE = window.__carshowLive || null;
+    state.sponsors = LIVE ? [] : loadSponsors(); // LIVE mode: filled by ingestSponsors() instead
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.importOpen) { closeImportModal(); return; }
+      if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }
       if (!state.detailRow) return;
       if (e.key === "Escape") closeDetail();
       else if (e.key === "ArrowLeft") stepDetail(-1);
@@ -1187,6 +1354,13 @@
       state.act = actRows ? { name: "activity.csv", rows: actRows } : null;
       finishIngest([], generatedAt);
     },
+    // Called by index.php's boot script (LIVE mode only) with the sponsor list
+    // read fresh from the server on this page load — bypasses localStorage
+    // entirely, same as the fixture-loading hooks below bypass file I/O.
+    ingestSponsors: function (list) {
+      state.sponsors = Array.isArray(list) ? list : [];
+      renderViews();
+    },
     showDropZone: showDropZone,
     setTab: function (t) { state.tab = t; renderViews(); },
     setSearch: function (q) { state.search = q; renderRegBody(); },
@@ -1199,6 +1373,9 @@
     openSponsorForm: openSponsorForm,
     closeSponsorForm: closeSponsorForm,
     openImportModal: openImportModal,
-    closeImportModal: closeImportModal
+    closeImportModal: closeImportModal,
+    openClearSponsorsConfirm: openClearSponsorsConfirm,
+    closeClearSponsorsConfirm: closeClearSponsorsConfirm,
+    clearAllSponsors: clearAllSponsors
   };
 })();

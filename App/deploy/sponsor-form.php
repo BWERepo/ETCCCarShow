@@ -3,12 +3,13 @@
 // gate (index.php), because this page's whole point is to have a URL that
 // can be linked/embedded from another website for sponsors to fill out
 // themselves. Submissions are appended to sponsor-submissions.json
-// (gitignored, contains PII) via a lock-guarded read-modify-write.
+// (gitignored, contains PII) via lib.php's lock-guarded read-modify-write.
 //
-// Officers pull new submissions into the offline app's Sponsors tab with the
-// "Import from Server" button (App/src/app.js), which calls the *password*-
-// protected sponsor-submissions.php to read this file back out — this page
-// itself never serves the accumulated list, only appends to it.
+// sponsor-submissions.json is now the single always-current sponsor list —
+// the hosted index.php reads it fresh on every page load, and the Sponsors
+// tab (when viewed on the hosted site) reads/writes it live through
+// sponsor-submissions.php instead of caching to localStorage. This page
+// itself only ever appends; it never serves the accumulated list back out.
 //
 // Field set intentionally matches App/src/config.js's SPONSOR_TYPES /
 // SPONSOR_SHIRT_SIZES and the Sponsors tab's record shape exactly, so a
@@ -18,6 +19,7 @@
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
+require __DIR__ . '/lib.php';
 
 $SPONSOR_TYPES = [
     'premier' => 'Premier ($250)',
@@ -63,26 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'submittedAt' => gmdate('c'),
         ];
         $file = __DIR__ . '/sponsor-submissions.json';
-        $fh = fopen($file, 'c+');
-        if ($fh && flock($fh, LOCK_EX)) {
-            $size = filesize($file) ?: 0;
-            $raw = $size > 0 ? fread($fh, $size) : '';
-            $list = $raw ? json_decode($raw, true) : [];
-            if (!is_array($list)) $list = [];
-            $list[] = $record;
-            ftruncate($fh, 0);
-            rewind($fh);
-            fwrite($fh, json_encode($list, JSON_PRETTY_PRINT));
-            fflush($fh);
-            flock($fh, LOCK_UN);
-            fclose($fh);
+        if (carshow_append_json_list($file, $record)) {
             $submitted = true;
             $values = [
                 'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
                 'website' => '', 'etccMember' => false, 'sponsorType' => 'premier', 'shirtSize' => '',
             ];
         } else {
-            if ($fh) fclose($fh);
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
         }
     }

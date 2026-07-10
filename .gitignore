@@ -7,6 +7,13 @@ Thumbs.db
 App/deploy/secrets.php
 App/deploy/_data.html
 
-# Sponsor form submissions accumulate live on the server — never committed, and never
-# overwritten by a deploy (see deploy/ftp-deploy.sh, which deliberately doesn't upload it)
+# FTP credentials for deploy/ftp-deploy.sh, read at runtime by that script — same
+# pattern as ../BusinessWebExpress/.ftp-credentials. Never committed. Create your
+# own copy from .ftp-credentials.example (which IS committed, as a template).
+App/deploy/.ftp-credentials
+
+# Sponsor list and uploaded registrations accumulate live on the server — never
+# committed, and never overwritten by a deploy (see deploy/ftp-deploy.sh, which
+# deliberately doesn't upload either)
 App/deploy/sponsor-submissions.json
+App/deploy/registrations-data.json

@@ -1,7 +1,14 @@
+// DEPRECATED for the live site — index.php now stitches current data into
+// app-bundle.html dynamically on every request (see deploy/README.md), so
+// this script has no role in what etccapps.com actually serves. Kept only
+// for producing a fully self-contained, portable single-file snapshot (with
+// one day's data baked in) if you ever want to email someone a copy without
+// server/app access. To refresh the LIVE site's registration data, use
+// `deploy/upload-registrations.js` instead.
+//
 // Builds deploy/_data.html: a copy of the built ETCCCarShow.html with the two
-// current CSVs embedded and auto-ingested on load (via window.__carshow.ingestRows),
-// so index.php can serve it straight to an authenticated session with no
-// drop-zone step. Run after `node build.js` in App/ so ETCCCarShow.html is current.
+// current CSVs embedded and auto-ingested on load (via window.__carshow.ingestRows).
+// Run after `node build.js` in App/ so ETCCCarShow.html is current.
 //
 // Usage: node deploy/build-snapshot.js [regCsvPath] [actCsvPath]
 // With no args, picks the newest registration_data*.csv / activity_registrant_data*.csv

@@ -121,8 +121,6 @@
     kv("Registrations", s.registrations);
     ws.getCell(r, 1).value = "Funds"; ws.getCell(r, 1).font = { bold: true };
     var fv = ws.getCell(r, 2); fv.value = Number(s.funds); fv.numFmt = "$#,##0.00"; r++;
-    ws.getCell(r, 1).value = "Individual Sponsorships"; ws.getCell(r, 1).font = { bold: true };
-    var sv = ws.getCell(r, 2); sv.value = Number(s.sponsorship); sv.numFmt = "$#,##0.00"; r++;
     kv("Next Available Member Number", s.nextMemberNumber);
     r++;
     section("Shirts");

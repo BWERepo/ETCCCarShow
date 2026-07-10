@@ -207,7 +207,6 @@ th.pinned { z-index: 3; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
 .panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--red-dark); }
 .shirt-matrices { display: flex; gap: 28px; flex-wrap: wrap; }
-.shirt-matrix-sub { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
 table.matrix { border-collapse: collapse; }
 table.matrix th, table.matrix td { border: 1px solid var(--line); padding: 6px 12px; text-align: center; }
 table.matrix th { background: #f3f5f8; }
@@ -264,7 +263,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.32 &middot; Deployed 7/10/2026 8:26 AM</div>
+  <div>v1.33 &middot; Deployed 7/10/2026 8:30 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1847,7 +1846,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       el("div", { class: "shirt-matrices" }, [
         el("div", {}, [shirtMatrix(s)]),
         el("div", {}, [
-          el("h4", { class: "shirt-matrix-sub", text: "Combined (Registration + Sponsors)" }),
+          el("h3", { text: "Total Shirts Needed For Event" }),
           combinedShirtMatrix(s)
         ])
       ])

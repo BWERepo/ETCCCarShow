@@ -698,7 +698,7 @@
       el("div", { class: "shirt-matrices" }, [
         el("div", {}, [shirtMatrix(s)]),
         el("div", {}, [
-          el("h4", { class: "shirt-matrix-sub", text: "Combined (Registration + Sponsors)" }),
+          el("h3", { text: "Total Shirts Needed For Event" }),
           combinedShirtMatrix(s)
         ])
       ])

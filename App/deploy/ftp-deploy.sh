@@ -79,6 +79,7 @@ upload "registrations-upload.php"
 upload "members-import.php"
 upload "forgot-password.php"
 upload "reset-password.php"
+upload "logout.php"
 # canonical copy lives in ../assets/, shared with the main app's build.js (which
 # embeds it as base64) — see assets/ETCClogoWhiteBackground.png
 upload "ETCClogoWhiteBackground.png" "$DIR/../assets/ETCClogoWhiteBackground.png"

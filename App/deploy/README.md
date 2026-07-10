@@ -68,6 +68,9 @@ new account):
   password, writing a fresh hash straight into `secrets.php` on the server (not a
   file you get back — it never leaves the server). One-time use; the token is
   deleted after a successful reset or once it expires.
+- `logout.php` — destroys the shared PHP session and redirects to the club's main
+  site (`www.etccwebsite.com`). Linked from the app's hamburger menu (LIVE mode
+  only, same visibility rule as the Member Database link).
 - `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to
   `sponsor-submissions.json`, `registrations-data.json`, `members-data.json`, and
   `password-reset.json`.

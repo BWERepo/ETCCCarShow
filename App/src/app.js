@@ -1223,6 +1223,12 @@
       var membersItem = el("a", { class: "hdr-menu-item", href: "members-import.php", target: "_blank", rel: "noopener" }, ["👥 Member Database"]);
       membersItem.addEventListener("click", closeMenu);
       items.push(membersItem);
+      var sponsorFormItem = el("a", { class: "hdr-menu-item", href: "sponsor-form.php", target: "_blank", rel: "noopener" }, ["🏆 Become a Car Show Sponsor"]);
+      sponsorFormItem.addEventListener("click", closeMenu);
+      items.push(sponsorFormItem);
+      var logoutItem = el("a", { class: "hdr-menu-item", href: "logout.php" }, ["🚪 Logout"]);
+      logoutItem.addEventListener("click", closeMenu);
+      items.push(logoutItem);
     }
     var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" }, items);
     hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });

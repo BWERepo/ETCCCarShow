@@ -1730,12 +1730,14 @@
         ["Repository", m.repo], ["FTP Deployment Path", m.ftp], ["Files in Repo", m.files],
         ["Files Deployed", m.filesDeployed], ["Lines of Code", m.loc], ["Total Changes", m.totalChanges]
       ];
-      body.appendChild(el("div", { class: "changelog-meta" }, statDefs.map(function (s) {
-        return el("div", { class: "changelog-stat" }, [
-          el("div", { class: "label" }, [s[0]]),
-          el("div", { class: "value" }, [s[1]])
-        ]);
-      })));
+      body.appendChild(el("div", { class: "changelog-card" }, [
+        el("div", { class: "changelog-meta" }, statDefs.map(function (s) {
+          return el("div", {}, [
+            el("div", { class: "k" }, [s[0]]),
+            el("div", { class: "v" }, [s[1]])
+          ]);
+        }))
+      ]));
     }
 
     if (state.changelogLoading) {
@@ -1759,7 +1761,9 @@
           ]);
         }))
       ]);
-      body.appendChild(el("div", { class: "changelog-table-wrap" }, [table]));
+      body.appendChild(el("div", { class: "changelog-card flush" }, [
+        el("div", { class: "changelog-table-wrap" }, [table])
+      ]));
     }
 
     var modal = el("div", { class: "modal wide" }, [head, body]);

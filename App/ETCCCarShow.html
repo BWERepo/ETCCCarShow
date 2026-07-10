@@ -210,16 +210,22 @@ th.pinned { z-index: 3; }
 .test-list li.fail { color: var(--warn); background: #fff5f5; }
 .test-list .expect { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
-/* change log modal (Developer submenu, LIVE mode) */
-.changelog-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 6px 0 16px; }
-.changelog-stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-.changelog-stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-.changelog-stat .value { font-size: 15px; font-weight: 700; margin-top: 2px; word-break: break-word; }
-.changelog-table-wrap { max-height: 55vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+/* change log modal (Developer submenu, LIVE mode) — same shape as
+   SilentAuctionManager's Change Log screen: one bordered card holding an
+   unboxed stat grid (SAM's #changelog-meta/.stat-box, which has no CSS of
+   its own beyond the wrapping .card), then a second card, flush/no-padding,
+   holding the scrollable commit table (SAM's second .card + #changelog-table). */
+.changelog-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; }
+.changelog-meta { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; padding: 14px 16px; }
+.changelog-meta .k { font-size: 11px; color: var(--muted); }
+.changelog-meta .v { font-size: 13px; font-weight: 600; margin-top: 2px; word-break: break-word; }
+.changelog-card.flush { padding: 0; }
+.changelog-table-wrap { max-height: 55vh; overflow: auto; }
 .changelog-table-wrap table.grid th, .changelog-table-wrap table.grid td { white-space: normal; vertical-align: top; }
 .changelog-body { color: var(--muted); font-size: 11px; margin-top: 4px; line-height: 1.5; white-space: pre-wrap; }
 .changelog-ver { font-size: 11px; background: #dbeafe; padding: 2px 6px; border-radius: 10px; display: inline-block; }
 .changelog-sha { font-family: monospace; font-size: 11px; color: var(--accent); }
+@media (max-width: 700px) { .changelog-meta { grid-template-columns: repeat(2, 1fr); } }
 
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -292,7 +298,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.39 &middot; Deployed 7/10/2026 9:29 AM</div>
+  <div>v1.40 &middot; Deployed 7/10/2026 9:48 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -2907,12 +2913,14 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
         ["Repository", m.repo], ["FTP Deployment Path", m.ftp], ["Files in Repo", m.files],
         ["Files Deployed", m.filesDeployed], ["Lines of Code", m.loc], ["Total Changes", m.totalChanges]
       ];
-      body.appendChild(el("div", { class: "changelog-meta" }, statDefs.map(function (s) {
-        return el("div", { class: "changelog-stat" }, [
-          el("div", { class: "label" }, [s[0]]),
-          el("div", { class: "value" }, [s[1]])
-        ]);
-      })));
+      body.appendChild(el("div", { class: "changelog-card" }, [
+        el("div", { class: "changelog-meta" }, statDefs.map(function (s) {
+          return el("div", {}, [
+            el("div", { class: "k" }, [s[0]]),
+            el("div", { class: "v" }, [s[1]])
+          ]);
+        }))
+      ]));
     }
 
     if (state.changelogLoading) {
@@ -2936,7 +2944,9 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
           ]);
         }))
       ]);
-      body.appendChild(el("div", { class: "changelog-table-wrap" }, [table]));
+      body.appendChild(el("div", { class: "changelog-card flush" }, [
+        el("div", { class: "changelog-table-wrap" }, [table])
+      ]));
     }
 
     var modal = el("div", { class: "modal wide" }, [head, body]);

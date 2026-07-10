@@ -239,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </select>
       </div>
       <div class="btn-row">
-        <button type="button" class="btn btn-secondary" onclick="history.back()">Cancel</button>
+        <button type="button" class="btn btn-secondary" onclick="location.href='https://www.etccwebsite.com/content.aspx?page_id=0&amp;club_id=313652'">Cancel</button>
         <button type="submit" class="btn">Submit Sponsorship</button>
       </div>
     </form>

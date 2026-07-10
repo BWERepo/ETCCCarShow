@@ -29,10 +29,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid) {
     } elseif ($pw1 !== $pw2) {
         $errors[] = 'Passwords do not match.';
     } else {
+        // Preserve any existing SMTP config (secrets.php also holds the
+        // credentials this very page's sibling, forgot-password.php, needs
+        // to send its emails via lib.php's carshow_send_mail()) instead of
+        // wiping it out — an earlier version of this file did a naive full
+        // rewrite with only $PASSWORD_HASH and silently broke reset-email
+        // delivery the first time someone completed a reset.
+        $SMTP_HOST = $SMTP_PORT = $SMTP_USER = $SMTP_PASS = $SMTP_FROM = null;
+        if (is_file($SECRETS_FILE)) require $SECRETS_FILE;
+
         $newHash = crypt($pw1, '$6$' . bin2hex(random_bytes(8)) . '$');
-        $php = "<?php\n" .
-            "// Not committed to git (see .gitignore) — the live site's actual password hash.\n" .
-            "\$PASSWORD_HASH = " . var_export($newHash, true) . ";\n";
+        $lines = [
+            '<?php',
+            '// Not committed to git (see .gitignore) — the live site\'s actual password hash.',
+            '$PASSWORD_HASH = ' . var_export($newHash, true) . ';',
+        ];
+        if ($SMTP_HOST !== null) {
+            $lines[] = '';
+            $lines[] = '// SMTP credentials for forgot-password.php\'s reset emails (see lib.php\'s carshow_send_mail()).';
+            $lines[] = '$SMTP_HOST = ' . var_export($SMTP_HOST, true) . ';';
+            $lines[] = '$SMTP_PORT = ' . var_export($SMTP_PORT, true) . ';';
+            $lines[] = '$SMTP_USER = ' . var_export($SMTP_USER, true) . ';';
+            $lines[] = '$SMTP_PASS = ' . var_export($SMTP_PASS, true) . ';';
+            $lines[] = '$SMTP_FROM = ' . var_export($SMTP_FROM, true) . ';';
+        }
+        $php = implode("\n", $lines) . "\n";
         if (file_put_contents($SECRETS_FILE, $php, LOCK_EX) !== false) {
             @unlink($RESET_FILE); // one-time use
             $done = true;

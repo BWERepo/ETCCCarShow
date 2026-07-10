@@ -9,10 +9,13 @@
 // reasonable proxy for identity in a single-shared-password model. The
 // visitor never supplies or sees an email address.
 //
-// Uses PHP's mail() — reliability depends on how this Hostinger account has
-// mail configured. If the reset email never arrives, fall back to
-// regenerating the hash manually (see README.md: `openssl passwd -6 ...`)
-// and updating secrets.php directly.
+// Sends via carshow_send_mail() (lib.php) — an authenticated SMTP client
+// using the mailbox configured in secrets.php's $SMTP_* vars. PHP's raw
+// mail() was tried first and dropped: it returned success while silently
+// failing to actually deliver to Gmail from this Hostinger account (no
+// SPF/DKIM behind mail()'s sendmail path). If sending ever fails again,
+// fall back to regenerating the hash manually (see README.md:
+// `openssl passwd -6 ...`) and updating secrets.php directly.
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 require __DIR__ . '/lib.php';
 
@@ -36,11 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "Reset it here (link expires in 1 hour):\n" . $resetUrl . "\n\n" .
             "If you didn't request this, you can ignore this email — the link " .
             "expires on its own and nothing changes until someone opens it.";
-        $headers = "From: no-reply@etccapps.com\r\n";
-        if (@mail($ADMIN_EMAIL, $subject, $body, $headers)) {
+        if (carshow_send_mail($ADMIN_EMAIL, $subject, $body)) {
             $sent = true;
         } else {
-            $errors[] = 'Could not send the reset email — this server may not have outgoing mail configured. Ask a developer to reset the password directly instead (see deploy/README.md).';
+            $errors[] = 'Could not send the reset email — SMTP may not be configured (see secrets.php) or the send failed. Ask a developer to reset the password directly instead (see deploy/README.md).';
         }
     }
 }

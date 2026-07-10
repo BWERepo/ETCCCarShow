@@ -28,7 +28,9 @@
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
     importOpen: false,     // "Import from Server" modal (offline tool only — see LIVE below)
     sponsorSyncError: null, // set when a LIVE-mode push to the server fails; shown in the Sponsors tab
-    clearSponsorsOpen: false // "Remove All Sponsors" confirmation modal
+    clearSponsorsOpen: false, // "Remove All Sponsors" confirmation modal
+    sponsorSelected: {},    // id -> true, for the Sponsors tab's row checkboxes
+    deleteSelectedOpen: false // "Delete selected sponsors" confirmation modal
   };
 
   // Set only when this page was served by deploy/index.php (the hosted site) — that
@@ -823,6 +825,25 @@
     if (LIVE) pushSponsorToServer("delete", { id: id });
     else saveSponsors(state.sponsors);
   }
+
+  // ---------- row selection (Sponsors tab checkboxes) ----------
+  function selectedSponsorIds() { return Object.keys(state.sponsorSelected); }
+  function setSponsorSelected(id, checked) {
+    if (checked) state.sponsorSelected[id] = true; else delete state.sponsorSelected[id];
+  }
+  function toggleSelectAllSponsors(checked) {
+    visibleSponsors().forEach(function (s) { setSponsorSelected(s.id, checked); });
+    renderSponsorsBody();
+  }
+  // Removes every selected sponsor the same way the single-delete path does
+  // (one removeSponsor() call per id — no batch endpoint exists on the server,
+  // and at this club's scale a handful of sequential fire-and-forget deletes
+  // is an acceptable tradeoff versus adding one).
+  function deleteSelectedSponsors() {
+    selectedSponsorIds().forEach(function (id) { removeSponsor(id); });
+    state.sponsorSelected = {};
+    renderViews();
+  }
   // Fire-and-forget (with a visible failure indicator) rather than blocking the
   // UI on a round-trip — the local list already reflects the change immediately.
   // No re-fetch/merge afterward: two officers editing at the exact same moment
@@ -899,16 +920,57 @@
     host.appendChild(backdrop);
   }
 
+  // ---------- delete selected sponsors ----------
+  function openDeleteSelectedConfirm() {
+    if (!selectedSponsorIds().length) return;
+    state.deleteSelectedOpen = true;
+    renderDeleteSelectedConfirm();
+  }
+  function closeDeleteSelectedConfirm() { state.deleteSelectedOpen = false; renderDeleteSelectedConfirm(); }
+  function renderDeleteSelectedConfirm() {
+    var host = $("#confirmHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.deleteSelectedOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeDeleteSelectedConfirm);
+    var count = selectedSponsorIds().length;
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Delete " + count + " Sponsor" + (count === 1 ? "" : "s") + "?" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var yesBtn = el("button", { class: "btn primary", style: "background:var(--warn);border-color:var(--red-dark)" },
+      ["Yes, Delete"]);
+    yesBtn.addEventListener("click", function () { closeDeleteSelectedConfirm(); deleteSelectedSponsors(); });
+    var noBtn = el("button", { class: "btn" }, ["Cancel"]);
+    noBtn.addEventListener("click", closeDeleteSelectedConfirm);
+
+    var body = el("div", { class: "modal-body" }, [
+      el("p", {}, ["This permanently removes the " + count + " selected sponsor" + (count === 1 ? "" : "s") +
+        (LIVE ? " from the server" : "") + ". This cannot be undone."]),
+      el("div", { class: "settings-actions" }, [yesBtn, noBtn])
+    ]);
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeDeleteSelectedConfirm);
+    host.appendChild(backdrop);
+  }
+
   function buildSponsorsToolbar() {
     var search = el("input", { type: "search", placeholder: "Search sponsors…", value: state.sponsorSearch });
     search.addEventListener("input", function () { state.sponsorSearch = search.value; renderSponsorsBody(); });
     var count = el("span", { class: "count", id: "sponsorcount" });
+    // Adding a sponsor goes through the same public "Become a Car Show
+    // Sponsor" form (sponsor-form.php) anyone else uses, instead of the
+    // in-app modal — keeps one path for entries to land in
+    // sponsor-submissions.json.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
-    addBtn.addEventListener("click", function () { openSponsorForm(null); });
+    addBtn.addEventListener("click", function () { window.open("sponsor-form.php", "_blank", "noopener"); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printSponsors);
-    var xls = el("button", { class: "btn" }, ["⬇ Download Excel"]);
-    xls.addEventListener("click", function () { downloadExcel(); });
+    var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
+    delBtn.addEventListener("click", openDeleteSelectedConfirm);
     var kids = [search, count, el("span", { class: "spacer" })];
     if (LIVE) {
       // Always current already — every edit here already went to the server,
@@ -919,10 +981,7 @@
       importBtn.addEventListener("click", openImportModal);
       kids.push(importBtn);
     }
-    var clearBtn = el("button", { class: "btn" }, ["🗑 Remove All"]);
-    if (!state.sponsors.length) clearBtn.setAttribute("disabled", "disabled");
-    clearBtn.addEventListener("click", openClearSponsorsConfirm);
-    kids.push(prn, xls, clearBtn, addBtn);
+    kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
 
@@ -931,7 +990,10 @@
     if (state.sponsorSyncError) {
       container.appendChild(el("div", { class: "messages", style: "margin-bottom:10px" }, [state.sponsorSyncError]));
     }
-    var thead = el("thead", {}, [el("tr", {}, SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); })
+    var selectAllCb = el("input", { type: "checkbox", id: "sponsorSelectAll", title: "Select all" });
+    selectAllCb.addEventListener("change", function () { toggleSelectAllSponsors(selectAllCb.checked); });
+    var thead = el("thead", {}, [el("tr", {}, [el("th", { class: "no-print" }, [selectAllCb])]
+      .concat(SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); }))
       .concat([el("th", { class: "no-print", text: "" })]))]);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
     container.appendChild(el("div", { class: "tablewrap" }, [table]));
@@ -948,6 +1010,11 @@
       var tr = el("tr", {});
       tr.title = "Click for full details";
       tr.addEventListener("click", function () { openSponsorForm(s); });
+      var cb = el("input", { type: "checkbox" });
+      cb.checked = !!state.sponsorSelected[s.id];
+      cb.addEventListener("click", function (e) { e.stopPropagation(); });
+      cb.addEventListener("change", function () { setSponsorSelected(s.id, cb.checked); renderSponsorsBody(); });
+      tr.appendChild(el("td", { class: "no-print" }, [cb]));
       SPONSOR_COLS.forEach(function (c) { tr.appendChild(el("td", { text: sponsorFieldText(s, c.key) })); });
       tr.appendChild(el("td", { class: "no-print" }));
       frag.appendChild(tr);
@@ -957,7 +1024,20 @@
     var rc = $("#sponsorcount");
     if (rc) rc.textContent = rows.length + " of " + state.sponsors.length + " sponsors shown";
     if (!state.sponsors.length) {
-      body.appendChild(el("tr", {}, [el("td", { class: "hint", colspan: String(SPONSOR_COLS.length + 1), text: "No sponsors yet — click “+ Add Sponsor” to add one." })]));
+      body.appendChild(el("tr", {}, [el("td", { class: "hint", colspan: String(SPONSOR_COLS.length + 2), text: "No sponsors yet — click “+ Add Sponsor” to add one." })]));
+    }
+    var selectAllCb = $("#sponsorSelectAll");
+    if (selectAllCb) {
+      var visibleIds = rows.map(function (s) { return s.id; });
+      var selectedVisible = visibleIds.filter(function (id) { return state.sponsorSelected[id]; });
+      selectAllCb.checked = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+      selectAllCb.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visibleIds.length;
+    }
+    var delBtn = $("#sponsorDeleteBtn");
+    if (delBtn) {
+      var n = selectedSponsorIds().length;
+      delBtn.textContent = "🗑 Delete" + (n ? " (" + n + ")" : "");
+      if (n) delBtn.removeAttribute("disabled"); else delBtn.setAttribute("disabled", "disabled");
     }
   }
 
@@ -1343,6 +1423,7 @@
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.importOpen) { closeImportModal(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }
+      if (e.key === "Escape" && state.deleteSelectedOpen) { closeDeleteSelectedConfirm(); return; }
       if (!state.detailRow) return;
       if (e.key === "Escape") closeDetail();
       else if (e.key === "ArrowLeft") stepDetail(-1);
@@ -1385,6 +1466,11 @@
     closeImportModal: closeImportModal,
     openClearSponsorsConfirm: openClearSponsorsConfirm,
     closeClearSponsorsConfirm: closeClearSponsorsConfirm,
-    clearAllSponsors: clearAllSponsors
+    clearAllSponsors: clearAllSponsors,
+    setSponsorSelected: setSponsorSelected,
+    toggleSelectAllSponsors: toggleSelectAllSponsors,
+    openDeleteSelectedConfirm: openDeleteSelectedConfirm,
+    closeDeleteSelectedConfirm: closeDeleteSelectedConfirm,
+    deleteSelectedSponsors: deleteSelectedSponsors
   };
 })();

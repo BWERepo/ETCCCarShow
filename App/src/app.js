@@ -1617,10 +1617,10 @@
 
   function openChangelog() {
     state.changelogOpen = true;
-    renderChangelogModal();
+    renderChangelogPage();
     loadChangelogData();
   }
-  function closeChangelog() { state.changelogOpen = false; renderChangelogModal(); }
+  function closeChangelog() { state.changelogOpen = false; renderChangelogPage(); }
 
   // Exact total commit count via GitHub's pagination Link header: request one
   // commit per page, then read the rel="last" page number (= total commits).
@@ -1639,7 +1639,7 @@
   function loadChangelogData() {
     state.changelogLoading = true;
     state.changelogError = null;
-    renderChangelogModal();
+    renderChangelogPage();
     var base = "https://api.github.com/repos/" + CHANGELOG_OWNER + "/" + CHANGELOG_REPO;
     var commits, fileCount = "—", deployedCount = "—";
 
@@ -1696,12 +1696,12 @@
           return { sha: c.sha.substring(0, 7), date: d, subject: subject, body: body, version: version, fullSha: c.sha };
         });
         state.changelogLoading = false;
-        renderChangelogModal();
+        renderChangelogPage();
       });
     }).catch(function (err) {
       state.changelogLoading = false;
       state.changelogError = "Failed to load change log: " + (err && err.message || err);
-      renderChangelogModal();
+      renderChangelogPage();
     });
   }
 
@@ -1712,17 +1712,19 @@
     return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + h + ":" + p(d.getMinutes()) + " " + ap;
   }
 
-  function renderChangelogModal() {
+  // Full page, not a centered modal — matches SilentAuctionManager, where
+  // Change Log is its own nav "screen" rather than a dialog.
+  function renderChangelogPage() {
     var host = $("#changelogHost");
     if (!host) return;
     host.innerHTML = "";
     if (!state.changelogOpen) return;
 
-    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
     closeBtn.addEventListener("click", closeChangelog);
-    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Change Log" }), el("span", { class: "spacer" }), closeBtn]);
+    var head = el("div", { class: "changelog-page-head" }, [closeBtn, el("h2", { text: "Change Log" })]);
 
-    var body = el("div", { class: "modal-body" }, []);
+    var body = el("div", { class: "changelog-page-inner" }, []);
 
     if (state.changelogMeta) {
       var m = state.changelogMeta;
@@ -1766,11 +1768,9 @@
       ]));
     }
 
-    var modal = el("div", { class: "modal wide" }, [head, body]);
-    modal.addEventListener("click", function (e) { e.stopPropagation(); });
-    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
-    backdrop.addEventListener("click", closeChangelog);
-    host.appendChild(backdrop);
+    var bodyWrap = el("div", { class: "changelog-page-body" }, [body]);
+    var page = el("div", { class: "changelog-page" }, [head, bodyWrap]);
+    host.appendChild(page);
   }
 
   function init() {

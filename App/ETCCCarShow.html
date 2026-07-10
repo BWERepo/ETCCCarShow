@@ -144,7 +144,7 @@ table.grid tbody tr:hover { background: #fff6e9; }
 table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.grid td.shirt { text-align: center; color: var(--accent); font-weight: 600; }
 table.grid td.shirtsum, table.grid th.shirtsum { text-align: center; }
-table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: normal; max-width: 260px; }
+table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .pinned { position: sticky; background: inherit; z-index: 1; }
 .pin-1 { left: 0; }
 th.pinned { z-index: 3; }
@@ -285,7 +285,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.46 &middot; Deployed 7/10/2026 1:36 PM</div>
+  <div>v1.47 &middot; Deployed 7/10/2026 1:59 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>

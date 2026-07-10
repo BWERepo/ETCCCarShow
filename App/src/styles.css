@@ -137,7 +137,7 @@ table.grid tbody tr:hover { background: #fff6e9; }
 table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.grid td.shirt { text-align: center; color: var(--accent); font-weight: 600; }
 table.grid td.shirtsum, table.grid th.shirtsum { text-align: center; }
-table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: normal; max-width: 260px; }
+table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .pinned { position: sticky; background: inherit; z-index: 1; }
 .pin-1 { left: 0; }
 th.pinned { z-index: 3; }

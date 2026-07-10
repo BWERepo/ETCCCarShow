@@ -691,16 +691,14 @@
       ])
     ]));
 
-    // shirts matrix — registration-only, plus a combined (registration +
-    // sponsor) matrix side by side
+    // shirts matrices — registration-only, plus a combined (registration +
+    // sponsor) matrix — as a pair of cards side by side, same "cards
+    // sponsor-cards" / "sponsor-card" styling as the Sponsors panel above
+    // (compact table font/padding included) so both panels read as one system.
     container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Registration Shirts" }),
-      el("div", { class: "shirt-matrices" }, [
-        el("div", {}, [shirtMatrix(s)]),
-        el("div", {}, [
-          el("h3", { text: "Total Shirts Needed For Event" }),
-          combinedShirtMatrix(s)
-        ])
+      el("div", { class: "cards sponsor-cards" }, [
+        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Registration Shirts" }), shirtMatrix(s)]),
+        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }), combinedShirtMatrix(s)])
       ])
     ]));
 

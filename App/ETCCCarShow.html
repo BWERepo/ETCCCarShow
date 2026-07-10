@@ -206,7 +206,6 @@ th.pinned { z-index: 3; }
 .sponsor-card table.matrix th, .sponsor-card table.matrix td { padding: 4px 8px; font-size: 12px; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
 .panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--red-dark); }
-.shirt-matrices { display: flex; gap: 28px; flex-wrap: wrap; }
 table.matrix { border-collapse: collapse; }
 table.matrix th, table.matrix td { border: 1px solid var(--line); padding: 6px 12px; text-align: center; }
 table.matrix th { background: #f3f5f8; }
@@ -263,7 +262,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.33 &middot; Deployed 7/10/2026 8:30 AM</div>
+  <div>v1.34 &middot; Deployed 7/10/2026 8:38 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1839,16 +1838,14 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       ])
     ]));
 
-    // shirts matrix — registration-only, plus a combined (registration +
-    // sponsor) matrix side by side
+    // shirts matrices — registration-only, plus a combined (registration +
+    // sponsor) matrix — as a pair of cards side by side, same "cards
+    // sponsor-cards" / "sponsor-card" styling as the Sponsors panel above
+    // (compact table font/padding included) so both panels read as one system.
     container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Registration Shirts" }),
-      el("div", { class: "shirt-matrices" }, [
-        el("div", {}, [shirtMatrix(s)]),
-        el("div", {}, [
-          el("h3", { text: "Total Shirts Needed For Event" }),
-          combinedShirtMatrix(s)
-        ])
+      el("div", { class: "cards sponsor-cards" }, [
+        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Registration Shirts" }), shirtMatrix(s)]),
+        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }), combinedShirtMatrix(s)])
       ])
     ]));
 

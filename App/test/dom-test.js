@@ -185,14 +185,16 @@ var w = dom.window, d = dom.window.document;
   ok(cardVals.indexOf("28") !== -1, "Registrations card = 28");
   ok(cardVals.indexOf("8027") !== -1, "Next Member # card = 8027");
   ok(cardVals.some(function (t) { return /\$245/.test(t); }), "Funds card shows $245");
-  // Target the Shirts panel specifically by its heading — the Sponsors panel
-  // (added later) also renders table.matrix elements (one per sponsor-type
-  // card) earlier in the DOM, so "first .panel table.matrix" is ambiguous now.
-  var shirtsPanel = Array.prototype.filter.call(d.querySelectorAll(".panel"), function (p) {
-    var h3 = p.querySelector("h3");
-    return h3 && h3.textContent === "Shirts";
+  // Target the "Registration Shirts" card specifically by its head — it's
+  // one of several .sponsor-card elements on this tab now (the Sponsors
+  // panel's per-type cards, plus this and "Total Shirts Needed For Event",
+  // all reuse the same sponsor-card styling), so "first table.matrix" is
+  // ambiguous.
+  var shirtsCard = Array.prototype.filter.call(d.querySelectorAll(".sponsor-card"), function (c) {
+    var head = c.querySelector(".sponsor-card-head");
+    return head && head.textContent === "Registration Shirts";
   })[0];
-  var matrixCells = Array.prototype.map.call(shirtsPanel.querySelectorAll("table.matrix td"), function (td) { return td.textContent; });
+  var matrixCells = Array.prototype.map.call(shirtsCard.querySelectorAll("table.matrix td"), function (td) { return td.textContent; });
   ok(matrixCells.indexOf("1") !== -1, "shirt matrix shows a 1");
   ok(/Successfully created 28/.test(d.querySelector(".status").textContent), "status shows success");
 

@@ -14,7 +14,7 @@
     search: "",
     showWalkins: false,
     statusFilter: { paid: true, notpaid: false, cancelled: false, empty: false },
-    tab: "reg",
+    tab: "sum",
     detailRow: null,  // registration row currently shown in the detail modal, or null
     dropOpen: true,   // whether the "drop the two CSVs here" card is showing
     zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling

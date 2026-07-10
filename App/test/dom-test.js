@@ -60,6 +60,12 @@ var w = dom.window, d = dom.window.document;
   w.__carshow.ingestRows(reg, act);
   await tick(); // initial table body fills via setTimeout
 
+  // app now defaults to the Summary tab (see app.js) — everything through the
+  // Print/zoom section below is testing Registration-tab-specific behavior,
+  // so switch there explicitly rather than relying on it being the default.
+  w.__carshow.setTab("reg");
+  await tick(); // the reg table body/rowcount also fill via setTimeout
+
   // drop zone auto-collapses once there's a real result to look at instead
   ok(d.querySelector("#drop").classList.contains("collapsed"), "drop zone collapses after a successful load");
   ok(!d.querySelector("#drop .filecard"), "drop zone content is cleared, not just hidden");
@@ -179,7 +185,14 @@ var w = dom.window, d = dom.window.document;
   ok(cardVals.indexOf("28") !== -1, "Registrations card = 28");
   ok(cardVals.indexOf("8027") !== -1, "Next Member # card = 8027");
   ok(cardVals.some(function (t) { return /\$245/.test(t); }), "Funds card shows $245");
-  var matrixCells = Array.prototype.map.call(d.querySelector(".panel table.matrix").querySelectorAll("td"), function (td) { return td.textContent; });
+  // Target the Shirts panel specifically by its heading — the Sponsors panel
+  // (added later) also renders table.matrix elements (one per sponsor-type
+  // card) earlier in the DOM, so "first .panel table.matrix" is ambiguous now.
+  var shirtsPanel = Array.prototype.filter.call(d.querySelectorAll(".panel"), function (p) {
+    var h3 = p.querySelector("h3");
+    return h3 && h3.textContent === "Shirts";
+  })[0];
+  var matrixCells = Array.prototype.map.call(shirtsPanel.querySelectorAll("table.matrix td"), function (td) { return td.textContent; });
   ok(matrixCells.indexOf("1") !== -1, "shirt matrix shows a 1");
   ok(/Successfully created 28/.test(d.querySelector(".status").textContent), "status shows success");
 

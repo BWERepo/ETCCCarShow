@@ -71,8 +71,7 @@ var html =
 '<style>\n' + css + '\n</style>\n</head>\n<body>\n' +
 '<header class="app">\n' +
 '  <img src="' + logoDataUri + '" alt="ETCC Logo" class="hdr-logo">\n' +
-'  <h1>ETCC Car Show — Registration</h1>\n' +
-'  <span class="sub">Offline tool · your data never leaves this computer</span>\n' +
+'  <h1>ETCC Car Show</h1>\n' +
 '</header>\n' +
 '<div class="wrap">\n' +
 '  <div id="drop" class="drop"></div>\n' +

@@ -21,39 +21,53 @@ body {
   background: var(--bg);
 }
 header.app {
-  color: #000; padding: 14px 20px; display: flex; align-items: center; justify-content: center;
+  color: #000; padding: 14px 20px; display: flex; align-items: center;
   gap: 14px; position: relative; border-bottom: 1px solid var(--line);
 }
 header.app .hdr-logo { height: 72px; width: 72px; object-fit: contain; border-radius: 6px; }
 header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; color: #000; }
 header.app .sub { font-size: 13px; color: var(--muted); }
-header.app .hdr-spacer { display: none; }
-.hdr-menu-wrap { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); }
+
+/* ── Hamburger — SilentAuctionManager style: 3-bar icon at the far left of
+   the header, animating into an X while the drawer is open ── */
 .hamburger-btn {
-  background: #fff; border: 1px solid var(--line); color: var(--ink);
-  font-size: 16px; line-height: 1; padding: 7px 11px; border-radius: 6px; cursor: pointer;
+  background: transparent; border: none; color: var(--ink); cursor: pointer;
+  width: 40px; height: 40px; display: flex; flex-direction: column; justify-content: center;
+  align-items: center; gap: 5px; padding: 0; flex-shrink: 0; border-radius: 6px;
+  transition: background 0.12s;
 }
-.hamburger-btn:hover { background: #f3f5f8; }
+.hamburger-btn:hover { background: rgba(0,0,0,0.06); }
+.hamburger-btn .bar { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; transition: transform 0.2s, opacity 0.2s; }
+.hamburger-btn.open .bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger-btn.open .bar:nth-child(2) { opacity: 0; }
+.hamburger-btn.open .bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* ── Off-canvas nav drawer — SilentAuctionManager style ── */
+.hdr-nav-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  opacity: 0; visibility: hidden; transition: opacity 0.22s ease, visibility 0.22s ease; z-index: 150;
+}
+.hdr-nav-backdrop.open { opacity: 1; visibility: visible; }
 .hdr-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--line);
-  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 170px; overflow: hidden; z-index: 60;
+  position: fixed; top: 0; bottom: 0; left: 0; width: 220px; background: #1d1d1f;
+  display: flex; flex-direction: column; overflow-y: auto; padding: 12px 0;
+  transform: translateX(-100%); transition: transform 0.22s ease; z-index: 200;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.25);
 }
-.hdr-menu.hidden { display: none; }
+.hdr-menu.open { transform: translateX(0); }
 .hdr-menu-item {
-  display: block; width: 100%; text-align: left; padding: 10px 14px; background: #fff; border: none;
-  border-bottom: 1px solid var(--line); font-size: 14px; color: var(--ink); cursor: pointer; text-decoration: none;
+  display: block; width: 100%; text-align: left; padding: 10px 16px; background: transparent; border: none;
+  font-size: 13px; color: #aeaeb2; cursor: pointer; text-decoration: none;
 }
-.hdr-menu-item:last-child { border-bottom: none; }
-.hdr-menu-item:hover { background: #f3f5f8; }
-.hdr-dev-row { display: flex; gap: 6px; cursor: default; }
-.hdr-dev-row:hover { background: #fff; }
+.hdr-menu-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.hdr-dev-row { display: flex; gap: 6px; cursor: default; padding: 10px 16px; }
+.hdr-dev-row:hover { background: transparent; }
 .hdr-dev-pw {
-  flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px;
-  font-size: 13px; font-family: inherit; color: var(--ink); background: #fff;
+  flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid #3a3a3c; border-radius: 5px;
+  font-size: 13px; font-family: inherit; color: #fff; background: #2c2c2e;
 }
 .hdr-dev-row .btn { flex: none; padding: 6px 10px; font-size: 13px; }
-.hdr-dev-error { padding: 0 14px 10px; color: var(--red-dark); font-size: 12px; border-bottom: 1px solid var(--line); }
-.hdr-dev-error:last-child { border-bottom: none; }
+.hdr-dev-error { padding: 0 16px 10px; color: #ff6b6b; font-size: 12px; }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
 
 footer.app-footer {

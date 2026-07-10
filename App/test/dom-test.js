@@ -200,12 +200,12 @@ var w = dom.window, d = dom.window.document;
 
   // ---- hamburger menu -> Settings -> Run Regression Tests ----
   ok(!!d.querySelector("#hamburgerBtn"), "hamburger button is present in the header");
-  ok(!!d.querySelector("#hdrMenu").classList.contains("hidden"), "menu starts hidden");
+  ok(!d.querySelector("#hdrMenu").classList.contains("open"), "menu starts closed");
   d.querySelector("#hamburgerBtn").dispatchEvent(new w.Event("click", { bubbles: true }));
-  ok(!d.querySelector("#hdrMenu").classList.contains("hidden"), "clicking the hamburger opens the menu");
+  ok(d.querySelector("#hdrMenu").classList.contains("open"), "clicking the hamburger opens the menu");
   ok(!d.querySelector("#settingsHost .modal-backdrop"), "settings modal not open yet");
   d.querySelector("#settingsMenuItem").dispatchEvent(new w.Event("click", { bubbles: true }));
-  ok(d.querySelector("#hdrMenu").classList.contains("hidden"), "picking Settings closes the menu");
+  ok(!d.querySelector("#hdrMenu").classList.contains("open"), "picking Settings closes the menu");
   ok(!!d.querySelector("#settingsHost .modal-backdrop"), "Settings item opens the settings modal");
 
   // Running the tests exercises the real logic + Excel round-trip against the

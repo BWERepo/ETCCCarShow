@@ -51,12 +51,6 @@ if ($bundle === false) {
     exit;
 }
 
-// The offline-tool subtitle is accurate for ETCCCarShow.html run locally,
-// but false for this hosted, always-current, password-protected view.
-$OLD_SUBTITLE = 'Offline tool · your data never leaves this computer';
-$NEW_SUBTITLE = 'Hosted snapshot · always current, password-protected';
-$bundle = str_replace($OLD_SUBTITLE, $NEW_SUBTITLE, $bundle);
-
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
 // this one, has already run) sees window.__carshowLive already set.

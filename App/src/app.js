@@ -1399,12 +1399,22 @@
   function buildHeaderMenu() {
     var header = $("header.app");
     if (!header) return;
-    var hamburgerBtn = el("button", { id: "hamburgerBtn", class: "hamburger-btn", title: "Menu", "aria-label": "Menu" }, ["☰"]);
-    var menu = el("div", { id: "hdrMenu", class: "hdr-menu hidden" });
+    // SilentAuctionManager-style: 3-bar icon (animates into an X via the
+    // .open class), sitting at the far left of the header, opening a
+    // fixed off-canvas drawer from the left with a backdrop — see
+    // .hamburger-btn/.hdr-nav-backdrop/.hdr-menu in styles.css.
+    var hamburgerBtn = el("button", { id: "hamburgerBtn", class: "hamburger-btn", title: "Menu", "aria-label": "Menu", "aria-expanded": "false" }, [
+      el("span", { class: "bar" }), el("span", { class: "bar" }), el("span", { class: "bar" })
+    ]);
     hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
+    header.insertBefore(hamburgerBtn, header.firstChild);
+
+    var backdrop = el("div", { id: "hdrNavBackdrop", class: "hdr-nav-backdrop" });
+    backdrop.addEventListener("click", closeMenu);
+    var menu = el("div", { id: "hdrMenu", class: "hdr-menu" });
+    document.body.appendChild(backdrop);
+    document.body.appendChild(menu);
     document.addEventListener("click", closeMenu);
-    header.appendChild(el("div", { class: "hdr-spacer" }));
-    header.appendChild(el("div", { class: "hdr-menu-wrap" }, [hamburgerBtn, menu]));
     renderHeaderMenu();
   }
   function toggleMenu() { state.menuOpen = !state.menuOpen; renderHeaderMenu(); }
@@ -1468,7 +1478,14 @@
   function renderHeaderMenu() {
     var menu = $("#hdrMenu");
     if (!menu) return;
-    menu.classList.toggle("hidden", !state.menuOpen);
+    var backdrop = $("#hdrNavBackdrop");
+    var btn = $("#hamburgerBtn");
+    menu.classList.toggle("open", state.menuOpen);
+    if (backdrop) backdrop.classList.toggle("open", state.menuOpen);
+    if (btn) {
+      btn.classList.toggle("open", state.menuOpen);
+      btn.setAttribute("aria-expanded", state.menuOpen ? "true" : "false");
+    }
     menu.innerHTML = "";
     var items = [];
     if (LIVE) {
@@ -1591,6 +1608,7 @@
       if (e.key === "Escape" && state.importOpen) { closeImportModal(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }
       if (e.key === "Escape" && state.deleteSelectedOpen) { closeDeleteSelectedConfirm(); return; }
+      if (e.key === "Escape" && state.menuOpen) { closeMenu(); return; }
       if (!state.detailRow) return;
       if (e.key === "Escape") closeDetail();
       else if (e.key === "ArrowLeft") stepDetail(-1);

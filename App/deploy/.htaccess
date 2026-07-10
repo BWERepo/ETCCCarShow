@@ -1,5 +1,18 @@
 DirectoryIndex index.php index.html
 
+# Hostinger's own default security headers send a bare "default-src 'self'"
+# Content-Security-Policy, which (per the CSP spec) any directive not set
+# explicitly falls back to — silently blocking the Developer > Change Log
+# feature's fetch() calls to api.github.com (connect-src has no explicit
+# value, so it inherits default-src's 'self'-only host list). This
+# explicit header replaces theirs for this app, keeping default-src 'self'
+# but adding what this app actually needs: inline <script>/<style> (the
+# whole app is one self-contained HTML file, no external JS/CSS files),
+# data: URIs (the embedded logo), and api.github.com for the Change Log.
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.github.com"
+</IfModule>
+
 <Files "_data.html">
   <IfModule mod_authz_core.c>
     Require all denied

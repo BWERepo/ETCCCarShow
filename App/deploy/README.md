@@ -52,7 +52,7 @@ new account):
   `secrets.example.php` to `secrets.php` and fill in a real hash:
   `openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-password'`
 - `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to
-  `sponsor-submissions.json` and `registrations-data.json`.
+  `sponsor-submissions.json`, `registrations-data.json`, and `members-data.json`.
 - `ETCClogoWhiteBackground.png` — logo; canonical copy lives at `../assets/` (shared
   with the main app, which embeds it as base64 in the header), originally copied from
   SilentAuctionManager's Images folder.
@@ -80,6 +80,23 @@ new account):
   server access) with a specific day's data baked in. Not part of the normal refresh
   flow anymore; produces `_data.html` locally, which is not uploaded by
   `ftp-deploy.sh` and has no role in what `index.php` serves.
+- `members-import.php` — **officer-only** (gated by the same PHP session as `index.php`
+  — no separate password prompt, but you must already be logged in) page with a file
+  upload form for an ETCC membership roster CSV (needs "Last Name" and "First Name"
+  columns, matching the ClubExpress export convention). Stores the parsed names as
+  `members-data.json`. Linked from the app's hamburger menu → Settings (only shown when
+  viewing the hosted site).
+
+## Member roster validation on the sponsor form
+
+The public form's "ETCC Member Name" field is a free-text input constrained by an HTML
+`<datalist>` (autocomplete suggestions as you type a last name) built from
+`members-data.json`, and validated server-side on submit: a non-empty value must match
+a roster entry exactly (case-insensitively) or the submission is rejected with an error;
+an empty value just means "not a sponsor who's also a member." Import/refresh the roster
+via `members-import.php` whenever ETCC's membership list changes — there's no
+auto-sync from ClubExpress for this (it's a manual CSV export/upload, same as
+registrations).
 
 ## Sponsors: one always-current list
 
@@ -130,8 +147,9 @@ them has no effect on which registration data is being served.
 
    Either way it uploads the bundle as `app-bundle.html`, plus `index.php`, `lib.php`,
    `secrets.php`, `sponsor-form.php`, `sponsor-submissions.php`,
-   `registrations-upload.php`, `_login.html`, the logo, and `.htaccess`. Never touches
-   `registrations-data.json` or `sponsor-submissions.json`.
+   `registrations-upload.php`, `members-import.php`, `_login.html`, the logo, and
+   `.htaccess`. Never touches `registrations-data.json`, `sponsor-submissions.json`,
+   or `members-data.json`.
 
 Dropping CSVs into the *offline* tool (`ETCCCarShow.html` run locally) never touches the
 server either way — that's a fully separate, private experience by design.

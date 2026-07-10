@@ -16,6 +16,12 @@
 // submission here can be merged straight into the app with no translation.
 // This page isn't part of build.js's src/ pipeline, so if those config
 // lists change, update the two arrays below to match.
+//
+// ETCC Member Name is a free-text field constrained by a <datalist> and
+// validated server-side against members-data.json (imported via
+// members-import.php from a club membership CSV) — not a boolean checkbox.
+// An empty value just means "not a member"; a non-empty value must match
+// the roster exactly (case-insensitively) or the submission is rejected.
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -31,24 +37,40 @@ $SHIRT_SIZES = [
     "Women's Small", "Women's Medium", "Women's Large", "Women's Extra Large", "Women's 2XL", "Women's 3XL",
 ];
 
+// Member roster (gitignored, contains member PII — see members-import.php)
+// used only to populate the datalist suggestions and validate the ETCC
+// Member Name field below. Blocked from direct HTTP access by .htaccess.
+$members = carshow_read_json_list(__DIR__ . '/members-data.json');
+$memberNames = []; // lowercased name -> canonical display name, for case-insensitive validation
+foreach ($members as $m) {
+    if (!empty($m['name'])) $memberNames[strtolower($m['name'])] = $m['name'];
+}
+
 $errors = [];
 $submitted = false;
 $values = [
     'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-    'website' => '', 'etccMember' => false, 'sponsorType' => 'premier', 'shirtSize' => '',
+    'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website'] as $f) {
+    foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website', 'etccMemberName'] as $f) {
         $values[$f] = trim((string)($_POST[$f] ?? ''));
     }
-    $values['etccMember'] = !empty($_POST['etccMember']);
     $values['sponsorType'] = (string)($_POST['sponsorType'] ?? '');
     $values['shirtSize'] = (string)($_POST['shirtSize'] ?? '');
 
     if ($values['name'] === '') $errors[] = 'Sponsor Name is required.';
     if (!array_key_exists($values['sponsorType'], $SPONSOR_TYPES)) $errors[] = 'Choose a valid sponsor type.';
     if ($values['shirtSize'] !== '' && !in_array($values['shirtSize'], $SHIRT_SIZES, true)) $errors[] = 'Choose a valid T-shirt size.';
+    if ($values['etccMemberName'] !== '') {
+        $matched = $memberNames[strtolower($values['etccMemberName'])] ?? null;
+        if ($matched === null) {
+            $errors[] = 'ETCC Member Name not found in the roster — pick a name from the suggestions, or leave it blank if you\'re not a member.';
+        } else {
+            $values['etccMemberName'] = $matched; // normalize to the roster's canonical casing
+        }
+    }
 
     if (!$errors) {
         $record = [
@@ -59,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'email' => $values['email'],
             'address' => $values['address'],
             'website' => $values['website'],
-            'etccMember' => $values['etccMember'],
+            'etccMemberName' => $values['etccMemberName'],
             'sponsorType' => $values['sponsorType'],
             'shirtSize' => $values['shirtSize'],
             'submittedAt' => gmdate('c'),
@@ -69,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $submitted = true;
             $values = [
                 'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-                'website' => '', 'etccMember' => false, 'sponsorType' => 'premier', 'shirtSize' => '',
+                'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
             ];
         } else {
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
@@ -147,9 +169,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <label for="f-website">Website</label>
         <input type="url" id="f-website" name="website" placeholder="https://" value="<?php echo htmlspecialchars($values['website']); ?>">
       </div>
-      <div class="form-row checkbox-row">
-        <input type="checkbox" id="f-member" name="etccMember" value="1" <?php echo $values['etccMember'] ? 'checked' : ''; ?>>
-        <label for="f-member">I am an ETCC member</label>
+      <div class="form-row">
+        <label for="f-member">ETCC Member Name</label>
+        <input type="text" id="f-member" name="etccMemberName" list="etcc-members" autocomplete="off"
+          placeholder="Start typing your last name…" value="<?php echo htmlspecialchars($values['etccMemberName']); ?>">
+        <datalist id="etcc-members">
+          <?php foreach ($members as $m): ?>
+            <?php if (!empty($m['name'])): ?>
+              <option value="<?php echo htmlspecialchars($m['name']); ?>">
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </datalist>
       </div>
       <div class="form-row">
         <label for="f-type">Sponsor Type *</label>

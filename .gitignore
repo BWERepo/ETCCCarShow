@@ -12,8 +12,9 @@ App/deploy/_data.html
 # own copy from .ftp-credentials.example (which IS committed, as a template).
 App/deploy/.ftp-credentials
 
-# Sponsor list and uploaded registrations accumulate live on the server — never
-# committed, and never overwritten by a deploy (see deploy/ftp-deploy.sh, which
-# deliberately doesn't upload either)
+# Sponsor list, uploaded registrations, and the imported member roster accumulate
+# live on the server — never committed, and never overwritten by a deploy (see
+# deploy/ftp-deploy.sh, which deliberately doesn't upload any of them)
 App/deploy/sponsor-submissions.json
 App/deploy/registrations-data.json
+App/deploy/members-data.json

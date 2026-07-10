@@ -70,15 +70,17 @@ upload "secrets.php"
 upload "sponsor-form.php"
 upload "sponsor-submissions.php"
 upload "registrations-upload.php"
+upload "members-import.php"
 # canonical copy lives in ../assets/, shared with the main app's build.js (which
 # embeds it as base64) — see assets/ETCClogoWhiteBackground.png
 upload "ETCClogoWhiteBackground.png" "$DIR/../assets/ETCClogoWhiteBackground.png"
 upload ".htaccess"
-# sponsor-submissions.json and registrations-data.json are deliberately never
-# uploaded here — they're the live, server-accumulated data (sponsor edits/
-# submissions, uploaded registrations) and have no meaningful local copy to
-# overwrite them with. See upload-registrations.js and the Sponsors tab for
-# how those actually get refreshed.
+# sponsor-submissions.json, registrations-data.json, and members-data.json are
+# deliberately never uploaded here — they're the live, server-accumulated data
+# (sponsor edits/submissions, uploaded registrations, imported member roster)
+# and have no meaningful local copy to overwrite them with. See
+# upload-registrations.js, members-import.php, and the Sponsors tab for how
+# those actually get refreshed.
 
 echo "--- Final listing ---"
 curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv "$BASE/" -m 20

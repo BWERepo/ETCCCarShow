@@ -215,15 +215,17 @@
       if (existingIds[id]) return;
       existingIds[id] = true;
       var cityStateZip = [rec["City"], rec["State"]].filter(Boolean).join(", ") + (rec["Zip"] ? " " + rec["Zip"] : "");
+      var sponsorName = (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : "");
+      var isMember = Number(rec["Member Number"]) < CONFIG.firstNonMember;
       upsertSponsor({
         id: id,
-        name: (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : ""),
+        name: sponsorName,
         contactPerson: "",
         phone: rec["Phone"] || "",
         email: rec["Email"] || "",
         address: [rec["Address"], cityStateZip].filter(Boolean).join(", "),
         website: "",
-        etccMember: Number(rec["Member Number"]) < CONFIG.firstNonMember,
+        etccMemberName: isMember ? sponsorName : "",
         sponsorType: "individual",
         shirtSize: rec._sponsorShirtSize || ""
       });
@@ -732,7 +734,7 @@
     { key: "email", label: "Email" },
     { key: "address", label: "Address" },
     { key: "website", label: "Website" },
-    { key: "etccMember", label: "ETCC Member" },
+    { key: "etccMemberName", label: "ETCC Member Name" },
     { key: "sponsorType", label: "Sponsor Type" },
     { key: "shirtSize", label: "T-Shirt" }
   ];
@@ -787,7 +789,6 @@
     ]);
   }
   function sponsorFieldText(s, colKey) {
-    if (colKey === "etccMember") return s.etccMember ? "Yes" : "No";
     if (colKey === "sponsorType") return sponsorTypeLabel(s.sponsorType);
     var v = s[colKey];
     return v == null ? "" : String(v);
@@ -967,12 +968,13 @@
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
     { key: "address", label: "Address" },
-    { key: "website", label: "Website" }
+    { key: "website", label: "Website" },
+    { key: "etccMemberName", label: "ETCC Member Name" }
   ];
   function blankSponsor() {
     return {
       id: null, name: "", contactPerson: "", phone: "", email: "", address: "", website: "",
-      etccMember: false, sponsorType: CONFIG.SPONSOR_TYPES[0].key, shirtSize: ""
+      etccMemberName: "", sponsorType: CONFIG.SPONSOR_TYPES[0].key, shirtSize: ""
     };
   }
   function openSponsorForm(sponsor) {
@@ -1009,13 +1011,6 @@
       ]));
     });
 
-    var etccCb = el("input", { type: "checkbox" });
-    etccCb.checked = !!editing.etccMember;
-    body.appendChild(el("div", { class: "form-row" }, [
-      el("span", { class: "form-label", text: "ETCC Member" }),
-      el("label", {}, [etccCb, document.createTextNode(" Yes")])
-    ]));
-
     var typeSel = el("select", {});
     CONFIG.SPONSOR_TYPES.forEach(function (t) {
       var o = el("option", { value: t.key, text: t.label });
@@ -1048,7 +1043,7 @@
         email: fieldEls.email.value.trim(),
         address: fieldEls.address.value.trim(),
         website: fieldEls.website.value.trim(),
-        etccMember: etccCb.checked,
+        etccMemberName: fieldEls.etccMemberName.value.trim(),
         sponsorType: typeSel.value,
         shirtSize: shirtSel.value
       };
@@ -1306,6 +1301,13 @@
           return el("li", { class: t.ok ? "pass" : "fail" }, kids);
         })));
       }
+    }
+
+    if (LIVE) {
+      body.appendChild(el("h4", { style: "margin-top:18px", text: "Member Database" }));
+      body.appendChild(el("div", { class: "hint", style: "margin-bottom:6px" },
+        ["Import the ETCC membership roster used to validate the public sponsor form's ETCC Member Name field."]));
+      body.appendChild(el("a", { class: "btn", href: "members-import.php", target: "_blank", rel: "noopener" }, ["Manage Member Database →"]));
     }
 
     var modal = el("div", { class: "modal" }, [head, body]);

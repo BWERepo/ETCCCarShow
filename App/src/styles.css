@@ -125,7 +125,12 @@ footer.app-footer .footer-credit { font-size: 10px; margin-top: 4px; }
 /* table */
 .tablewrap { overflow: auto; max-height: calc(100vh - 250px); border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 table.grid { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
-table.grid th, table.grid td { padding: 6px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: left; }
+table.grid th, table.grid td { padding: 6px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: left; vertical-align: middle; }
+/* Without this, a checkbox's intrinsic box (Sponsors tab's row-select column)
+   renders slightly taller than a plain text cell at the same padding,
+   making Sponsors rows taller than Registration rows despite sharing this
+   same table.grid padding/font-size. */
+table.grid td input[type="checkbox"] { display: block; margin: 0; }
 table.grid thead th {
   position: sticky; top: 0; z-index: 2; background: #eef1f4; font-weight: 700; cursor: pointer;
   border-bottom: 2px solid #d5dae0; user-select: none;

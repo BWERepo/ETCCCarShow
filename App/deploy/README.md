@@ -74,11 +74,14 @@ new account):
 - `ETCClogoWhiteBackground.png` — logo; canonical copy lives at `../assets/` (shared
   with the main app, which embeds it as base64 in the header), originally copied from
   SilentAuctionManager's Images folder.
-- `sponsor-form.php` — **public, no login** — a standalone "Become a Sponsor" form with
-  the same fields as the app's Sponsors tab. Meant to be linked/embedded from another
-  website (e.g. the club's main site) so sponsors can submit their own info. Appends
-  each submission straight to `sponsor-submissions.json` — the single always-current
-  sponsor list, not a separate staging area.
+- `sponsor-form.php` — **password-gated, same shared password as `index.php`** — a
+  standalone "Become a Sponsor" form with the same fields as the app's Sponsors tab.
+  Meant to be linked/embedded from another website (e.g. the club's main site);
+  officers hand the site password to sponsors/businesses that need to submit here.
+  Serves the same `_login.html` screen as `index.php` (with a tweaked subtitle) until
+  the shared session is authenticated, then appends each submission straight to
+  `sponsor-submissions.json` — the single always-current sponsor list, not a separate
+  staging area.
 - `sponsor-submissions.php` — read/write JSON API for `sponsor-submissions.json`.
   `action=list` (default) returns the full list; `action=upsert` / `action=delete` add,
   edit, or remove one sponsor. Authenticated either by the existing PHP session (calls
@@ -122,7 +125,8 @@ registrations).
 the Sponsors tab reads/writes when viewed on the hosted site — there's exactly one
 sponsor list, not a per-officer local cache that needs importing.
 
-- **Public form** (`sponsor-form.php`, no login) — appends a new sponsor.
+- **Sponsor form** (`sponsor-form.php`, gated by the same shared password as
+  `index.php`) — appends a new sponsor.
 - **Hosted Sponsors tab** — on page load, `index.php` injects the current list via
   `ingestSponsors()`; every add/edit/delete in the tab pushes immediately to
   `sponsor-submissions.php` (session-authenticated, no extra password prompt needed

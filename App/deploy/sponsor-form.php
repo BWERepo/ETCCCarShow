@@ -1,9 +1,11 @@
 <?php
-// Public sponsor sign-up form — deliberately NOT behind the site's password
-// gate (index.php), because this page's whole point is to have a URL that
-// can be linked/embedded from another website for sponsors to fill out
-// themselves. Submissions are appended to sponsor-submissions.json
-// (gitignored, contains PII) via lib.php's lock-guarded read-modify-write.
+// Sponsor sign-up form — behind the SAME password gate as index.php (shared
+// $PASSWORD_HASH/session from secrets.php, not a separate credential). It's
+// still meant to be linked/embedded from another website; officers hand the
+// site password out to sponsors/businesses that need to submit here, same as
+// anyone else who needs the main app. Submissions are appended to
+// sponsor-submissions.json (gitignored, contains PII) via lib.php's
+// lock-guarded read-modify-write.
 //
 // sponsor-submissions.json is now the single always-current sponsor list —
 // the hosted index.php reads it fresh on every page load, and the Sponsors
@@ -25,7 +27,41 @@
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
+session_start();
+require __DIR__ . '/secrets.php';
 require __DIR__ . '/lib.php';
+
+// Same login POST handling as index.php — kept in sync deliberately rather
+// than factored out, since it's only a few lines and duplicating it here
+// avoids adding a require-order dependency between the two pages.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login') {
+    header('Content-Type: application/json');
+    $pw = (string)($_POST['password'] ?? '');
+    $ok = hash_equals($PASSWORD_HASH, crypt($pw, $PASSWORD_HASH));
+    if ($ok) {
+        session_regenerate_id(true);
+        $_SESSION['carshow_authenticated'] = true;
+        echo json_encode(['success' => true]);
+    } else {
+        http_response_code(401);
+        echo json_encode(['success' => false]);
+    }
+    exit;
+}
+
+if (empty($_SESSION['carshow_authenticated'])) {
+    // _login.html posts to location.pathname, so the same file works
+    // unmodified from this page's own URL. Swap in copy that fits this
+    // page's context instead of index.php's "registration & summary" text.
+    $login = file_get_contents(__DIR__ . '/_login.html');
+    $login = str_replace(
+        'Enter password to access the Car Show registration &amp; summary',
+        'Enter password to access the sponsor sign-up form',
+        $login
+    );
+    echo $login;
+    exit;
+}
 
 $SPONSOR_TYPES = [
     'premier' => 'Premier ($250)',

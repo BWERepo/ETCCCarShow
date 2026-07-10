@@ -5,7 +5,8 @@
 // the hosted site — reads it on load and pushes every add/edit/delete (and
 // the "Remove All" button's clear) here immediately instead of caching to
 // localStorage (see App/src/app.js's LIVE-mode handling). sponsor-form.php
-// (public, no login) only ever appends to this same file.
+// (gated by the same shared password as index.php) only ever appends to
+// this same file.
 //
 // Actions: list (default), upsert, delete, clear.
 //

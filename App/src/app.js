@@ -1075,8 +1075,8 @@
   // ---------- import sponsors submitted through the public web form ----------
   // Pulls sponsor-submissions.php (password-protected, see App/deploy/README.md)
   // and merges any records not already present locally (matched by id) into
-  // state.sponsors. The public form (deploy/sponsor-form.php) has no login, so
-  // this is the only path that data takes to reach an officer's browser.
+  // state.sponsors. This is the offline tool's only path to see submissions
+  // from deploy/sponsor-form.php, since it has no shared session cross-origin.
   function openImportModal() { state.importOpen = true; renderImportModal(); }
   function closeImportModal() { state.importOpen = false; renderImportModal(); }
 

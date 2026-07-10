@@ -56,6 +56,40 @@
     return Object.prototype.hasOwnProperty.call(rows[0], name);
   }
 
+  // "First [and Spouse First] Last" — e.g. "John Smith" or "John and Jane
+  // Smith". Neither "Spouse First Name" nor "Individual Sponsorship Text"
+  // have a ClubExpress CSV source; both are blank until this default fires
+  // or an officer hand-fills them via the detail modal.
+  function sponsorshipDefaultText(rec) {
+    var first = String(rec["First Name"] || "").trim();
+    var spouse = String(rec["Spouse First Name"] || "").trim();
+    var last = String(rec["Last Name"] || "").trim();
+    return (first + (spouse ? " and " + spouse : "") + " " + last).trim();
+  }
+  // Insert-only, same rationale as the Sponsors-tab Reg Date backfill: fires
+  // only while "Individual Sponsorship Text" is still blank, so it never
+  // overwrites an officer's hand-edit (including a deliberate blank — if
+  // Individual Sponsorship stays > 0, the next thing that touches this
+  // record re-defaults it, matching the literal rule requested: "if ...
+  // blank, default to ..."). Called from generate() (fresh CSV rows),
+  // buildManualRegistration() (fresh Walk-In rows), and app.js's
+  // applyRecordPatch() (every edit/override re-application), so the default
+  // reliably (re)applies wherever a record's fields can change.
+  function applySponsorshipTextDefault(rec) {
+    if (toNum(rec["Individual Sponsorship"]) > 0 && isBlank(rec["Individual Sponsorship Text"])) {
+      rec["Individual Sponsorship Text"] = sponsorshipDefaultText(rec);
+    }
+    return rec;
+  }
+
+  // Shared by generate() and buildManualRegistration(): shirt bucket key ->
+  // its final column header (e.g. "MensFreeLG" -> "Men's Free LG").
+  function bucketCol(key, C) {
+    C = C || CONFIG;
+    for (var i = 0; i < C.SHIRT_BUCKETS.length; i++) if (C.SHIRT_BUCKETS[i].key === key) return C.SHIRT_BUCKETS[i].col;
+    return key;
+  }
+
   // Aggregate attendees/funds/sponsorship/shirts/generations/clubs from a list
   // of already-built registration records (the same shape as generate()'s
   // `registrations` output). Kept independent of generate()'s CSV/activity
@@ -181,6 +215,8 @@
           // back out of the (possibly ambiguous, if it matches their own free
           // shirt's size) aggregated shirt buckets above.
           rec._sponsorShirtSize = sb ? sponsorShirtRaw : "";
+          var sponsorName = a[C.sponsorNameColumn];
+          if (!isBlank(sponsorName)) rec["Individual Sponsorship Text"] = sponsorName;
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {
@@ -203,6 +239,7 @@
       }
 
       rec["#"] = attendee;
+      applySponsorshipTextDefault(rec);
       return rec;
     });
 
@@ -261,12 +298,6 @@
         errorCount: errorCount
       }
     };
-
-    // ---- inner helpers -------------------------------------------------
-    function bucketCol(key) {
-      for (var i = 0; i < C.SHIRT_BUCKETS.length; i++) if (C.SHIRT_BUCKETS[i].key === key) return C.SHIRT_BUCKETS[i].col;
-      return key;
-    }
   }
 
   function buildRecord(srcRow, columns, shirtCols) {
@@ -295,6 +326,52 @@
     return rec;
   }
 
+  // Builds one registration record for a manually-entered Walk-In (Member or
+  // Nonmember) from the "+ Add Registration" form — same record shape
+  // generate() produces (baseColumnOrder + shirt bucket columns), so it
+  // flows through the app's existing search/sort/summary/print/detail-modal
+  // code identically to a CSV-derived row. Kept in this pure module (not
+  // app.js) so it stays independently testable, same rationale as
+  // summarizeRecords. fields.regDate is expected pre-formatted (a display
+  // string, not a Date) since this module has no DOM/date-formatting
+  // knowledge of its own — app.js's fmtDate() owns that.
+  function buildManualRegistration(fields, C) {
+    C = C || CONFIG;
+    fields = fields || {};
+    var shirtCols = C.SHIRT_BUCKETS.map(function (b) { return b.col; });
+    var columns = C.baseColumnOrder.concat(shirtCols);
+    var rec = blankRecord(columns, shirtCols);
+
+    rec["Reg Type"] = fields.regType;
+    rec["Last Name"] = fields.lastName || "";
+    rec["First Name"] = fields.firstName || "";
+    rec["Member Number"] = fields.memberNumber ? toInt(fields.memberNumber) : (toInt(fields.nextAvailableMemberNumber) || C.firstNonMember);
+    rec["Reg Date"] = fields.regDate || "";
+    rec["#"] = 1; // a walk-in is, by definition, physically at the event
+    rec["Club Name"] = fields.clubName || "";
+    rec["Phone"] = formatPhone(fields.phone || "");
+    rec["Email"] = fields.email || "";
+    rec["Address"] = fields.address || "";
+    rec["City"] = fields.city || "";
+    rec["State"] = fields.state || "";
+    rec["Zip"] = fields.zip || "";
+    rec["Total Fee"] = toNum(fields.totalFee);
+    rec["Status"] = fields.status || "Paid";
+    var year = toInt(fields.year);
+    rec["Year"] = year || "";
+    rec["Model"] = fields.model || "";
+    rec["Gen"] = genFromYear(year);
+    rec["In Car Show?"] = fields.inCarShow || "";
+    rec["Color"] = fields.color || "";
+    rec["FreeTShirtSize"] = fields.freeTShirtSize || "";
+    var bucketKey = C.freeSizeMap[fields.freeTShirtSize];
+    if (bucketKey) rec[bucketCol(bucketKey, C)] = 1;
+
+    applySponsorshipTextDefault(rec); // no-op today (this form has no Individual Sponsorship field yet), kept for consistency/future-proofing
+    rec.id = fields.id || null; // caller (app.js) assigns a stable id on first save
+    return rec;
+  }
+
   function failure(msg, opts, regRows, actRows) {
     return {
       ok: false,
@@ -311,7 +388,7 @@
     };
   }
 
-  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey };
+  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey, buildManualRegistration: buildManualRegistration, toInt: toInt, toNum: toNum, applySponsorshipTextDefault: applySponsorshipTextDefault };
   root.CarShowLogic = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

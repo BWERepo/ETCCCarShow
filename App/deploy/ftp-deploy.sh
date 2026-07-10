@@ -75,6 +75,10 @@ upload "index.php"
 upload "lib.php"
 upload "sponsor-form.php"
 upload "sponsor-submissions.php"
+upload "walkin-registrations.php"
+upload "app-settings.php"
+upload "deleted-registrations.php"
+upload "registration-overrides.php"
 upload "registrations-upload.php"
 upload "members-import.php"
 upload "registrations-import.php"
@@ -93,11 +97,13 @@ upload ".htaccess"
 # repo. To push a manually-generated hash (openssl passwd, see README.md) instead
 # of using the reset flow, upload it by hand:
 #   curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T deploy/secrets.php "$BASE/secrets.php"
-# sponsor-submissions.json, registrations-data.json, members-data.json, and
-# password-reset.json are likewise deliberately never uploaded here — they're
-# live, server-accumulated data with no meaningful local copy to overwrite them
-# with. See upload-registrations.js, members-import.php, and the Sponsors tab for
-# how those actually get refreshed.
+# sponsor-submissions.json, walkin-registrations.json, app-settings.json,
+# deleted-registrations.json, registration-overrides.json, registrations-data.json,
+# members-data.json, and password-reset.json are likewise deliberately never
+# uploaded here — they're live, server-accumulated data with no meaningful
+# local copy to overwrite them with. See upload-registrations.js, members-import.php, and the Sponsors/Registration
+# tabs (including its Developer > Settings) for how those actually get
+# refreshed.
 
 echo "--- Final listing ---"
 curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv "$BASE/" -m 20

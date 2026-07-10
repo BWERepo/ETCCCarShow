@@ -4,7 +4,13 @@
 // "Last Name" or "LastName" work too) into members-data.json (gitignored,
 // contains member PII, blocked from direct HTTP access by .htaccess).
 // sponsor-form.php reads that file to populate the ETCC Member Name
-// datalist/autocomplete and to validate submissions against it.
+// datalist/autocomplete and to validate submissions against it. If the CSV
+// also has a member number, contact, and/or vehicle columns (Member Number,
+// Phone, Email, Address, City, State, Zip, Year, Model, Color — same
+// normalized, case/space/underscore-insensitive matching as last/first name;
+// whichever of these are present are captured, the rest are left blank),
+// they're captured too; the Registration tab's Add Registration form uses
+// them to auto-fill a Walk-In Member's whole form by looking up their name.
 //
 // Gated by the same PHP session as index.php — no separate password prompt,
 // but you must already be logged into the app to reach this page.
@@ -37,12 +43,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['members_csv'])) {
             $header = str_getcsv(array_shift($lines));
             $lastIdx = null;
             $firstIdx = null;
-            // Normalize away spaces/underscores/case so "Last Name", "last_name",
-            // "LastName", etc. all match — different exports name these differently.
+            // Optional columns: field name -> column index once found. Normalize away
+            // spaces/underscores/hyphens/periods/case so "Last Name", "last_name",
+            // "LastName", "E-mail", "E.Mail", etc. all match — different exports name
+            // these differently.
+            $optionalIdx = ['memberNumber' => null, 'phone' => null, 'email' => null,
+                'address' => null, 'city' => null, 'state' => null, 'zip' => null,
+                'year' => null, 'model' => null, 'color' => null];
+            // Some exports (confirmed: this club's member database) prefix contact
+            // columns with "primary_" (e.g. "primary_email") — covered alongside the
+            // unprefixed names for every contact field, not just email, since that
+            // naming convention is likely consistent across the whole export.
+            $optionalAliases = [
+                'memberNumber' => ['membernumber', 'memberno', 'member#', 'memberid', 'id'],
+                'phone' => ['phone', 'phonenumber', 'homephone', 'cellphone', 'primaryphone'],
+                'email' => ['email', 'emailaddress', 'primaryemail'],
+                'address' => ['address', 'address1', 'streetaddress', 'primaryaddress', 'primaryaddress1'],
+                'city' => ['city', 'primarycity'],
+                'state' => ['state', 'primarystate'],
+                'zip' => ['zip', 'zipcode', 'postalcode', 'primaryzip', 'primaryzipcode', 'primarypostalcode'],
+                'year' => ['year', 'corvetteyear', 'modelyear'],
+                'model' => ['model', 'corvettemodel'],
+                'color' => ['color', 'corvettecolor']
+            ];
             foreach ($header as $i => $h) {
-                $h = str_replace([' ', '_'], '', strtolower(trim($h)));
+                $h = str_replace([' ', '_', '-', '.'], '', strtolower(trim($h)));
                 if ($h === 'lastname') $lastIdx = $i;
                 if ($h === 'firstname') $firstIdx = $i;
+                foreach ($optionalAliases as $field => $aliases) {
+                    if ($optionalIdx[$field] === null && in_array($h, $aliases, true)) $optionalIdx[$field] = $i;
+                }
             }
             if ($lastIdx === null || $firstIdx === null) {
                 $errors[] = 'CSV must have "last_name" and "first_name" (or "Last Name" / "First Name") columns.';
@@ -59,11 +89,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['members_csv'])) {
                     $key = strtolower($name);
                     if (isset($seen[$key])) continue;
                     $seen[$key] = true;
-                    $members[] = ['name' => $name, 'lastName' => $last, 'firstName' => $first];
+                    $member = ['name' => $name, 'lastName' => $last, 'firstName' => $first];
+                    foreach ($optionalIdx as $field => $idx) {
+                        $member[$field] = $idx !== null ? trim($cols[$idx] ?? '') : '';
+                    }
+                    $members[] = $member;
                 }
                 usort($members, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
                 if (carshow_write_json($MEMBERS_FILE, $members)) {
                     $imported = count($members);
+                    $importedFoundFields = array_keys(array_filter($optionalIdx, function ($v) { return $v !== null; }));
                 } else {
                     $errors[] = 'Could not save the member list — please try again.';
                 }
@@ -103,10 +138,17 @@ $current = carshow_read_json_list($MEMBERS_FILE);
 <body>
 <div class="wrap">
   <h1>Import ETCC Member Database</h1>
-  <div class="sub">Used to validate the "ETCC Member Name" field on the public sponsor form</div>
+  <div class="sub">Used to validate the "ETCC Member Name" field on the public sponsor form, and to look up a member's info on the Registration tab's Add Registration form</div>
   <div class="panel">
     <?php if ($imported !== null): ?>
-      <div class="success">Imported <?php echo $imported; ?> member name<?php echo $imported === 1 ? '' : 's'; ?>.</div>
+      <div class="success">
+        Imported <?php echo $imported; ?> member name<?php echo $imported === 1 ? '' : 's'; ?>.
+        <?php if ($importedFoundFields): ?>
+          Also found: <?php echo htmlspecialchars(implode(', ', $importedFoundFields)); ?>.
+        <?php else: ?>
+          No member number/contact columns were recognized — only names were imported.
+        <?php endif; ?>
+      </div>
     <?php endif; ?>
     <?php if ($errors): ?>
       <div class="errors"><strong>Please fix the following:</strong><ul>

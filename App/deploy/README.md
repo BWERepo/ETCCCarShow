@@ -173,6 +173,159 @@ refresh by exporting CSVs. What's different from the old flow is where that data
 `ftp-deploy.sh` / `app-bundle.html` are for **code** changes only (`App/src/*`); running
 them has no effect on which registration data is being served.
 
+## Walk-In registrations: a second, independent always-current list
+
+`walkin-registrations.json` holds manually-added Walk-In Member/Nonmember rows entered
+through the Registration tab's "+ Add Registration" form — for someone who shows up at
+the event without having pre-registered online. It's a separate file from
+`registrations-data.json` (and untouched by CSV imports) for the same reason
+`sponsor-submissions.json` is separate: officer-entered data needs to survive the *next*
+CSV re-import, not get wiped by it.
+
+- **Add Registration form** — picks Walk-In Member (officer types the real member
+  number, or looks it up by name from the imported roster — see below) or Walk-In
+  Nonmember (auto-assigned the next open number from a numbering pool that's
+  deliberately separate from the CSV import's own nonmember numbers — see app.js's
+  `nextAvailableWalkinNumber()` and "Settings" below). Every add pushes immediately to
+  `walkin-registrations.php` (session-authenticated).
+- **On page load**, `index.php` injects the current list via `ingestWalkins()`; app.js's
+  `allRegistrations()` merges it with the CSV-derived rows everywhere the Registration
+  and Summary tabs read registrations from (table, search, sort, print, live totals,
+  shirt counts) — a walk-in behaves identically to a CSV row except persistence.
+- **Editing a Walk-In row** — the detail modal's Edit mode (see "Editable detail modal
+  fields" below) is the correction path now. The dedicated "Delete Walk-In Registration"
+  button that used to live in the detail modal was removed once bulk-delete + editing
+  both existed — a wrong Reg Type or a "I want to start over" case still goes through the
+  Registration tab's checkbox/bulk-delete + re-adding instead.
+
+## Editable detail modal fields
+
+Clicking a row's "✎ Edit" button (in the detail modal's head) switches every
+`EDITABLE_FIELDS` row from plain text to an `<input>`/`<select>`, Save/Cancel buttons
+appear, and Prev/Next + click-outside-to-close are disabled until you leave edit mode
+(Save, Cancel, or Escape — which acts as Cancel while editing) — so an in-progress edit
+can't be silently discarded by an accidental click or arrow key. Applies to **every**
+row, CSV-imported or Walk-In, per the user's explicit choice (matching the bulk-delete
+scope decision):
+
+- **Editable:** Member Number, Club Name, Status, Total Fee, Individual Sponsorship,
+  Spouse First Name, Individual Sponsorship Text, #, Phone, Email, Address, City, State,
+  Zip, Year, Model, Color, In Car Show?.
+- **Not editable:** Reg Date, Reg Type, Gen (system/derived — Gen auto-recomputes from
+  Year if Year changes, see `applyRecordPatch()`), and the Shirts section (a 24-bucket
+  editor is a separate, bigger task).
+- **Status** is a free-form CSV field in practice (ClubExpress uses values like "Not paid
+  in time limit" or "Open", not just Paid/Not Paid/Cancelled) — the select preserves
+  whatever the row's current value already is as an extra option, so saving an edit to
+  an unrelated field can't silently downgrade an unusual Status to the nearest of the
+  three standard choices.
+- **Walk-In rows** already have a full server record (`walkin-registrations.json`) — an
+  edit just merges the patch and re-pushes it via the same `upsertWalkin()` the Add
+  Registration form uses.
+- **CSV-imported rows** have no per-row server record — `registrations-data.json` is
+  wholly replaced by every fresh import. An edit is stored as a **patch**, keyed by the
+  row's stable identity (`csvRegKey()`, the same Reg-Date+name identity bulk-delete
+  uses), in a new `registration-overrides.json` (via `registration-overrides.php`,
+  action=list/upsert). `regenerate()` re-applies every stored patch on top of the
+  freshly-parsed CSV every page load — including after a **later** re-import that still
+  contains the same row, so the edit survives indefinitely, same durability guarantee as
+  a CSV-row deletion. Each save fully replaces that row's stored patch (the form always
+  submits every editable field together, not a partial diff).
+
+## Individual Sponsorship Text (and Spouse First Name)
+
+Two columns in `baseColumnOrder` (`config.js`) with **no ClubExpress CSV source at
+all** — confirmed by checking a real, current registration export's headers, not
+guessed. Both start blank on every fresh CSV row.
+
+- **Individual Sponsorship Text** — sits right after Individual Sponsorship in the
+  Registration table/Excel export. Auto-defaults to `"First [and Spouse First] Last"`
+  (e.g. "John Smith" or "John and Jane Smith") the moment Individual Sponsorship is > 0
+  **and** the Text field is still blank — see `logic.js`'s `applySponsorshipTextDefault()`,
+  called from `generate()` (fresh CSV rows), `buildManualRegistration()` (fresh Walk-Ins,
+  currently a no-op since that form has no Individual Sponsorship field), and app.js's
+  `applyRecordPatch()` (every edit/override re-application, so an edit that pushes
+  Individual Sponsorship above 0 — or clears the Text field back to blank — re-triggers
+  the default). Insert-only: never overwrites a value that's already there, whether from
+  a prior default or an officer's hand-edit via the detail modal.
+- **Spouse First Name** — purely a manual-entry field (via the detail modal's Edit mode);
+  nothing currently populates it automatically. Exists so an officer can supply a
+  sponsor's plus-one name, making the "and Spouse" branch above actually fire.
+- **Not added to the Add Registration form** — a Walk-In registration has no Individual
+  Sponsorship concept in that form today (it's a real ClubExpress-only activity type),
+  so this was left out of scope. Both fields are still reachable for a Walk-In via the
+  detail modal after the fact, same as any other editable field.
+
+## Member roster: name lookup, member numbers, and contact info
+
+`members-data.json` (Developer → Import Members → `members-import.php`) started out
+holding only `{name, lastName, firstName}` — enough for `sponsor-form.php`'s "ETCC
+Member Name" datalist/validation. It now also captures whichever of `memberNumber`,
+`phone`, `email`, `address`, `city`, `state`, `zip`, `year`, `model`, `color` the
+imported CSV has recognizable columns for (`Member Number`/`Member No`/`Member #`/
+`Member ID`/`ID`, `Phone`, `Email`, `Address`, `City`, `State`, `Zip`, `Year`/`Corvette
+Year`, `Model`/`Corvette Model`, `Color`/`Corvette Color` — same normalized,
+case/space/underscore-insensitive matching last/first name already used). Any field the
+CSV doesn't have a column for is just `""` for every record — harmless, that field falls
+through to manual entry. **Note:** this only takes effect from the *next* re-import —
+code changes here don't retroactively add fields to whatever's already sitting in
+`members-data.json` on the server, so re-import after any code change that touches this
+file's column detection.
+
+- **On page load**, `index.php` injects the roster via `ingestMembers()` (`state.members`).
+- **Add Registration form** — when Reg Type is Walk-In Member, a "Look Up Member" field
+  (a `<datalist>` of `"Last, First"` names, same pattern as the sponsor form's member
+  field) auto-fills the *whole form* on an exact match — Last Name, First Name, Member
+  Number, Phone, Email, Address, City, State, Zip, Corvette Year, Model, Color from that
+  roster entry, plus Club Name unconditionally set to `"ETCC"` (every roster entry is, by
+  definition, an ETCC member — not itself a roster field). Still just a convenience —
+  every field stays manually editable, and fields the roster doesn't have data for are
+  simply left as whatever was already typed.
+
+## Settings: Developer → ⚙ Settings
+
+A small app-wide settings store, `app-settings.json` / `app-settings.php` (same
+list/save shape, same dual auth as every other endpoint here). Reachable from the same
+"Settings" modal `🧪 Run Regression Tests` already opened (that menu item now sits
+alongside a dedicated `⚙ Settings` entry — both open the same modal; the settings below
+are its first two sections, regression tests are the third). Current settings:
+
+- **First NonMember Number** (default 2000) — the starting number
+  `nextAvailableWalkinNumber()` auto-assigns to a Walk-In Nonmember. Deliberately **does
+  not** affect the CSV import's own nonmember numbering (still hardcoded at
+  `CONFIG.firstNonMember`/8001 in `config.js`) — the two pools are intentionally kept
+  independent so changing this setting can never renumber or collide with
+  already-imported CSV registrations.
+- **Walk-In Car Show Registration** (default $50) / **Walk-In Non Car Show Registration**
+  (default $0) — fill in the Add Registration form's Total Fee Collected field based on
+  its In Car Show? field (Yes -> Car Show fee, No -> Non Car Show fee — a real stored
+  column, not a separate form-only field). Still freely editable after that.
+- **Preregistration** (default $40) — reference figure only, not applied anywhere in the
+  UI. CSV-preregistered attendees' fees come from the ClubExpress export itself, not
+  this setting.
+
+## Registration tab: row checkboxes + bulk delete
+
+A select-all/per-row checkbox column (leftmost, pinned alongside Reg Type/Last
+Name/First Name while scrolling — `PINNED_COUNT` in app.js is now 4, not 3) plus a
+"🗑 Delete" toolbar button, same UX as the Sponsors tab's row selection. Deletion is
+routed differently depending on the row's origin, since only Walk-Ins have a real
+per-row server record:
+
+- **Walk-In rows** (have a `.id`) are deleted outright via `walkin-registrations.php`,
+  same as the detail modal's existing "Delete Walk-In Registration" button.
+- **CSV-imported rows** have no per-row record of their own — `registrations-data.json`
+  is wholly replaced by every fresh import. Instead, `csvRegKey(rec)` (the same
+  Reg-Date+name identity `csvSponsorId()` already used for the Sponsors auto-sync) is
+  added to a new `deleted-registrations.json` (via `deleted-registrations.php`,
+  action=list/add). `regenerate()` filters `state.result.registrations` against this set
+  every time it runs — including after a **later** CSV re-import that still contains the
+  same row, so the exclusion survives indefinitely, not just until the next import. There
+  is no "undo" UI for this; a deleted CSV row can only come back by hand-editing
+  `deleted-registrations.json` on the server.
+- Select-all only selects the currently *visible* (searched/filtered) rows, same as the
+  Sponsors tab.
+
 ## Deploying a code change
 
 1. `node build.js` from `App/` — rebuilds `ETCCCarShow.html`.

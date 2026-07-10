@@ -60,10 +60,15 @@
     firstNonMember: 8001,
 
     // --- Reg Type column values (first column in the Registration table) ---
-    // Every row built from the CSVs is "Pre-Registered" — there are no other
-    // row sources (walk-in placeholder rows were removed).
+    // Every row built from the CSVs is "Pre-Registered". WALKIN_MEMBER/
+    // WALKIN_NONMEMBER are assigned only by the Registration tab's
+    // "+ Add Registration" form (see app.js's buildManualRegistration call) —
+    // an officer manually entering someone who shows up without having
+    // pre-registered online.
     REG_TYPE: {
-      PRE_REGISTERED: "Pre-Registered"
+      PRE_REGISTERED: "Pre-Registered",
+      WALKIN_MEMBER: "Walk-In Member",
+      WALKIN_NONMEMBER: "Walk-In Nonmember"
     },
     showCancelled: true,          // keep Cancelled rows
     sortBy: "Last Name",
@@ -92,6 +97,7 @@
     // and activityTitleToBucket (no fee/unitCost quantity math; always exactly 1).
     sponsorshipActivityTitle: "Individual Sponsorship",
     sponsorFreeShirtColumn: "CSFreeSponsorShirt",
+    sponsorNameColumn: "CSSponsorName",
 
     // --- Column Rename Table (Old -> New) ---
     renameMap: {
@@ -116,10 +122,15 @@
 
     // --- Final column order (matches today's RegistrationSheet) ---
     // Shirt columns are appended programmatically (all 24, in SHIRT_BUCKETS order).
+    // "Spouse First Name" and "Individual Sponsorship Text" have no CSV source
+    // (ClubExpress's export has neither) — they start blank on every fresh
+    // CSV row and are filled in either automatically (see
+    // applySponsorshipTextDefault() in logic.js) or by hand via the detail
+    // modal's Edit mode. See PROJECT_STATUS.md for why.
     baseColumnOrder: [
-      "Reg Type", "Last Name", "First Name", "Member Number", "Reg Date",
+      "Reg Type", "Last Name", "First Name", "Spouse First Name", "Member Number", "Reg Date",
       "#", "Club Name", "Phone", "Email", "Address", "City", "State",
-      "Zip", "Total Fee", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
+      "Zip", "Total Fee", "Individual Sponsorship", "Individual Sponsorship Text", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],
 

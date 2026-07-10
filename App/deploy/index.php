@@ -54,7 +54,7 @@ if ($bundle === false) {
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
 // this one, has already run) sees window.__carshowSite already set.
-$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\" };</script>\n";
+$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\" };</script>\n";
 $bundle = str_replace('<head>', '<head>' . "\n" . $siteConfigScript, $bundle);
 
 $bootParts = [];
@@ -67,6 +67,41 @@ $bootParts = [];
 // re-upsert (overwriting) entries that already exist on the server.
 $sponsors = carshow_read_json_list(__DIR__ . '/sponsor-submissions.json');
 $bootParts[] = "    window.__carshow.ingestSponsors(" . carshow_safe_inline_json($sponsors) . ");\n";
+
+// Walk-In registrations are independent of the CSV-derived data below —
+// they survive a fresh CSV import, unlike registrations-data.json — so
+// ingestion order relative to it doesn't matter, unlike sponsors above.
+$walkins = carshow_read_json_list(__DIR__ . '/walkin-registrations.json');
+$bootParts[] = "    window.__carshow.ingestWalkins(" . carshow_safe_inline_json($walkins) . ");\n";
+
+// Member roster (name + member number, if the last CSV import had that
+// column — see members-import.php) — used by the Add Registration form to
+// look up a Walk-In Member's number by name.
+$members = carshow_read_json_list(__DIR__ . '/members-data.json');
+$bootParts[] = "    window.__carshow.ingestMembers(" . carshow_safe_inline_json($members) . ");\n";
+
+// App-wide settings — defaults here MUST match app-settings.php's $defaults.
+$appSettingsRaw = is_file(__DIR__ . '/app-settings.json') ? json_decode(file_get_contents(__DIR__ . '/app-settings.json'), true) : [];
+$appSettingsDefaults = [
+    'walkinFirstNonMember' => 2000,
+    'walkInCarShowFee' => 50,
+    'walkInNonCarShowFee' => 0,
+    'preregistrationFee' => 40
+];
+$appSettings = array_merge($appSettingsDefaults, is_array($appSettingsRaw) ? $appSettingsRaw : []);
+$bootParts[] = "    window.__carshow.ingestAppSettings(" . carshow_safe_inline_json($appSettings) . ");\n";
+
+// MUST run before the ingestRows() call below — regenerate() (triggered by
+// ingestRows) excludes deleted keys from the freshly-parsed CSV the moment
+// it runs, not just after the fact.
+$deletedKeys = carshow_read_json_list(__DIR__ . '/deleted-registrations.json');
+$bootParts[] = "    window.__carshow.ingestDeletedRegistrations(" . carshow_safe_inline_json($deletedKeys) . ");\n";
+
+// Same ordering requirement as deleted-registrations above — regenerate()
+// applies these field-edit patches to the freshly-parsed CSV rows immediately.
+$overridesRaw = is_file(__DIR__ . '/registration-overrides.json') ? json_decode(file_get_contents(__DIR__ . '/registration-overrides.json'), true) : [];
+$overrides = is_array($overridesRaw) ? $overridesRaw : [];
+$bootParts[] = "    window.__carshow.ingestRegistrationOverrides(" . carshow_safe_inline_json($overrides) . ");\n";
 
 $regFile = __DIR__ . '/registrations-data.json';
 if (is_file($regFile)) {

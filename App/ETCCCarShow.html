@@ -285,7 +285,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.47 &middot; Deployed 7/10/2026 1:59 PM</div>
+  <div>v1.59 &middot; Deployed 7/10/2026 6:44 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -408,10 +408,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     firstNonMember: 8001,
 
     // --- Reg Type column values (first column in the Registration table) ---
-    // Every row built from the CSVs is "Pre-Registered" — there are no other
-    // row sources (walk-in placeholder rows were removed).
+    // Every row built from the CSVs is "Pre-Registered". WALKIN_MEMBER/
+    // WALKIN_NONMEMBER are assigned only by the Registration tab's
+    // "+ Add Registration" form (see app.js's buildManualRegistration call) —
+    // an officer manually entering someone who shows up without having
+    // pre-registered online.
     REG_TYPE: {
-      PRE_REGISTERED: "Pre-Registered"
+      PRE_REGISTERED: "Pre-Registered",
+      WALKIN_MEMBER: "Walk-In Member",
+      WALKIN_NONMEMBER: "Walk-In Nonmember"
     },
     showCancelled: true,          // keep Cancelled rows
     sortBy: "Last Name",
@@ -440,6 +445,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // and activityTitleToBucket (no fee/unitCost quantity math; always exactly 1).
     sponsorshipActivityTitle: "Individual Sponsorship",
     sponsorFreeShirtColumn: "CSFreeSponsorShirt",
+    sponsorNameColumn: "CSSponsorName",
 
     // --- Column Rename Table (Old -> New) ---
     renameMap: {
@@ -464,10 +470,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     // --- Final column order (matches today's RegistrationSheet) ---
     // Shirt columns are appended programmatically (all 24, in SHIRT_BUCKETS order).
+    // "Spouse First Name" and "Individual Sponsorship Text" have no CSV source
+    // (ClubExpress's export has neither) — they start blank on every fresh
+    // CSV row and are filled in either automatically (see
+    // applySponsorshipTextDefault() in logic.js) or by hand via the detail
+    // modal's Edit mode. See PROJECT_STATUS.md for why.
     baseColumnOrder: [
-      "Reg Type", "Last Name", "First Name", "Member Number", "Reg Date",
+      "Reg Type", "Last Name", "First Name", "Spouse First Name", "Member Number", "Reg Date",
       "#", "Club Name", "Phone", "Email", "Address", "City", "State",
-      "Zip", "Total Fee", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
+      "Zip", "Total Fee", "Individual Sponsorship", "Individual Sponsorship Text", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],
 
@@ -614,6 +625,40 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return Object.prototype.hasOwnProperty.call(rows[0], name);
   }
 
+  // "First [and Spouse First] Last" — e.g. "John Smith" or "John and Jane
+  // Smith". Neither "Spouse First Name" nor "Individual Sponsorship Text"
+  // have a ClubExpress CSV source; both are blank until this default fires
+  // or an officer hand-fills them via the detail modal.
+  function sponsorshipDefaultText(rec) {
+    var first = String(rec["First Name"] || "").trim();
+    var spouse = String(rec["Spouse First Name"] || "").trim();
+    var last = String(rec["Last Name"] || "").trim();
+    return (first + (spouse ? " and " + spouse : "") + " " + last).trim();
+  }
+  // Insert-only, same rationale as the Sponsors-tab Reg Date backfill: fires
+  // only while "Individual Sponsorship Text" is still blank, so it never
+  // overwrites an officer's hand-edit (including a deliberate blank — if
+  // Individual Sponsorship stays > 0, the next thing that touches this
+  // record re-defaults it, matching the literal rule requested: "if ...
+  // blank, default to ..."). Called from generate() (fresh CSV rows),
+  // buildManualRegistration() (fresh Walk-In rows), and app.js's
+  // applyRecordPatch() (every edit/override re-application), so the default
+  // reliably (re)applies wherever a record's fields can change.
+  function applySponsorshipTextDefault(rec) {
+    if (toNum(rec["Individual Sponsorship"]) > 0 && isBlank(rec["Individual Sponsorship Text"])) {
+      rec["Individual Sponsorship Text"] = sponsorshipDefaultText(rec);
+    }
+    return rec;
+  }
+
+  // Shared by generate() and buildManualRegistration(): shirt bucket key ->
+  // its final column header (e.g. "MensFreeLG" -> "Men's Free LG").
+  function bucketCol(key, C) {
+    C = C || CONFIG;
+    for (var i = 0; i < C.SHIRT_BUCKETS.length; i++) if (C.SHIRT_BUCKETS[i].key === key) return C.SHIRT_BUCKETS[i].col;
+    return key;
+  }
+
   // Aggregate attendees/funds/sponsorship/shirts/generations/clubs from a list
   // of already-built registration records (the same shape as generate()'s
   // `registrations` output). Kept independent of generate()'s CSV/activity
@@ -739,6 +784,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           // back out of the (possibly ambiguous, if it matches their own free
           // shirt's size) aggregated shirt buckets above.
           rec._sponsorShirtSize = sb ? sponsorShirtRaw : "";
+          var sponsorName = a[C.sponsorNameColumn];
+          if (!isBlank(sponsorName)) rec["Individual Sponsorship Text"] = sponsorName;
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {
@@ -761,6 +808,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       rec["#"] = attendee;
+      applySponsorshipTextDefault(rec);
       return rec;
     });
 
@@ -819,12 +867,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         errorCount: errorCount
       }
     };
-
-    // ---- inner helpers -------------------------------------------------
-    function bucketCol(key) {
-      for (var i = 0; i < C.SHIRT_BUCKETS.length; i++) if (C.SHIRT_BUCKETS[i].key === key) return C.SHIRT_BUCKETS[i].col;
-      return key;
-    }
   }
 
   function buildRecord(srcRow, columns, shirtCols) {
@@ -853,6 +895,52 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return rec;
   }
 
+  // Builds one registration record for a manually-entered Walk-In (Member or
+  // Nonmember) from the "+ Add Registration" form — same record shape
+  // generate() produces (baseColumnOrder + shirt bucket columns), so it
+  // flows through the app's existing search/sort/summary/print/detail-modal
+  // code identically to a CSV-derived row. Kept in this pure module (not
+  // app.js) so it stays independently testable, same rationale as
+  // summarizeRecords. fields.regDate is expected pre-formatted (a display
+  // string, not a Date) since this module has no DOM/date-formatting
+  // knowledge of its own — app.js's fmtDate() owns that.
+  function buildManualRegistration(fields, C) {
+    C = C || CONFIG;
+    fields = fields || {};
+    var shirtCols = C.SHIRT_BUCKETS.map(function (b) { return b.col; });
+    var columns = C.baseColumnOrder.concat(shirtCols);
+    var rec = blankRecord(columns, shirtCols);
+
+    rec["Reg Type"] = fields.regType;
+    rec["Last Name"] = fields.lastName || "";
+    rec["First Name"] = fields.firstName || "";
+    rec["Member Number"] = fields.memberNumber ? toInt(fields.memberNumber) : (toInt(fields.nextAvailableMemberNumber) || C.firstNonMember);
+    rec["Reg Date"] = fields.regDate || "";
+    rec["#"] = 1; // a walk-in is, by definition, physically at the event
+    rec["Club Name"] = fields.clubName || "";
+    rec["Phone"] = formatPhone(fields.phone || "");
+    rec["Email"] = fields.email || "";
+    rec["Address"] = fields.address || "";
+    rec["City"] = fields.city || "";
+    rec["State"] = fields.state || "";
+    rec["Zip"] = fields.zip || "";
+    rec["Total Fee"] = toNum(fields.totalFee);
+    rec["Status"] = fields.status || "Paid";
+    var year = toInt(fields.year);
+    rec["Year"] = year || "";
+    rec["Model"] = fields.model || "";
+    rec["Gen"] = genFromYear(year);
+    rec["In Car Show?"] = fields.inCarShow || "";
+    rec["Color"] = fields.color || "";
+    rec["FreeTShirtSize"] = fields.freeTShirtSize || "";
+    var bucketKey = C.freeSizeMap[fields.freeTShirtSize];
+    if (bucketKey) rec[bucketCol(bucketKey, C)] = 1;
+
+    applySponsorshipTextDefault(rec); // no-op today (this form has no Individual Sponsorship field yet), kept for consistency/future-proofing
+    rec.id = fields.id || null; // caller (app.js) assigns a stable id on first save
+    return rec;
+  }
+
   function failure(msg, opts, regRows, actRows) {
     return {
       ok: false,
@@ -869,7 +957,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
 
-  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey };
+  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey, buildManualRegistration: buildManualRegistration, toInt: toInt, toNum: toNum, applySponsorshipTextDefault: applySponsorshipTextDefault };
   root.CarShowLogic = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -971,7 +1059,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     });
     ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: n } };
-    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
+    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Spouse First Name": 14, "Individual Sponsorship Text": 22, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
     ws.columns.forEach(function (col, i) {
       var name = cols[i];
       col.width = widthFor[name] || (isShirt(res, name) ? 7 : Math.min(Math.max(name.length + 2, 8), 20));
@@ -1056,6 +1144,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     (typeof require !== "undefined" ? require("./logic.js") : null);
   var EXCEL = root.CarShowExcel ||
     (typeof require !== "undefined" ? require("./excel.js") : null);
+  var CONFIG = root.CarShowConfig ||
+    (typeof require !== "undefined" ? require("./config.js") : null);
 
   function eq(results, actual, expected, label) {
     var ok = JSON.stringify(actual) === JSON.stringify(expected);
@@ -1071,10 +1161,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     eq(results, out.ok, true, "generate ok");
     eq(results, out.meta.errorCount, 0, "zero errors");
-    eq(results, out.summary.registrations, 28, "Registrations = 28");
+    eq(results, out.summary.registrations, 3, "Registrations = 3");
     eq(results, out.summary.attendees, 3, "Attendees = 3");
     eq(results, out.summary.funds, 245, "Funds = 245");
-    eq(results, out.summary.nextMemberNumber, 8027, "Next member # = 8027");
+    // Only Bob (the fixture's one non-member) gets auto-numbered — walk-in
+    // placeholder rows were removed from generate() this session (see
+    // PROJECT_STATUS.md); 8002 is the next slot after Bob's 8001, not the
+    // old 8027 (which counted 25 now-nonexistent placeholder rows too).
+    eq(results, out.summary.nextMemberNumber, 8002, "Next member # = 8002");
 
     var s = out.summary.shirtTotals;
     eq(results, s.MensFreeSM, 1, "Men's Free SM = 1 (sponsorship bonus shirt)");
@@ -1097,9 +1191,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     eq(results, out.summary.clubs, [{ name: "Sample Club", attendees: 2 }, { name: "Unknown", attendees: 1 }], "club tally");
     eq(results, out.messages.length, 0, "no messages — sponsorship handled without warning");
 
-    eq(results, out.registrations.length, 28, "28 table rows");
-    var walkins = out.registrations.filter(function (r) { return r._isWalkIn; });
-    eq(results, walkins.length, 25, "25 walk-in rows");
+    eq(results, out.registrations.length, 3, "3 table rows");
+    // Every CSV-derived row is unconditionally "Pre-Registered" — walk-in
+    // rows (Reg Type WALKIN_MEMBER/WALKIN_NONMEMBER) only ever come from the
+    // Registration tab's Add Registration form (buildManualRegistration in
+    // this same logic.js), a separate code path generate() never touches.
+    var regTypes = out.registrations.map(function (r) { return r["Reg Type"]; });
+    eq(results, regTypes, ["Pre-Registered", "Pre-Registered", "Pre-Registered"], "all 3 rows are Pre-Registered");
     var alice = out.registrations.filter(function (r) { return r["First Name"] === "Alice"; })[0];
     eq(results, alice["Member Number"], 100, "Alice keeps her own member #");
     eq(results, alice["Phone"], "(555) 555-0100", "Alice phone formatted");
@@ -1113,15 +1211,71 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     eq(results, Number(sponsor["Individual Sponsorship"]), 100, "Sponsor's Individual Sponsorship column = 100");
     eq(results, alice["Individual Sponsorship"], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
     eq(results, out.summary.sponsorship, 100, "summary.sponsorship = 100");
-
-    var walkNums = walkins.map(function (r) { return r["Member Number"]; }).sort(function (a, b) { return a - b; });
-    eq(results, walkNums[0], 8002, "first walk-in # 8002");
-    eq(results, walkNums[walkNums.length - 1], 8026, "last walk-in # 8026");
+    // Individual Sponsorship Text has no CSV source — generate() defaults it
+    // to "First [and Spouse] Last" whenever Individual Sponsorship > 0 and
+    // it's still blank (see applySponsorshipTextDefault in logic.js).
+    eq(results, sponsor["Individual Sponsorship Text"], "Sponsor Sample", "Sponsor's Individual Sponsorship Text defaults to their name");
+    eq(results, alice["Individual Sponsorship Text"], "", "Alice (no sponsorship) has blank Individual Sponsorship Text");
+    eq(results, sponsor["Spouse First Name"], "", "Spouse First Name has no CSV source — always blank on a fresh CSV row");
 
     eq(results, out.registrations[0]["Last Name"], "Sample", "first row sorts to Sample");
-    eq(results, /^z-> Walk-In/.test(out.registrations[out.registrations.length - 1]["Last Name"]), true, "walk-ins last");
+
+    manualRegistrationAssertions(results);
 
     return { out: out, results: results };
+  }
+
+  // buildManualRegistration() — the Registration tab's "+ Add Registration"
+  // form (Walk-In Member/Nonmember) builds records with this pure function
+  // instead of going through generate(); covered separately since it's a
+  // distinct code path generate()'s own assertions above never exercise.
+  function manualRegistrationAssertions(results) {
+    var member = LOGIC.buildManualRegistration({
+      id: "wk_test1",
+      regType: "Walk-In Member",
+      lastName: "Test", firstName: "Marty",
+      memberNumber: "42",
+      clubName: "ETCC", phone: "555-1212", email: "marty@example.com",
+      address: "1 Main St", city: "Knoxville", state: "TN", zip: "37918",
+      year: "1965", model: "Corvette", color: "Red",
+      inCarShow: "Yes", freeTShirtSize: "Men's Large",
+      totalFee: "50", status: "Paid", regDate: "7/10/2026 6:00 PM"
+    });
+    eq(results, member["Reg Type"], "Walk-In Member", "manual: Reg Type preserved");
+    eq(results, member["Member Number"], 42, "manual: typed Member Number kept, coerced to a number");
+    eq(results, member["#"], 1, "manual: attendee count always 1");
+    eq(results, member["Gen"], "C2", "manual: Gen derived from Year (1965 -> C2)");
+    eq(results, member["Men's Free LG"], 1, "manual: free shirt bucket bumped from FreeTShirtSize");
+    eq(results, member["Total Fee"], 50, "manual: Total Fee coerced to a number");
+    eq(results, member.id, "wk_test1", "manual: id passed through");
+
+    var nonmember = LOGIC.buildManualRegistration({
+      regType: "Walk-In Nonmember",
+      lastName: "Test", firstName: "Nora",
+      memberNumber: "", nextAvailableMemberNumber: 2005,
+      freeTShirtSize: "", inCarShow: "No", status: "Not Paid"
+    });
+    eq(results, nonmember["Member Number"], 2005, "manual: blank Member Number falls back to nextAvailableMemberNumber");
+    eq(results, nonmember["FreeTShirtSize"], "", "manual: no shirt picked -> no bucket bumped");
+    var shirtSum = CONFIG.SHIRT_BUCKETS.reduce(function (sum, b) { return sum + (nonmember[b.col] || 0); }, 0);
+    eq(results, shirtSum, 0, "manual: all 24 shirt buckets zero when no size picked");
+
+    sponsorshipTextAssertions(results);
+  }
+
+  // applySponsorshipTextDefault() — no CSV/fixture row happens to exercise
+  // the "and Spouse" branch (see generate()'s own assertions above), so it's
+  // covered directly here instead.
+  function applyText(rec) { LOGIC.applySponsorshipTextDefault(rec); return rec["Individual Sponsorship Text"]; }
+  function sponsorshipTextAssertions(results) {
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "" }),
+      "John Doe", "sponsorship text: defaults to 'First Last' with no spouse");
+    eq(results, applyText({ "First Name": "John", "Spouse First Name": "Jane", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "" }),
+      "John and Jane Doe", "sponsorship text: 'First and Spouse Last' when Spouse First Name is set");
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 0, "Individual Sponsorship Text": "" }),
+      "", "sponsorship text: stays blank when Individual Sponsorship is 0");
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "Custom Text" }),
+      "Custom Text", "sponsorship text: never overwrites an already-set value");
   }
 
   // Excel export round-trip (build a workbook, reload it, check shape).
@@ -1139,8 +1293,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       eq(results, !!reg, true, "RegistrationSheet exists");
       eq(results, !!sum, true, "SummarySheet exists");
       eq(results, reg.getCell(1, 1).value, out.meta.title, "title row A1");
-      eq(results, reg.getCell(2, 1).value, "Last Name", "header A2 = Last Name");
-      eq(results, reg.actualRowCount, 30, "reg sheet has 30 rows");
+      eq(results, reg.getCell(2, 1).value, "Reg Type", "header A2 = Reg Type");
+      eq(results, reg.actualRowCount, 5, "reg sheet has 5 rows (title + header + 3 fixture rows)");
       eq(results, !!reg.autoFilter, true, "autofilter set");
       eq(results, reg.views[0].state, "frozen", "frozen panes");
       var feeCol = out.columns.indexOf("Total Fee") + 1;
@@ -1202,14 +1356,49 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     changelogLoading: false,
     changelogError: null,
     changelogMeta: null,       // { repo, ftp, files, filesDeployed, loc, totalChanges } once loaded
-    changelogCommits: null     // [{ sha, date, time, subject, body, version }] once loaded
+    changelogCommits: null,    // [{ sha, date, time, subject, body, version }] once loaded
+    walkins: [],           // manually-added Walk-In Member/Nonmember registrations — filled by
+                            // ingestWalkins(), called by index.php's boot script; server-synced
+                            // the same way state.sponsors is, independent of the loaded CSVs
+    walkinSyncError: null, // set when a push to the server fails; shown in the Add Registration modal
+    addRegOpen: false,      // "+ Add Registration" form modal (Registration tab)
+    members: [],            // ETCC member roster ({name, lastName, firstName, memberNumber,
+                             // phone, email, address, city, state, zip}, whichever the last
+                             // import's CSV had columns for) — filled by ingestMembers(); used by
+                             // the Add Registration form to fill the whole form by looking up a
+                             // Walk-In Member's name (see members-import.php)
+    appSettings: {          // filled by ingestAppSettings(); see app-settings.php. Defaults here
+                             // are just a fallback for the brief window before that hook runs —
+                             // app-settings.php's own $defaults is the real source of truth.
+      walkinFirstNonMember: 2000,
+      walkInCarShowFee: 50,
+      walkInNonCarShowFee: 0,
+      preregistrationFee: 40
+    },
+    appSettingsSaving: false,
+    appSettingsError: null,   // set when a Settings save fails; shown in the Settings modal
+    appSettingsSaved: false,  // brief "Saved" confirmation after a successful save
+    deletedCsvKeys: {},       // csvRegKey(rec) -> true, for CSV-derived rows removed via the
+                               // Registration tab's checkbox/bulk-delete — filled by
+                               // ingestDeletedRegistrations(); excluded from state.result.registrations
+                               // in regenerate(), so they stay gone across reloads/re-imports too
+    regSelected: {},           // rowKey(r) -> true, for the Registration tab's row checkboxes
+    deleteRegSelectedOpen: false, // "Delete selected registrations" confirmation modal
+    regDeleteSyncError: null,  // set when persisting a CSV-row deletion fails
+    csvOverrides: {},          // csvRegKey(rec) -> patch object, for CSV-derived rows edited via
+                                // the detail modal's Edit mode — filled by
+                                // ingestRegistrationOverrides(); applied on top of
+                                // state.result.registrations in regenerate(), so edits survive
+                                // reloads/re-imports too (see registration-overrides.php)
+    detailEditing: false,      // detail modal is in Edit mode
+    detailEditError: null      // set when saving a detail-modal edit fails
   };
 
   // Populated in init() below from window.__carshowSite, which
-  // deploy/index.php injects as { sponsorsApiUrl: "..." } in the very first
-  // inline script, before app.js runs. Read inside init() rather than at
-  // module-load time, since init() is what's guaranteed to run after every
-  // inline script in the document, including this one. The Sponsors tab is
+  // deploy/index.php injects as { sponsorsApiUrl: "...", walkinsApiUrl: "..." }
+  // in the very first inline script, before app.js runs. Read inside init()
+  // rather than at module-load time, since init() is what's guaranteed to run
+  // after every inline script in the document, including this one. The Sponsors tab is
   // server-authoritative: state.sponsors is fetched fresh (via
   // ingestSponsors(), called by index.php's boot script), and every
   // add/edit/delete is pushed straight to sponsorsApiUrl — so every officer
@@ -1296,6 +1485,19 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       actFileName: state.act ? state.act.name : "",
       generatedAt: generatedAt || new Date()
     });
+    // Exclude rows removed via the Registration tab's checkbox/bulk-delete,
+    // then re-apply any detail-modal field edits — generate() has no notion
+    // of either, so both run against its fresh output every time. Order
+    // matters: both must run before syncSponsorsFromRegistrations() so a
+    // deleted/edited row's Individual Sponsorship is reflected in the sync.
+    if (state.result.ok) {
+      state.result.registrations = state.result.registrations
+        .filter(function (r) { return !state.deletedCsvKeys[csvRegKey(r)]; })
+        .map(function (r) {
+          var patch = state.csvOverrides[csvRegKey(r)];
+          return patch ? applyRecordPatch(r, patch) : r;
+        });
+    }
     state.sortCol = null; state.sortDir = 1;
     syncSponsorsFromRegistrations();
     renderViews();
@@ -1315,9 +1517,35 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // person on a re-export. Reg Date (the registration transaction's own
   // timestamp) plus name is stable for the same person's same registration
   // across exports, and distinct across different people.
-  function csvSponsorId(rec) {
+  // Stable identity for a CSV-derived registration row across re-exports —
+  // shared by csvSponsorId() below (prefixed, its own namespace) and the
+  // Registration tab's checkbox-delete and detail-modal-edit features
+  // (unprefixed, used directly as a key into state.deletedCsvKeys/
+  // state.csvOverrides — see rowKey()).
+  function csvRegKey(rec) {
     var raw = String(rec["Reg Date"] || "") + "_" + String(rec["Last Name"] || "") + "_" + String(rec["First Name"] || "");
-    return "csvind_" + raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    return raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+  function csvSponsorId(rec) { return "csvind_" + csvRegKey(rec); }
+
+  // Merges an edit patch onto a copy of a record, recomputing Gen if Year was
+  // part of the patch (Gen is derived, never directly editable — see
+  // EDITABLE_FIELDS/renderDetailModal), and re-applying the Individual
+  // Sponsorship Text default in case the edit is what pushed Individual
+  // Sponsorship above 0 (see applySponsorshipTextDefault — a no-op if Text is
+  // already set, whether that's from a prior default or an officer's own
+  // edit). Shared by regenerate() (re-applying a persisted CSV-row edit every
+  // load) and the detail modal's Save handler (building the just-edited
+  // record to show immediately, before the next reload).
+  function applyRecordPatch(rec, patch) {
+    var merged = {};
+    Object.keys(rec).forEach(function (k) { merged[k] = rec[k]; });
+    Object.keys(patch).forEach(function (k) { merged[k] = patch[k]; });
+    if (Object.prototype.hasOwnProperty.call(patch, "Year")) {
+      merged["Gen"] = LOGIC.genFromYear(LOGIC.toInt(patch["Year"]));
+    }
+    LOGIC.applySponsorshipTextDefault(merged);
+    return merged;
   }
   function syncSponsorsFromRegistrations() {
     if (!state.result || !state.result.ok) return;
@@ -1389,6 +1617,9 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       return;
     }
     if (state.tab === "reg") app.appendChild(buildLoadedInfo());
+    if (state.tab === "reg" && state.regDeleteSyncError) {
+      app.appendChild(el("div", { class: "messages", style: "margin-bottom:10px" }, [state.regDeleteSyncError]));
+    }
     var toolbar = state.tab === "reg" ? buildRegToolbar() : buildSummaryToolbar();
     app.appendChild(toolbar);
     app.appendChild(state.tab === "reg" ? buildRegView() : buildSummaryView());
@@ -1424,6 +1655,12 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printRegistration);
 
+    var delBtn = el("button", { class: "btn", id: "regDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
+    delBtn.addEventListener("click", openDeleteRegSelectedConfirm);
+
+    var addBtn = el("button", { class: "btn primary" }, ["+ Add Registration"]);
+    addBtn.addEventListener("click", openAddRegistration);
+
     var zoomOut = el("button", { class: "btn", title: "Zoom out" }, ["−"]);
     zoomOut.addEventListener("click", function () { setZoom(state.zoom - 0.1); });
     var zoomIn = el("button", { class: "btn", title: "Zoom in" }, ["+"]);
@@ -1441,7 +1678,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       el("span", { class: "spacer" }),
       zoomGroup
     ];
-    kids.push(prn);
+    kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
   function buildSummaryToolbar() {
@@ -1504,11 +1741,16 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   function buildRegView() {
     var cols = visibleColumns();
     var thead = el("thead"), htr = el("tr");
+
+    var selectAllCb = el("input", { type: "checkbox", id: "regSelectAll", title: "Select all" });
+    selectAllCb.addEventListener("change", function () { toggleSelectAllReg(selectAllCb.checked); });
+    htr.appendChild(el("th", { class: "no-print" + pinnedClass(0) }, [selectAllCb]));
+
     cols.forEach(function (c, idx) {
       var label = c === SHIRTS_COL ? "Shirts" : c;
       var arrow = state.sortCol === c ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
       var th = el("th", { class: (c === SHIRTS_COL ? "shirtsum" : (isNumericCol(c) ? "num" : "")) +
-          (NARROW_HEADER_COLS[c] ? " narrow-hdr" : "") + pinnedClass(idx) },
+          (NARROW_HEADER_COLS[c] ? " narrow-hdr" : "") + pinnedClass(idx + 1) },
         [label, el("span", { class: "arrow", text: arrow })]);
       th.addEventListener("click", function () {
         if (state.sortCol === c) state.sortDir = -state.sortDir; else { state.sortCol = c; state.sortDir = 1; }
@@ -1523,34 +1765,29 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     return wrap;
   }
 
-  // ---------- pinned columns (Last Name + First Name stay visible while scrolling) ----------
-  // Both are `position: sticky`, so the second one needs its `left` set to the
-  // rendered width of the first — otherwise they'd both sit at left:0 and
-  // overlap/mangle each other's text.
-  // Reg Type, Last Name, First Name — the three identifying columns stay
-  // frozen while scrolling right, same idea as when Last Name/First Name
-  // were the only two.
+  // ---------- pinned columns (checkbox + Reg Type + Last Name + First Name stay visible while scrolling) ----------
+  // Each pinned cell is `position: sticky`; every one after the first needs
+  // its `left` set to the summed rendered width of the pinned cells before
+  // it, or they'd all sit at left:0 and overlap/mangle each other.
+  var PINNED_COUNT = 4; // checkbox, Reg Type, Last Name, First Name
   function pinnedClass(idx) {
-    if (idx === 0) return " pinned pin-1";
-    if (idx === 1) return " pinned pin-2";
-    if (idx === 2) return " pinned pin-3";
-    return "";
+    return idx < PINNED_COUNT ? " pinned pin-" + (idx + 1) : "";
   }
   function updatePinnedOffsets() {
     var table = $(".tablewrap table.grid");
     var headRow = table && table.querySelector("thead tr");
-    var c0 = headRow && headRow.children[0];
-    var c1 = headRow && headRow.children[1];
-    if (!c0 || !c1) return;
+    if (!headRow) return;
     // getBoundingClientRect is in post-zoom (visual) px; the `zoom` CSS property
     // re-scales inline-style lengths too, so divide back out or the offset
     // would be applied twice.
-    var w0 = c0.getBoundingClientRect().width / state.zoom;
-    var w1 = c1.getBoundingClientRect().width / state.zoom;
-    var cells2 = table.querySelectorAll(".pin-2");
-    for (var i = 0; i < cells2.length; i++) cells2[i].style.left = w0 + "px";
-    var cells3 = table.querySelectorAll(".pin-3");
-    for (var j = 0; j < cells3.length; j++) cells3[j].style.left = (w0 + w1) + "px";
+    var offset = 0;
+    for (var i = 0; i < PINNED_COUNT; i++) {
+      var cell = headRow.children[i];
+      if (!cell) break;
+      var cells = table.querySelectorAll(".pin-" + (i + 1));
+      for (var j = 0; j < cells.length; j++) cells[j].style.left = offset + "px";
+      offset += cell.getBoundingClientRect().width / state.zoom;
+    }
   }
 
   // ---------- zoom (shrink the table so all columns fit without horizontal scrolling) ----------
@@ -1574,8 +1811,145 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     setZoom(availableWidth / naturalWidth);
   }
 
+  // CSV-derived registrations plus manually-added Walk-In Member/Nonmember
+  // rows — the single merge point everything downstream (table body, search,
+  // sort, print, detail modal Prev/Next, live Summary tab) reads through, so
+  // walk-ins behave identically to a CSV row everywhere except persistence.
+  function allRegistrations() {
+    return (state.result ? state.result.registrations : []).concat(state.walkins);
+  }
+
+  // Stable selection/deletion key for any registration row — a walk-in's own
+  // .id if it has one, otherwise its csvRegKey(). Used by the Registration
+  // tab's row checkboxes and by deleteSelectedReg() to route each selected
+  // row to the right deletion mechanism (see below).
+  function rowKey(r) { return r.id || csvRegKey(r); }
+
+  // ---------- Registration tab row selection + bulk delete ----------
+  function selectedRegKeys() { return Object.keys(state.regSelected); }
+  function setRegSelected(key, checked) {
+    if (checked) state.regSelected[key] = true; else delete state.regSelected[key];
+  }
+  function toggleSelectAllReg(checked) {
+    visibleRows().forEach(function (r) { setRegSelected(rowKey(r), checked); });
+    renderRegBody();
+  }
+  function openDeleteRegSelectedConfirm() {
+    if (!selectedRegKeys().length) return;
+    state.deleteRegSelectedOpen = true;
+    renderDeleteRegSelectedConfirm();
+  }
+  function closeDeleteRegSelectedConfirm() { state.deleteRegSelectedOpen = false; renderDeleteRegSelectedConfirm(); }
+  // Walk-In rows are deleted immediately via removeWalkin(). CSV-derived rows
+  // have no per-row server record to delete — instead their csvRegKey() is
+  // added to state.deletedCsvKeys and persisted to deleted-registrations.json,
+  // and regenerate() excludes any matching key from every future CSV parse
+  // (including a fresh re-import that still contains the same row) — see
+  // that function's comment.
+  function deleteSelectedReg() {
+    var rows = allRegistrations();
+    var byKey = {};
+    rows.forEach(function (r) { byKey[rowKey(r)] = r; });
+    var csvKeysDeleted = [];
+    selectedRegKeys().forEach(function (key) {
+      var r = byKey[key];
+      if (!r) return;
+      if (r.id) {
+        removeWalkin(r.id);
+      } else {
+        state.deletedCsvKeys[key] = true;
+        csvKeysDeleted.push(key);
+      }
+    });
+    if (csvKeysDeleted.length && state.result && state.result.ok) {
+      state.result.registrations = state.result.registrations.filter(function (r) {
+        return !state.deletedCsvKeys[csvRegKey(r)];
+      });
+      pushDeletedRegistrationsToServer(csvKeysDeleted);
+    }
+    state.regSelected = {};
+    renderViews();
+  }
+  function pushDeletedRegistrationsToServer(keys) {
+    if (!SITE_CONFIG.deletedRegistrationsApiUrl) return;
+    fetch(SITE_CONFIG.deletedRegistrationsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add", keys: keys })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.regDeleteSyncError = null;
+    }).catch(function () {
+      state.regDeleteSyncError = "Could not save that deletion to the server — it'll reappear if the page is reloaded before this succeeds. Check your connection and try again.";
+      renderViews();
+    });
+  }
+  // Persists a CSV row's detail-modal edit. Fire-and-forget like the deletion
+  // push above — the local state.csvOverrides/table already reflect the edit
+  // immediately; a failure here just means it could revert on the next reload
+  // if not retried.
+  function pushRegistrationOverrideToServer(key, patch) {
+    if (!SITE_CONFIG.registrationOverridesApiUrl) return;
+    fetch(SITE_CONFIG.registrationOverridesApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "upsert", key: key, patch: patch })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.detailEditError = null;
+    }).catch(function () {
+      state.detailEditError = "Could not save that edit to the server — it'll revert if the page is reloaded before this succeeds. Check your connection and try again.";
+      renderViews();
+    });
+  }
+  function renderDeleteRegSelectedConfirm() {
+    var host = $("#confirmHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.deleteRegSelectedOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeDeleteRegSelectedConfirm);
+    var count = selectedRegKeys().length;
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Delete " + count + " Registration" + (count === 1 ? "" : "s") + "?" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var yesBtn = el("button", { class: "btn primary", style: "background:var(--warn);border-color:var(--red-dark)" }, ["Yes, Delete"]);
+    yesBtn.addEventListener("click", function () { closeDeleteRegSelectedConfirm(); deleteSelectedReg(); });
+    var noBtn = el("button", { class: "btn" }, ["Cancel"]);
+    noBtn.addEventListener("click", closeDeleteRegSelectedConfirm);
+
+    var body = el("div", { class: "modal-body" }, [
+      el("p", {}, ["This permanently removes the " + count + " selected registration" + (count === 1 ? "" : "s") +
+        ". Walk-In rows are deleted outright; CSV-imported rows are excluded going forward — including from a " +
+        "later CSV re-import that still contains the same row. This cannot be undone from the app."]),
+      el("div", { class: "settings-actions" }, [yesBtn, noBtn])
+    ]);
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeDeleteRegSelectedConfirm);
+    host.appendChild(backdrop);
+  }
+
+  // The next unassigned Walk-In Nonmember number — a pool deliberately
+  // separate from the CSV import's own nonmember auto-numbering (which stays
+  // hardcoded at CONFIG.firstNonMember/8001; see generate() in logic.js).
+  // Starts from the officer-configurable Developer > Settings value
+  // (state.appSettings.walkinFirstNonMember, default 2000) and advances past
+  // any Walk-In Nonmembers already added, so two added back to back never
+  // collide with each other.
+  function nextAvailableWalkinNumber() {
+    var next = Number(state.appSettings.walkinFirstNonMember) || 2000;
+    state.walkins.forEach(function (w) {
+      var n = Number(w["Member Number"]);
+      if (n >= next) next = n + 1;
+    });
+    return next;
+  }
+
   function sortedRows() {
-    var rows = state.result.registrations.slice();
+    var rows = allRegistrations();
     if (state.sortCol) {
       var c = state.sortCol, dir = state.sortDir;
       if (c === SHIRTS_COL) {
@@ -1616,16 +1990,24 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var rows = visibleRows();
     var frag = document.createDocumentFragment();
     rows.forEach(function (r) {
+      var key = rowKey(r);
       var tr = el("tr");
       tr.title = "Click for full details";
       tr.addEventListener("click", function () { openDetail(r); });
+
+      var cb = el("input", { type: "checkbox" });
+      cb.checked = !!state.regSelected[key];
+      cb.addEventListener("click", function (e) { e.stopPropagation(); });
+      cb.addEventListener("change", function () { setRegSelected(key, cb.checked); renderRegBody(); });
+      tr.appendChild(el("td", { class: "no-print" + pinnedClass(0) }, [cb]));
+
       cols.forEach(function (c, idx) {
         var v, cls = "";
         if (c === SHIRTS_COL) { cls = "shirtsum"; v = shirtSummaryText(r); }
         else if (CURRENCY_COLS[c]) { cls = "num"; v = fmtMoney(r[c]); }
         else if (isNumericCol(c)) { cls = "num"; v = r[c]; v = v == null ? "" : v; }
         else { v = r[c]; }
-        cls += pinnedClass(idx);
+        cls += pinnedClass(idx + 1);
         tr.appendChild(el("td", { class: cls.trim(), text: v == null ? "" : String(v) }));
       });
       frag.appendChild(tr);
@@ -1634,25 +2016,132 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     body.appendChild(frag);
     updatePinnedOffsets();
     var rc = $("#rowcount");
-    if (rc) rc.textContent = rows.length + " of " + state.result.registrations.length + " rows shown";
+    if (rc) rc.textContent = rows.length + " of " + allRegistrations().length + " rows shown";
+    var selectAllCb = $("#regSelectAll");
+    if (selectAllCb) {
+      var visibleKeys = rows.map(rowKey);
+      var selectedVisible = visibleKeys.filter(function (k) { return state.regSelected[k]; });
+      selectAllCb.checked = visibleKeys.length > 0 && selectedVisible.length === visibleKeys.length;
+      selectAllCb.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visibleKeys.length;
+    }
+    var delBtn = $("#regDeleteBtn");
+    if (delBtn) {
+      var n = selectedRegKeys().length;
+      delBtn.textContent = "🗑 Delete" + (n ? " (" + n + ")" : "");
+      if (n) delBtn.removeAttribute("disabled"); else delBtn.setAttribute("disabled", "disabled");
+    }
   }
 
   // ---------- detail modal ----------
   // Click any row to see every field for that one registration without scrolling —
   // grouped into readable sections instead of the table's 40+ side-by-side columns.
   var DETAIL_SECTIONS = [
-    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "#"] },
+    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "Spouse First Name", "Individual Sponsorship Text", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
     { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] }
   ];
-  function openDetail(row) { state.detailRow = row; renderDetailModal(); }
-  function closeDetail() { state.detailRow = null; renderDetailModal(); }
+  // Reg Date, Reg Type, and Gen are deliberately excluded — system/derived
+  // values, never hand-edited. Gen recomputes automatically if Year changes
+  // (see applyRecordPatch). Shirts (a separate section below, not part of
+  // DETAIL_SECTIONS) stay read-only too — a 24-bucket editor is a separate,
+  // bigger task than these plain text/select fields. Spouse First Name and
+  // Individual Sponsorship Text have no CSV source at all (see
+  // config.js/applySponsorshipTextDefault) — editing here is the only way to
+  // set the former, and to override the latter's auto-generated default.
+  var EDITABLE_FIELDS = {
+    "Member Number": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Spouse First Name": 1, "Individual Sponsorship Text": 1, "#": 1,
+    "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
+    "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
+  };
+  var INT_EDIT_FIELDS = { "Member Number": 1, "#": 1, "Year": 1 };
+  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
+
+  function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
+  function closeDetail() { state.detailRow = null; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
   function stepDetail(dir) {
     var list = visibleRows(), i = list.indexOf(state.detailRow);
     if (i === -1) return;
     var next = list[i + dir];
-    if (next) { state.detailRow = next; renderDetailModal(); }
+    if (next) { state.detailRow = next; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
   }
+  function openDetailEdit() { state.detailEditing = true; state.detailEditError = null; renderDetailModal(); }
+  function closeDetailEdit() { state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
+
+  // Builds one <li> for column c — a read-only value, or (in edit mode, for
+  // an EDITABLE_FIELDS column) an <input>/<select>, registering it on
+  // fieldEls so saveDetailEdit() can read every field back out at Save time.
+  function detailFieldItem(r, c, fieldEls) {
+    if (state.detailEditing && EDITABLE_FIELDS[c]) {
+      var input;
+      if (c === "In Car Show?") {
+        input = el("select", {});
+        ["No", "Yes"].forEach(function (v) {
+          var o = el("option", { value: v, text: v });
+          if (String(r[c]) === v) o.setAttribute("selected", "selected");
+          input.appendChild(o);
+        });
+      } else if (c === "Status") {
+        // Real CSV Status values aren't limited to Paid/Not Paid/Cancelled
+        // (e.g. ClubExpress's own "Not paid in time limit", "Open") —
+        // preserve whatever's already there as a selectable option so
+        // saving an edit to an unrelated field can't silently downgrade it.
+        var current = r[c] == null ? "" : String(r[c]);
+        var opts = ["Paid", "Not Paid", "Cancelled"];
+        if (current && opts.indexOf(current) === -1) opts.unshift(current);
+        input = el("select", {});
+        opts.forEach(function (v) {
+          var o = el("option", { value: v, text: v });
+          if (v === current) o.setAttribute("selected", "selected");
+          input.appendChild(o);
+        });
+      } else {
+        input = el("input", { type: "text", value: r[c] == null ? "" : String(r[c]) });
+      }
+      fieldEls[c] = input;
+      return li(c, "", input);
+    }
+    var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : r[c];
+    return li(c, v == null || v === "" ? "—" : String(v));
+  }
+
+  function saveDetailEdit(fieldEls) {
+    var r = state.detailRow;
+    if (!r) return;
+    var patch = {};
+    Object.keys(EDITABLE_FIELDS).forEach(function (c) {
+      var input = fieldEls[c];
+      if (!input) return;
+      var raw = input.value;
+      if (INT_EDIT_FIELDS[c]) patch[c] = LOGIC.toInt(raw);
+      else if (NUM_EDIT_FIELDS[c]) patch[c] = LOGIC.toNum(raw);
+      else patch[c] = raw.trim();
+    });
+
+    var merged;
+    if (r.id) {
+      // Walk-In row — already has a full server record; merge and push it directly.
+      merged = applyRecordPatch(r, patch);
+      upsertWalkin(merged);
+    } else {
+      // CSV-derived row — no per-row server record of its own, so persist just
+      // the patch, keyed by the row's stable identity (see csvRegKey/regenerate()).
+      var key = csvRegKey(r);
+      state.csvOverrides[key] = patch;
+      pushRegistrationOverrideToServer(key, patch);
+      merged = applyRecordPatch(r, patch);
+      if (state.result && state.result.ok) {
+        state.result.registrations = state.result.registrations.map(function (row) {
+          return csvRegKey(row) === key ? merged : row;
+        });
+      }
+    }
+    state.detailRow = merged;
+    state.detailEditing = false;
+    renderDetailModal();
+    if (state.tab === "reg") renderRegBody();
+  }
+
   function renderDetailModal() {
     var host = $("#detailHost");
     if (!host) return;
@@ -1660,34 +2149,39 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var r = state.detailRow;
     if (!r) return;
     var list = visibleRows(), i = list.indexOf(r);
+    var editing = state.detailEditing;
+    var fieldEls = {};
 
     var closeBtn = el("button", { class: "btn" }, ["✕"]);
     closeBtn.addEventListener("click", closeDetail);
     var prevBtn = el("button", { class: "btn" }, ["‹ Prev"]);
-    if (i <= 0) prevBtn.setAttribute("disabled", "disabled");
+    if (i <= 0 || editing) prevBtn.setAttribute("disabled", "disabled");
     prevBtn.addEventListener("click", function () { stepDetail(-1); });
     var nextBtn = el("button", { class: "btn" }, ["Next ›"]);
-    if (i === -1 || i >= list.length - 1) nextBtn.setAttribute("disabled", "disabled");
+    if (i === -1 || i >= list.length - 1 || editing) nextBtn.setAttribute("disabled", "disabled");
     nextBtn.addEventListener("click", function () { stepDetail(1); });
+    var editBtn = el("button", { class: "btn" }, ["✎ Edit"]);
+    editBtn.addEventListener("click", openDetailEdit);
 
     var name = (r["Last Name"] || "") + (r["First Name"] ? ", " + r["First Name"] : "");
-    var head = el("div", { class: "modal-head" }, [
+    var headKids = [
       el("h3", { text: name || "Registration" }),
       el("span", { class: "count", text: i > -1 ? (i + 1) + " of " + list.length : "" }),
-      prevBtn, nextBtn, closeBtn
-    ]);
+      prevBtn, nextBtn
+    ];
+    if (!editing) headKids.push(editBtn);
+    headKids.push(closeBtn);
+    var head = el("div", { class: "modal-head" }, headKids);
 
     var body = el("div", { class: "modal-body" }, [
       el("ul", { class: "meta-list" }, [
-        li("Member Number", String(r["Member Number"] == null ? "" : r["Member Number"])),
-        li("Club Name", String(r["Club Name"] == null ? "" : r["Club Name"]))
+        detailFieldItem(r, "Member Number", fieldEls),
+        detailFieldItem(r, "Club Name", fieldEls)
       ])
     ]);
     DETAIL_SECTIONS.forEach(function (sec) {
-      var items = sec.cols.filter(function (c) { return state.result.columns.indexOf(c) !== -1; }).map(function (c) {
-        var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : r[c];
-        return li(c, v == null || v === "" ? "—" : String(v));
-      });
+      var cols = sec.cols.filter(function (c) { return state.result.columns.indexOf(c) !== -1; });
+      var items = cols.map(function (c) { return detailFieldItem(r, c, fieldEls); });
       if (items.length) body.appendChild(el("div", { class: "modal-section" }, [el("h4", { text: sec.title }), el("ul", { class: "meta-list" }, items)]));
     });
 
@@ -1696,10 +2190,19 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       : [el("li", { class: "hint", text: "No shirts on this registration." })];
     body.appendChild(el("div", { class: "modal-section" }, [el("h4", { text: "Shirts" }), el("ul", { class: "meta-list" }, shirtItems)]));
 
+    if (editing) {
+      var saveBtn = el("button", { class: "btn primary" }, ["Save"]);
+      saveBtn.addEventListener("click", function () { saveDetailEdit(fieldEls); });
+      var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
+      cancelBtn.addEventListener("click", closeDetailEdit);
+      body.appendChild(el("div", { class: "settings-actions" }, [saveBtn, cancelBtn]));
+      if (state.detailEditError) body.appendChild(el("div", { class: "form-error" }, [state.detailEditError]));
+    }
+
     var modal = el("div", { class: "modal" }, [head, body]);
     modal.addEventListener("click", function (e) { e.stopPropagation(); });
     var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
-    backdrop.addEventListener("click", closeDetail);
+    backdrop.addEventListener("click", editing ? function (e) { e.stopPropagation(); } : closeDetail);
     host.appendChild(backdrop);
   }
 
@@ -1710,9 +2213,8 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // nextMemberNumber is the one exception: it's a capacity-planning figure
   // (next open slot overall), not something filtering should change.
   function buildSummaryView() {
-    var full = state.result.summary;
     var s = LOGIC.summarizeRecords(visibleRows(), CONFIG);
-    s.nextMemberNumber = full.nextMemberNumber;
+    s.nextMemberNumber = state.result.summary.nextMemberNumber;
     var m = state.result.meta, C = CONFIG;
     var container = el("div", { class: "view" });
 
@@ -1724,7 +2226,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
         li("Generated", fmtDate(m.generatedAt) + "  —  ", el("span", { class: statusCls, text: m.statusMessage })),
         li("Registration file", m.regFileName + "  (" + m.regRows + " rows)"),
         li("Activity file", m.actFileName ? m.actFileName + "  (" + m.actRows + " rows)" : "— none loaded —"),
-        li("Showing", s.registrations + " of " + full.registrations + " registrations — matches the Registration tab's current search/status filters")
+        li("Showing", s.registrations + " of " + allRegistrations().length + " registrations — matches the Registration tab's current search/status filters")
       ])
     ]));
 
@@ -1965,6 +2467,37 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   function removeSponsor(id) {
     state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });
     pushSponsorToServer("delete", { id: id });
+  }
+
+  // ---------- walk-in registrations (Registration tab's "+ Add Registration") ----------
+  // Same optimistic-local-update-then-server-push pattern as sponsors above —
+  // see upsertSponsor/pushSponsorToServer's comments.
+  function upsertWalkin(record) {
+    var idx = -1;
+    state.walkins.forEach(function (w, i) { if (w.id === record.id) idx = i; });
+    if (idx === -1) state.walkins.push(record); else state.walkins[idx] = record;
+    pushWalkinToServer("upsert", { registration: record });
+  }
+  function removeWalkin(id) {
+    state.walkins = state.walkins.filter(function (w) { return w.id !== id; });
+    pushWalkinToServer("delete", { id: id });
+  }
+  function pushWalkinToServer(action, payload) {
+    if (!SITE_CONFIG.walkinsApiUrl) return;
+    var body = { action: action };
+    Object.keys(payload).forEach(function (k) { body[k] = payload[k]; });
+    fetch(SITE_CONFIG.walkinsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.walkinSyncError = null;
+      renderViews();
+    }).catch(function () {
+      state.walkinSyncError = "Could not save that change to the server — check your connection and try again.";
+      renderViews();
+    });
   }
 
   // ---------- row selection (Sponsors tab checkboxes) ----------
@@ -2280,6 +2813,193 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     host.appendChild(backdrop);
   }
 
+  // ---------- "+ Add Registration" form modal (Registration tab) ----------
+  // Add-only — there's no dedicated "edit a walk-in" form here. A mistake
+  // made while filling this out is corrected afterward via the detail
+  // modal's Edit mode (see renderDetailModal/EDITABLE_FIELDS) or, for a
+  // wrong Reg Type/regretted entry entirely, the Registration tab's
+  // checkbox/bulk-delete + re-adding.
+  function openAddRegistration() { state.addRegOpen = true; renderAddRegistrationModal(); }
+  function closeAddRegistration() { state.addRegOpen = false; renderAddRegistrationModal(); }
+
+  function renderAddRegistrationModal() {
+    var host = $("#addRegHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.addRegOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closeAddRegistration);
+    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Add Registration" }), el("span", { class: "spacer" }), closeBtn]);
+
+    var body = el("div", { class: "modal-body" });
+    function row(label, input, required) {
+      body.appendChild(el("div", { class: "form-row" }, [
+        el("span", { class: "form-label", text: label + (required ? " *" : "") }),
+        input
+      ]));
+    }
+
+    var regTypeSel = el("select", {});
+    [CONFIG.REG_TYPE.WALKIN_MEMBER, CONFIG.REG_TYPE.WALKIN_NONMEMBER].forEach(function (v) {
+      regTypeSel.appendChild(el("option", { value: v, text: v }));
+    });
+    row("Reg Type", regTypeSel);
+
+    // Walk-In Member only: type a name and pick a match from the imported
+    // roster (state.members, from Developer > Import Members) to auto-fill
+    // the whole form — Last/First Name, Member Number, and whichever contact
+    // fields that roster entry has — same "Last, First" datalist pattern
+    // sponsor-form.php's "ETCC Member Name" field uses. Manual entry still
+    // works if the person isn't in the roster, or the last import didn't
+    // include a given field (left untouched in that case).
+    var lookupList = el("datalist", { id: "addRegMemberList" });
+    state.members.forEach(function (m) { lookupList.appendChild(el("option", { value: m.name })); });
+    var lookupInput = el("input", { type: "text", list: "addRegMemberList", autocomplete: "off", placeholder: "Start typing a last name…" });
+    var lookupRow = el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Look Up Member" }), lookupInput]);
+    body.appendChild(lookupRow);
+    body.appendChild(lookupList);
+
+    var lastNameInput = el("input", { type: "text" });
+    row("Last Name", lastNameInput, true);
+    var firstNameInput = el("input", { type: "text" });
+    row("First Name", firstNameInput);
+
+    lookupInput.addEventListener("input", function () {
+      var q = lookupInput.value.trim().toLowerCase();
+      var match = state.members.filter(function (m) { return m.name.toLowerCase() === q; })[0];
+      if (!match) return;
+      lastNameInput.value = match.lastName || "";
+      firstNameInput.value = match.firstName || "";
+      if (match.memberNumber) memberNumberInput.value = match.memberNumber;
+      clubNameInput.value = "ETCC"; // every roster entry is, by definition, an ETCC member
+      if (match.phone) phoneInput.value = match.phone;
+      if (match.email) emailInput.value = match.email;
+      if (match.address) addressInput.value = match.address;
+      if (match.city) cityInput.value = match.city;
+      if (match.state) stateInput.value = match.state;
+      if (match.zip) zipInput.value = match.zip;
+      if (match.year) yearInput.value = match.year;
+      if (match.model) modelInput.value = match.model;
+      if (match.color) colorInput.value = match.color;
+    });
+
+    // Walk-In Member: officer types (or looks up above) the person's real
+    // member number. Walk-In Nonmember: auto-assigned from a numbering pool
+    // deliberately separate from the CSV import's own nonmember numbers (see
+    // nextAvailableWalkinNumber()) and locked, so two walk-ins added back to
+    // back never collide.
+    var memberNumberInput = el("input", { type: "text" });
+    row("Member Number", memberNumberInput);
+    function syncMemberNumberField() {
+      lookupRow.style.display = regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER ? "" : "none";
+      if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_NONMEMBER) {
+        memberNumberInput.value = String(nextAvailableWalkinNumber());
+        memberNumberInput.setAttribute("disabled", "disabled");
+      } else {
+        memberNumberInput.value = "";
+        memberNumberInput.removeAttribute("disabled");
+      }
+    }
+    regTypeSel.addEventListener("change", syncMemberNumberField);
+    syncMemberNumberField();
+
+    var clubNameInput = el("input", { type: "text" });
+    row("Club Name", clubNameInput);
+    var phoneInput = el("input", { type: "text" });
+    row("Phone", phoneInput);
+    var emailInput = el("input", { type: "text" });
+    row("Email", emailInput);
+    var addressInput = el("input", { type: "text" });
+    row("Address", addressInput);
+    var cityInput = el("input", { type: "text" });
+    row("City", cityInput);
+    var stateInput = el("input", { type: "text" });
+    row("State", stateInput);
+    var zipInput = el("input", { type: "text" });
+    row("Zip", zipInput);
+    var yearInput = el("input", { type: "text" });
+    row("Corvette Year", yearInput);
+    var modelInput = el("input", { type: "text" });
+    row("Model", modelInput);
+    var colorInput = el("input", { type: "text" });
+    row("Color", colorInput);
+
+    // Total Fee Collected is filled in from Developer > Settings' matching fee
+    // whenever In Car Show? changes (still freely editable after that, e.g.
+    // for a partial payment or a manually negotiated amount).
+    var feeInput = el("input", { type: "text" });
+    var inCarShowSel = el("select", {});
+    ["No", "Yes"].forEach(function (v) { inCarShowSel.appendChild(el("option", { value: v, text: v })); });
+    inCarShowSel.addEventListener("change", function () {
+      feeInput.value = String(inCarShowSel.value === "Yes" ? state.appSettings.walkInCarShowFee : state.appSettings.walkInNonCarShowFee);
+    });
+    row("In Car Show?", inCarShowSel);
+    feeInput.value = String(state.appSettings.walkInNonCarShowFee); // matches inCarShowSel's default ("No")
+
+    var shirtSel = el("select", {});
+    shirtSel.appendChild(el("option", { value: "", text: "— none —" }));
+    Object.keys(CONFIG.freeSizeMap).forEach(function (sz) { shirtSel.appendChild(el("option", { value: sz, text: sz })); });
+    row("Free T-Shirt Size", shirtSel);
+
+    row("Total Fee Collected", feeInput);
+
+    var statusSel = el("select", {});
+    ["Paid", "Not Paid"].forEach(function (v) { statusSel.appendChild(el("option", { value: v, text: v })); });
+    row("Status", statusSel);
+
+    if (state.walkinSyncError) {
+      body.appendChild(el("div", { class: "messages", style: "margin-bottom:10px" }, [state.walkinSyncError]));
+    }
+    var errorMsg = el("div", { class: "form-error" });
+    body.appendChild(errorMsg);
+
+    var saveBtn = el("button", { class: "btn primary" }, ["Save"]);
+    saveBtn.addEventListener("click", function () {
+      var lastName = lastNameInput.value.trim();
+      if (!lastName) { errorMsg.textContent = "Last Name is required."; return; }
+      if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !memberNumberInput.value.trim()) {
+        errorMsg.textContent = "Member Number is required for a Walk-In Member.";
+        return;
+      }
+      var record = LOGIC.buildManualRegistration({
+        id: "wk" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        regType: regTypeSel.value,
+        lastName: lastName,
+        firstName: firstNameInput.value.trim(),
+        memberNumber: memberNumberInput.value.trim(),
+        nextAvailableMemberNumber: nextAvailableWalkinNumber(),
+        clubName: clubNameInput.value.trim(),
+        phone: phoneInput.value.trim(),
+        email: emailInput.value.trim(),
+        address: addressInput.value.trim(),
+        city: cityInput.value.trim(),
+        state: stateInput.value.trim(),
+        zip: zipInput.value.trim(),
+        year: yearInput.value.trim(),
+        model: modelInput.value.trim(),
+        color: colorInput.value.trim(),
+        inCarShow: inCarShowSel.value,
+        freeTShirtSize: shirtSel.value,
+        totalFee: feeInput.value.trim(),
+        status: statusSel.value,
+        regDate: fmtDate(new Date())
+      }, CONFIG);
+      upsertWalkin(record);
+      closeAddRegistration();
+      if (state.tab === "reg") renderRegBody();
+    });
+    var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
+    cancelBtn.addEventListener("click", closeAddRegistration);
+    body.appendChild(el("div", { class: "settings-actions" }, [saveBtn, cancelBtn]));
+
+    var modal = el("div", { class: "modal wide" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closeAddRegistration);
+    host.appendChild(backdrop);
+  }
+
   // Print-only table (mirrors the on-screen columns; sponsors don't have the
   // Registration tab's 24-shirt-column collapsing problem, so no separate
   // "full column" build is needed the way printRegistration() has).
@@ -2367,11 +3087,13 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       importMembers.addEventListener("click", closeMenu);
       var importRegs = el("a", { class: "hdr-menu-item", href: "registrations-import.php", target: "_blank", rel: "noopener" }, ["📋 Import Registrations"]);
       importRegs.addEventListener("click", closeMenu);
+      var settings = el("button", { class: "hdr-menu-item" }, ["⚙ Settings"]);
+      settings.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
       var regTests = el("button", { class: "hdr-menu-item" }, ["🧪 Run Regression Tests"]);
       regTests.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
       var changelog = el("button", { class: "hdr-menu-item" }, ["📋 Change Log"]);
       changelog.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openChangelog(); });
-      return [importMembers, importRegs, regTests, changelog];
+      return [importMembers, importRegs, settings, regTests, changelog];
     }
     if (!state.developerOpen) {
       var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
@@ -2412,6 +3134,32 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
 
   function openSettings() { state.settingsOpen = true; renderSettingsModal(); }
   function closeSettings() { state.settingsOpen = false; renderSettingsModal(); }
+
+  // Optimistic local update, then push to the server — same pattern as
+  // upsertSponsor/upsertWalkin. Every officer viewing the site picks up the
+  // new value on their next page load.
+  function saveAppSettings(patch) {
+    Object.keys(patch).forEach(function (k) { state.appSettings[k] = patch[k]; });
+    state.appSettingsSaving = true;
+    state.appSettingsError = null;
+    state.appSettingsSaved = false;
+    renderSettingsModal();
+    if (!SITE_CONFIG.appSettingsApiUrl) { state.appSettingsSaving = false; renderSettingsModal(); return; }
+    fetch(SITE_CONFIG.appSettingsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save", settings: patch })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.appSettingsSaving = false;
+      state.appSettingsSaved = true;
+      renderSettingsModal();
+    }).catch(function () {
+      state.appSettingsSaving = false;
+      state.appSettingsError = "Could not save — check your connection and try again.";
+      renderSettingsModal();
+    });
+  }
 
   // Runs the same fixture-based assertions as test/run-tests.js, entirely in
   // this tab (src/regression-tests.js + embedded fixture CSVs, both baked
@@ -2461,11 +3209,64 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     onlyErrCb.addEventListener("change", function () { state.testOnlyErrors = onlyErrCb.checked; renderSettingsModal(); });
     var onlyErrLabel = el("label", {}, [onlyErrCb, document.createTextNode(" Only show errors")]);
 
-    var body = el("div", { class: "modal-body" }, [
-      el("h4", { text: "Regression Tests" }),
-      el("div", { class: "hint", style: "margin-bottom:4px" }, ["Runs this app's fixture-based test suite in this tab. It uses its own sample data and never touches whatever CSVs you currently have loaded."]),
-      el("div", { class: "settings-actions" }, [runBtn, onlyErrLabel])
-    ]);
+    var body = el("div", { class: "modal-body" });
+
+    // ---- Walk-In Registration Settings ----
+    body.appendChild(el("h4", { text: "Walk-In Registration Settings" }));
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
+      ["The starting number auto-assigned to a Walk-In Nonmember on the Registration tab's " +
+       "“+ Add Registration” form. Separate from the CSV import's own nonmember numbering."]));
+    var firstNonMemberInput = el("input", { type: "text", value: String(state.appSettings.walkinFirstNonMember) });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "First NonMember Number" }), firstNonMemberInput
+    ]));
+
+    // ---- Registration Fees ----
+    body.appendChild(el("h4", { text: "Registration Fees" }));
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
+      ["The Add Registration form's Total Fee Collected auto-fills from Car Show or Non Car Show " +
+       "based on the In Car Show? field (still editable there). Preregistration is a reference figure " +
+       "only — CSV-preregistered attendees' fees come from ClubExpress, not this setting."]));
+    var carShowFeeInput = el("input", { type: "text", value: String(state.appSettings.walkInCarShowFee) });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Car Show Registration" }), carShowFeeInput]));
+    var nonCarShowFeeInput = el("input", { type: "text", value: String(state.appSettings.walkInNonCarShowFee) });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Non Car Show Registration" }), nonCarShowFeeInput]));
+    var preregFeeInput = el("input", { type: "text", value: String(state.appSettings.preregistrationFee) });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Preregistration" }), preregFeeInput]));
+
+    var settingsSaveBtn = el("button", { class: "btn primary" }, [state.appSettingsSaving ? "Saving…" : "Save"]);
+    if (state.appSettingsSaving) settingsSaveBtn.setAttribute("disabled", "disabled");
+    settingsSaveBtn.addEventListener("click", function () {
+      var fields = [
+        ["walkinFirstNonMember", firstNonMemberInput, "First NonMember Number"],
+        ["walkInCarShowFee", carShowFeeInput, "Walk-In Car Show Registration"],
+        ["walkInNonCarShowFee", nonCarShowFeeInput, "Walk-In Non Car Show Registration"],
+        ["preregistrationFee", preregFeeInput, "Preregistration"]
+      ];
+      var patch = {};
+      for (var i = 0; i < fields.length; i++) {
+        var key = fields[i][0], n = parseInt(fields[i][1].value, 10);
+        var min = key === "walkinFirstNonMember" ? 1 : 0;
+        if (isNaN(n) || n < min) {
+          state.appSettingsError = fields[i][2] + " must be a whole number" + (min ? " greater than 0." : " (0 or more).");
+          renderSettingsModal();
+          return;
+        }
+        patch[key] = n;
+      }
+      saveAppSettings(patch);
+    });
+    var settingsActions = [settingsSaveBtn];
+    if (state.appSettingsSaved) settingsActions.push(el("span", { class: "count", style: "color:var(--good)" }, ["Saved."]));
+    body.appendChild(el("div", { class: "settings-actions" }, settingsActions));
+    if (state.appSettingsError) {
+      body.appendChild(el("div", { class: "form-error" }, [state.appSettingsError]));
+    }
+
+    // ---- Regression Tests ----
+    body.appendChild(el("h4", { text: "Regression Tests" }));
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" }, ["Runs this app's fixture-based test suite in this tab. It uses its own sample data and never touches whatever CSVs you currently have loaded."]));
+    body.appendChild(el("div", { class: "settings-actions" }, [runBtn, onlyErrLabel]));
 
     if (state.testResults) {
       var r = state.testResults;
@@ -2672,6 +3473,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     document.body.appendChild(el("div", { id: "settingsHost" }));
     document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
+    document.body.appendChild(el("div", { id: "addRegHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
     // window.__carshowSite is set (by index.php, before this script runs) —
     // see the declaration comment near SITE_CONFIG above. Read it here, not
@@ -2683,13 +3485,15 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
+      if (e.key === "Escape" && state.addRegOpen) { closeAddRegistration(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }
       if (e.key === "Escape" && state.deleteSelectedOpen) { closeDeleteSelectedConfirm(); return; }
+      if (e.key === "Escape" && state.deleteRegSelectedOpen) { closeDeleteRegSelectedConfirm(); return; }
       if (e.key === "Escape" && state.menuOpen) { closeMenu(); return; }
       if (!state.detailRow) return;
-      if (e.key === "Escape") closeDetail();
-      else if (e.key === "ArrowLeft") stepDetail(-1);
-      else if (e.key === "ArrowRight") stepDetail(1);
+      if (e.key === "Escape") { if (state.detailEditing) closeDetailEdit(); else closeDetail(); }
+      else if (e.key === "ArrowLeft" && !state.detailEditing) stepDetail(-1);
+      else if (e.key === "ArrowRight" && !state.detailEditing) stepDetail(1);
     });
     renderViews();
   }
@@ -2710,11 +3514,47 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       state.sponsors = Array.isArray(list) ? list : [];
       renderViews();
     },
+    // Called by index.php's boot script with the Walk-In registrations list
+    // read fresh from the server on this page load.
+    ingestWalkins: function (list) {
+      state.walkins = Array.isArray(list) ? list : [];
+      renderViews();
+    },
+    // Called by index.php's boot script with the member roster read fresh
+    // from the server on this page load — used by the Add Registration
+    // form's member lookup.
+    ingestMembers: function (list) {
+      state.members = Array.isArray(list) ? list : [];
+    },
+    // Called by index.php's boot script with app-wide settings read fresh
+    // from the server on this page load.
+    ingestAppSettings: function (settings) {
+      if (settings && typeof settings === "object") {
+        Object.keys(settings).forEach(function (k) { state.appSettings[k] = settings[k]; });
+      }
+    },
+    // Called by index.php's boot script, BEFORE ingestRows(), with the set of
+    // csvRegKey()s previously deleted via the Registration tab's checkbox
+    // bulk-delete — so regenerate() can exclude them the moment the CSV is
+    // parsed, not just after the fact.
+    ingestDeletedRegistrations: function (keys) {
+      state.deletedCsvKeys = {};
+      (Array.isArray(keys) ? keys : []).forEach(function (k) { state.deletedCsvKeys[k] = true; });
+    },
+    // Called by index.php's boot script, BEFORE ingestRows(), with the
+    // csvRegKey() -> patch map of prior detail-modal edits to CSV rows.
+    ingestRegistrationOverrides: function (overrides) {
+      state.csvOverrides = (overrides && typeof overrides === "object") ? overrides : {};
+    },
+    openAddRegistration: openAddRegistration,
+    closeAddRegistration: closeAddRegistration,
     setTab: function (t) { state.tab = t; renderViews(); },
     setSearch: function (q) { state.search = q; renderRegBody(); },
     openDetail: openDetail,
     closeDetail: closeDetail,
     stepDetail: stepDetail,
+    openDetailEdit: openDetailEdit,
+    closeDetailEdit: closeDetailEdit,
     openSettings: openSettings,
     closeSettings: closeSettings,
     runRegressionTests: runRegressionTests,

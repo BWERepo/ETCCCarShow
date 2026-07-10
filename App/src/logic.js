@@ -13,7 +13,6 @@
   function isBlank(v) { return v === null || v === undefined || String(v).trim() === ""; }
   function toInt(v) { var n = parseInt(String(v).replace(/[^0-9\-]/g, ""), 10); return isNaN(n) ? 0 : n; }
   function toNum(v) { if (isBlank(v)) return 0; var n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; }
-  function pad2(n) { return (n < 10 ? "0" : "") + n; }
 
   function formatPhone(phoneTxt) {
     if (isBlank(phoneTxt)) return "";
@@ -61,7 +60,7 @@
   // of already-built registration records (the same shape as generate()'s
   // `registrations` output). Kept independent of generate()'s CSV/activity
   // matching so the app can re-run it against just the currently filtered/
-  // visible subset of records (search, status, walk-ins) for a live Summary
+  // visible subset of records (search, status) for a live Summary
   // tab, not only once against the full dataset.
   function summarizeRecords(records, C) {
     C = C || CONFIG;
@@ -85,7 +84,7 @@
         if (String(rec["In Car Show?"]).trim().toLowerCase() === "yes") carShow[gen].inCarShow += 1;
       }
 
-      // walk-ins have a blank Club Name -> "Unknown" with 0 attendees, matching the VBA
+      // blank Club Name -> "Unknown" with 0 attendees, matching the VBA
       var club = rec["Club Name"];
       club = isBlank(club) ? "Unknown" : String(club).trim();
       clubTally[club] = (clubTally[club] || 0) + attendee;
@@ -157,7 +156,7 @@
 
     var records = working.map(function (r) {
       var rec = buildRecord(r, columns, shirtCols);
-      rec._isWalkIn = false;
+      rec["Reg Type"] = C.REG_TYPE.PRE_REGISTERED;
 
       var freeSize = r[C.freeTShirtSizeColumn];
       var matches = actByDt[dtKey(r[C.dateTimeColumn])] || [];
@@ -167,7 +166,6 @@
         var title = a["Activity Title"];
         if (title === C.registrationActivityTitle) {
           attendee = 1;                       // one attendee per car-show registration
-          rec["Reg Type"] = title;
           var fb = C.freeSizeMap[freeSize];    // free shirt from the registration's size
           if (fb) rec[bucketCol(fb)] = (rec[bucketCol(fb)] || 0) + 1;
         } else if (title === C.sponsorshipActivityTitle) {
@@ -178,10 +176,10 @@
           if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
           else messages.push("Invalid sponsor shirt size '" + sponsorShirtRaw + "'");
           rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
-          // Not a real CSV column (like _isWalkIn) — the app reads this to auto-add
-          // a Sponsors-tab entry for this registrant without having to guess their
-          // shirt size back out of the (possibly ambiguous, if it matches their own
-          // free shirt's size) aggregated shirt buckets above.
+          // Not a real CSV column — the app reads this to auto-add a Sponsors-tab
+          // entry for this registrant without having to guess their shirt size
+          // back out of the (possibly ambiguous, if it matches their own free
+          // shirt's size) aggregated shirt buckets above.
           rec._sponsorShirtSize = sb ? sponsorShirtRaw : "";
         } else {
           var bucket = C.activityTitleToBucket[title];
@@ -208,16 +206,7 @@
       return rec;
     });
 
-    // --- walk-in rows -----------------------------------------------------
-    for (var w = 1; w <= C.walkInCount; w++) {
-      var wr = blankRecord(columns, shirtCols);
-      wr["Last Name"] = "z-> Walk-In " + pad2(w);
-      wr["#"] = 0;
-      wr._isWalkIn = true;
-      records.push(wr);
-    }
-
-    var registrationsCount = records.length; // real + walk-ins (matches VBA)
+    var registrationsCount = records.length;
 
     // --- assign non-member numbers (pre-sort, top-to-bottom) --------------
     var nextNum = C.firstNonMember;
@@ -243,9 +232,9 @@
     });
 
     // --- summary ------------------------------------------------------------
-    // Computed from the final `records` (real + walk-ins) rather than tracked
-    // inline above, so the exact same aggregation can be reused against just a
-    // filtered/visible subset of records (see summarizeRecords below).
+    // Computed from the final `records` rather than tracked inline above, so
+    // the exact same aggregation can be reused against just a filtered/visible
+    // subset of records (see summarizeRecords below).
     var summary = summarizeRecords(records, C);
     summary.nextMemberNumber = nextAvailableMemberNum; // capacity planning figure, not tied to any filtering
 

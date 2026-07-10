@@ -57,8 +57,14 @@
   var CONFIG = {
     // --- Variables (Configuration sheet: Variables table) ---
     title: "2026 Car Show Registration List",
-    walkInCount: 25,
     firstNonMember: 8001,
+
+    // --- Reg Type column values (first column in the Registration table) ---
+    // Every row built from the CSVs is "Pre-Registered" — there are no other
+    // row sources (walk-in placeholder rows were removed).
+    REG_TYPE: {
+      PRE_REGISTERED: "Pre-Registered"
+    },
     showCancelled: true,          // keep Cancelled rows
     sortBy: "Last Name",
     dateTimeColumn: "Date/Time",  // column used to match registrations <-> activities
@@ -111,8 +117,8 @@
     // --- Final column order (matches today's RegistrationSheet) ---
     // Shirt columns are appended programmatically (all 24, in SHIRT_BUCKETS order).
     baseColumnOrder: [
-      "Last Name", "First Name", "Member Number", "Reg Date",
-      "Reg Type", "#", "Club Name", "Phone", "Email", "Address", "City", "State",
+      "Reg Type", "Last Name", "First Name", "Member Number", "Reg Date",
+      "#", "Club Name", "Phone", "Email", "Address", "City", "State",
       "Zip", "Total Fee", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],

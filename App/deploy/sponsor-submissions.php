@@ -1,21 +1,17 @@
 <?php
 // Sponsor list read/write API for sponsor-submissions.json (contains PII).
 // This is the single always-current sponsor list: the hosted index.php
-// reads it fresh on every page load, and the Sponsors tab — when viewed on
-// the hosted site — reads it on load and pushes every add/edit/delete (and
-// the "Remove All" button's clear) here immediately instead of caching to
-// localStorage (see App/src/app.js's LIVE-mode handling). sponsor-form.php
-// (gated by the same shared password as index.php) only ever appends to
-// this same file.
+// reads it fresh on every page load, and the Sponsors tab reads it on load
+// and pushes every add/edit/delete (and the bulk-delete/"Remove All"
+// actions) here immediately. sponsor-form.php (gated by the same shared
+// password as index.php) only ever appends to this same file directly
+// (see that file), not through this API.
 //
 // Actions: list (default), upsert, delete, clear.
 //
-// Two auth paths, both handled by lib.php's carshow_authed():
-//  - PHP session (same-origin calls from the hosted page itself, already
-//    authenticated via index.php's login — no extra password prompt).
-//  - Password in the request body (cross-origin calls with no shared
-//    session, e.g. the offline tool's "Import from Server", which still
-//    only ever calls action=list).
+// Auth via lib.php's carshow_authed() — same PHP-session-or-password dual
+// check every endpoint here uses, though in practice the Sponsors tab only
+// ever calls this same-origin, with an already-authenticated session.
 session_start();
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Access-Control-Allow-Origin: *');

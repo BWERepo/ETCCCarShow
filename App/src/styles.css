@@ -1,4 +1,4 @@
-/* ETCC Car Show — offline registration viewer */
+/* ETCC Car Show — registration viewer (hosted at etccapps.com/apps/carshow) */
 :root {
   --red: #b0141e;
   --red-dark: #7d0e15;
@@ -8,7 +8,6 @@
   --bg: #f4f6f8;
   --panel: #ffffff;
   --accent: #0b5cad;
-  --walkin: #8a8f98;
   --good: #147d3a;
   --warn: #b0141e;
   --title-yellow: #fff7cc;
@@ -26,7 +25,6 @@ header.app {
 }
 header.app .hdr-logo { height: 72px; width: 72px; object-fit: contain; border-radius: 6px; }
 header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; color: #000; }
-header.app .sub { font-size: 13px; color: var(--muted); }
 
 /* ── Hamburger — SilentAuctionManager style: 3-bar icon at the far left of
    the header, animating into an X while the drawer is open ── */
@@ -75,23 +73,6 @@ footer.app-footer {
 }
 footer.app-footer .footer-credit { font-size: 10px; margin-top: 4px; }
 
-/* drop zone */
-.drop {
-  border: 2px dashed #c3ccd6; border-radius: 12px; background: var(--panel);
-  padding: 22px; text-align: center; color: var(--muted); transition: .12s;
-}
-.drop.drag { border-color: var(--red); background: #fff5f5; color: var(--ink); }
-.drop.collapsed { display: none; }
-.drop h2 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
-.drop .files { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
-.filecard {
-  min-width: 240px; text-align: left; border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 12px; background: #fbfcfd;
-}
-.filecard .name { font-weight: 600; word-break: break-all; }
-.filecard .meta { color: var(--muted); font-size: 12px; }
-.filecard.empty { opacity: .6; }
-.filecard.ok { border-color: #bfe2c9; background: #f2fbf5; }
 .btn {
   display: inline-block; border: 1px solid var(--line); background: #fff; color: var(--ink);
   padding: 7px 13px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600;
@@ -157,7 +138,6 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 table.grid td.shirt { text-align: center; color: var(--accent); font-weight: 600; }
 table.grid td.shirtsum, table.grid th.shirtsum { text-align: center; }
 table.grid td.shirtsum { color: var(--accent); font-weight: 600; white-space: normal; max-width: 260px; }
-tr.walkin td { color: var(--walkin); font-style: italic; }
 .pinned { position: sticky; background: inherit; z-index: 1; }
 .pin-1 { left: 0; }
 th.pinned { z-index: 3; }
@@ -262,7 +242,7 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .drop, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }

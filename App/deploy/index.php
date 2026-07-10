@@ -53,9 +53,9 @@ if ($bundle === false) {
 
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
-// this one, has already run) sees window.__carshowLive already set.
-$liveFlagScript = "<script>window.__carshowLive = { sponsorsApiUrl: \"sponsor-submissions.php\" };</script>\n";
-$bundle = str_replace('<head>', '<head>' . "\n" . $liveFlagScript, $bundle);
+// this one, has already run) sees window.__carshowSite already set.
+$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\" };</script>\n";
+$bundle = str_replace('<head>', '<head>' . "\n" . $siteConfigScript, $bundle);
 
 $bootParts = [];
 

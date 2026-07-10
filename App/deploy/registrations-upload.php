@@ -3,8 +3,8 @@
 // pair server-side (registrations-data.json, gitignored, contains PII).
 // index.php reads this file fresh on every request, so uploading here makes
 // the hosted site's registration data live for the very next page load —
-// no node build.js / build-snapshot.js / ftp-deploy.sh cycle needed just to
-// refresh data (that flow still applies for actual code changes).
+// no node build.js / ftp-deploy.sh cycle needed just to refresh data (that
+// flow still applies for actual code changes).
 //
 // Meant to be called by deploy/upload-registrations.js after exporting
 // fresh CSVs from ClubExpress (see that script and README.md), not by the

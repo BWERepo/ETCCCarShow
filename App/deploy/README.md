@@ -69,8 +69,7 @@ new account):
   file you get back — it never leaves the server). One-time use; the token is
   deleted after a successful reset or once it expires.
 - `logout.php` — destroys the shared PHP session and redirects to the club's main
-  site (`www.etccwebsite.com`). Linked from the app's hamburger menu (LIVE mode
-  only, same visibility rule as the Member Database link).
+  site (`www.etccwebsite.com`). Linked from the app's hamburger menu.
 - `.htaccess` — sets `DirectoryIndex index.php`, denies direct access to
   `sponsor-submissions.json`, `registrations-data.json`, `members-data.json`, and
   `password-reset.json`.
@@ -87,11 +86,9 @@ new account):
   staging area.
 - `sponsor-submissions.php` — read/write JSON API for `sponsor-submissions.json`.
   `action=list` (default) returns the full list; `action=upsert` / `action=delete` add,
-  edit, or remove one sponsor. Authenticated either by the existing PHP session (calls
-  made from the hosted page itself — the normal case for the Sponsors tab's
-  add/edit/delete) or by a password in the request body (calls with no shared session —
-  the offline tool's cross-origin "Import from Server", which only ever uses
-  `action=list`).
+  edit, or remove one sponsor; `action=clear` removes all. Authenticated by the
+  existing PHP session — calls made from the hosted page itself, the normal case for
+  the Sponsors tab's add/edit/delete/clear.
 - `registrations-upload.php` — authenticated (same dual auth as above) endpoint that
   stores a fresh CSV pair as `registrations-data.json`. Called by
   `upload-registrations.js`, not by the browser app directly.
@@ -99,11 +96,6 @@ new account):
   Exports folder (or takes explicit paths) and POSTs them to
   `registrations-upload.php`. This is how a registration-data refresh reaches the
   hosted site — see below.
-- `build-snapshot.js` — **deprecated for the live site**, kept only if you ever want a
-  fully self-contained, portable single-file snapshot (e.g. to email someone without
-  server access) with a specific day's data baked in. Not part of the normal refresh
-  flow anymore; produces `_data.html` locally, which is not uploaded by
-  `ftp-deploy.sh` and has no role in what `index.php` serves.
 - `members-import.php` — **officer-only** (gated by the same PHP session as `index.php`
   — no separate password prompt, but you must already be logged in) page with a file
   upload form for an ETCC membership roster CSV (needs `last_name`/`first_name`
@@ -118,20 +110,21 @@ new account):
   `upload-registrations.js` from a terminal. Also linked from the hamburger's
   "Developer" submenu.
 
-## Hamburger menu (LIVE mode)
+## Hamburger menu
 
-Order: **Logout**, **Developer**, **Settings**, **Become a Car Show Sponsor**. Settings
-and Become a Car Show Sponsor are always visible; Logout and Developer only appear in
-LIVE mode (the offline tool has no session and only ever shows Settings).
+Order: **Logout**, **Developer** (password-gated — reveals **Import Members**,
+**Import Registrations**, **Run Regression Tests**, and **Change Log** once unlocked).
 
 "Developer" is a client-side password gate, not a separate account or secret — clicking
 it expands an inline password field in the menu that POSTs to `location.pathname` with
 the same `action=login` request `_login.html` uses (checked against `secrets.php`'s
-`$PASSWORD_HASH`, same as the main login). Getting it right just reveals two more menu
-items, **Import Members** and **Import Registrations**, linking to `members-import.php`
-and `registrations-import.php` — both of which are already independently session-gated
-server-side regardless of this UI step. The point of "Developer" is to keep those two
-links out of the way for everyday use, not to add a second real credential.
+`$PASSWORD_HASH`, same as the main login). Getting it right reveals **Import Members**
+and **Import Registrations** (linking to `members-import.php` and
+`registrations-import.php` — both already independently session-gated server-side
+regardless of this UI step), plus **Run Regression Tests** and **Change Log**, which
+open in-page (Settings' regression-test runner and a GitHub-commit-history view — see
+`App/src/app.js`). The point of "Developer" is to keep these links out of the way for
+everyday use, not to add a second real credential.
 
 ## Member roster validation on the sponsor form
 
@@ -157,11 +150,6 @@ sponsor list, not a per-officer local cache that needs importing.
   `sponsor-submissions.php` (session-authenticated, no extra password prompt needed
   since you're already logged into the page). Every officer viewing the hosted site
   sees the same list, live.
-- **Offline tool** (`ETCCCarShow.html`, opened locally) — unaffected by any of this. It
-  still uses `localStorage` and the manual "Import from Server" pull, exactly as
-  before, since it's a deliberately separate, private/offline experience (see
-  `App/src/app.js`'s `LIVE` variable — it's only ever set when the page came from
-  `index.php`).
 
 No real-time sync between two officers editing at the same literal moment — last write
 wins, and everyone else's view catches up on their next page load. Fine at this club's
@@ -180,7 +168,7 @@ refresh by exporting CSVs. What's different from the old flow is where that data
    - hamburger menu → Developer (site password) → Import Registrations →
      `registrations-import.php`, and pick the two files by hand in the browser.
 3. Done. The **very next** page load of the hosted site reflects the new data — no
-   `build.js`, no `build-snapshot.js`, no `ftp-deploy.sh`.
+   `build.js`, no `ftp-deploy.sh`.
 
 `ftp-deploy.sh` / `app-bundle.html` are for **code** changes only (`App/src/*`); running
 them has no effect on which registration data is being served.
@@ -202,6 +190,3 @@ them has no effect on which registration data is being served.
    touches `secrets.php` (see above — deliberately excluded so it can't revert a live
    password reset), `registrations-data.json`, `sponsor-submissions.json`,
    `members-data.json`, or `password-reset.json`.
-
-Dropping CSVs into the *offline* tool (`ETCCCarShow.html` run locally) never touches the
-server either way — that's a fully separate, private experience by design.

@@ -1,5 +1,6 @@
-/* app.js — DOM wiring, rendering, Excel export. Globals: CarShowConfig,
- * CarShowLogic, Papa, ExcelJS. */
+/* app.js — DOM wiring and rendering for the hosted site. Globals: CarShowConfig,
+ * CarShowLogic, Papa, ExcelJS (ExcelJS/Papa are only exercised here via the
+ * Developer > Run Regression Tests round-trip, see runRegressionTests()). */
 (function () {
   "use strict";
   var CONFIG = window.CarShowConfig;
@@ -12,64 +13,43 @@
     sortCol: null,
     sortDir: 1,
     search: "",
-    showWalkins: false,
     statusFilter: { paid: true, notpaid: false, cancelled: false, empty: false },
     tab: "sum",
     detailRow: null,  // registration row currently shown in the detail modal, or null
-    dropOpen: true,   // whether the "drop the two CSVs here" card is showing
     zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
     menuOpen: false,      // hamburger dropdown
     settingsOpen: false,  // settings modal
     testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
     testRunning: false,
     testOnlyErrors: false,
-    sponsors: [],          // loaded from localStorage in init() UNLESS LIVE mode (see below)
+    sponsors: [],          // filled by ingestSponsors(), called by index.php's boot script
     sponsorSearch: "",
     sponsorTypeFilter: { premier: true, corporate: true, individual: true },
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
-    importOpen: false,     // "Import from Server" modal (offline tool only — see LIVE below)
-    sponsorSyncError: null, // set when a LIVE-mode push to the server fails; shown in the Sponsors tab
+    sponsorSyncError: null, // set when a push to the server fails; shown in the Sponsors tab
     clearSponsorsOpen: false, // "Remove All Sponsors" confirmation modal
     sponsorSelected: {},    // id -> true, for the Sponsors tab's row checkboxes
     deleteSelectedOpen: false, // "Delete selected sponsors" confirmation modal
     developerOpen: false,      // hamburger's "Developer" password prompt expanded
     developerUnlocked: false,  // password verified this page load — reveals Import Members/Registrations
     developerError: null,      // developer password error message, or null
-    changelogOpen: false,      // "Change Log" modal (Developer submenu, LIVE mode)
+    changelogOpen: false,      // "Change Log" full page (Developer submenu)
     changelogLoading: false,
     changelogError: null,
     changelogMeta: null,       // { repo, ftp, files, filesDeployed, loc, totalChanges } once loaded
     changelogCommits: null     // [{ sha, date, time, subject, body, version }] once loaded
   };
 
-  // Set only when this page was served by deploy/index.php (the hosted site) — that
-  // template injects `window.__carshowLive = { sponsorsApiUrl: "..." }` as the very
-  // first inline script, before app.js runs, specifically so it's visible here. It's
-  // never present in the offline ETCCCarShow.html build. When set, the Sponsors tab is
-  // server-authoritative: state.sponsors is fetched fresh (via ingestSponsors(), called
-  // by index.php's boot script) instead of read from localStorage, and every
-  // add/edit/delete is pushed straight to sponsorsApiUrl instead of saved locally — so
-  // every officer viewing the hosted site sees the same live list, with no separate
-  // Import step. The offline tool is untouched: LIVE stays null there, and it keeps
-  // using localStorage + the manual "Import from Server" pull exactly as before.
-  var LIVE = null;
-
-  // The public sponsor form's companion read API (deploy/sponsor-submissions.php) —
-  // see App/deploy/README.md. Used only by the offline tool's "Import from Server"
-  // (LIVE mode doesn't need it — the hosted site is already always current).
-  var DEFAULT_IMPORT_URL = "https://etccapps.com/apps/carshow/sponsor-submissions.php";
-
-  // ---------- sponsors: storage (localStorage, independent of the CSV data) ----------
-  var SPONSORS_STORAGE_KEY = "etccCarShowSponsors_v1";
-  function loadSponsors() {
-    try {
-      var raw = window.localStorage.getItem(SPONSORS_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) { return []; }
-  }
-  function saveSponsors(list) {
-    try { window.localStorage.setItem(SPONSORS_STORAGE_KEY, JSON.stringify(list)); } catch (e) { /* storage unavailable (e.g. private browsing) */ }
-  }
+  // Populated in init() below from window.__carshowSite, which
+  // deploy/index.php injects as { sponsorsApiUrl: "..." } in the very first
+  // inline script, before app.js runs. Read inside init() rather than at
+  // module-load time, since init() is what's guaranteed to run after every
+  // inline script in the document, including this one. The Sponsors tab is
+  // server-authoritative: state.sponsors is fetched fresh (via
+  // ingestSponsors(), called by index.php's boot script), and every
+  // add/edit/delete is pushed straight to sponsorsApiUrl — so every officer
+  // viewing the site sees the same live list.
+  var SITE_CONFIG = {};
 
   var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
@@ -140,50 +120,10 @@
     return e;
   }
 
-  // ---------- file handling ----------
-  function parseCsv(text) {
-    return Papa.parse(text, { header: true, skipEmptyLines: true }).data;
-  }
-  function classify(rows) {
-    if (!rows.length) return "empty";
-    var keys = Object.keys(rows[0]);
-    if (keys.indexOf(CONFIG.activityValidColumn) !== -1) return "act";
-    if (keys.indexOf(CONFIG.registrationValidColumn) !== -1) return "reg";
-    return "unknown";
-  }
-  function ingestFiles(fileList) {
-    var files = Array.prototype.slice.call(fileList);
-    var pending = files.length, problems = [];
-    files.forEach(function (f) {
-      var r = new FileReader();
-      r.onload = function () {
-        var rows = parseCsv(String(r.result));
-        var kind = classify(rows);
-        if (kind === "reg") state.reg = { name: f.name, rows: rows };
-        else if (kind === "act") state.act = { name: f.name, rows: rows };
-        else problems.push(f.name + " — unrecognized CSV (need Registration or Activity export).");
-        if (--pending === 0) { finishIngest(problems); }
-      };
-      r.onerror = function () { problems.push(f.name + " — could not read file."); if (--pending === 0) { finishIngest(problems); } };
-      r.readAsText(f);
-    });
-  }
-  // Regenerate the result, then decide whether to auto-collapse the drop zone:
-  // only once BOTH files are in (registration alone already produces an "ok"
-  // result, but closing the drop zone at that point makes it easy to forget
-  // the activity file entirely), and only if nothing went wrong (a problem,
-  // e.g. an unrecognized file, keeps the drop zone open so the user sees the
-  // message and can retry).
-  function finishIngest(problems, generatedAt) {
-    regenerate(generatedAt);
-    if (!problems.length && state.reg && state.act && state.result && state.result.ok) state.dropOpen = false;
-    renderDrop(problems);
-  }
-  // generatedAt defaults to "now" (correct when a person just dropped the
-  // files in), but callers with a real known ingestion time — e.g. the
-  // hosted snapshot replaying its embedded CSVs on every page load — should
-  // pass it explicitly so "CSVs loaded:" reflects when the export actually
-  // happened, not whenever a visitor happens to open the page.
+  // generatedAt defaults to "now", but callers with a real known ingestion
+  // time — index.php's boot script, replaying the CSVs it stored on this
+  // page load — should pass it explicitly so "CSVs loaded:" reflects when
+  // the export actually happened, not whenever a visitor opens the page.
   function regenerate(generatedAt) {
     if (!state.reg) { state.result = null; renderViews(); return; }
     state.result = LOGIC.generate(state.reg.rows, state.act ? state.act.rows : [], {
@@ -219,7 +159,6 @@
     var byId = {};
     state.sponsors.forEach(function (s) { byId[s.id] = s; });
     state.result.registrations.forEach(function (rec) {
-      if (rec._isWalkIn) return;
       var fee = rec["Individual Sponsorship"];
       if (fee === "" || fee == null || Number(fee) <= 0) return;
       var id = csvSponsorId(rec);
@@ -258,42 +197,6 @@
     });
   }
 
-  // ---------- drop zone ----------
-  function showDropZone() { state.dropOpen = true; renderDrop([]); }
-  function renderDrop(problems) {
-    var drop = $("#drop");
-    if (!state.dropOpen) { drop.innerHTML = ""; drop.classList.add("collapsed"); return; }
-    drop.classList.remove("collapsed");
-
-    var slot = function (label, file, hint) {
-      var kids = [el("div", { class: "name", text: file ? file.name : label })];
-      if (file) kids.push(el("div", { class: "meta", text: file.rows.length + " data row" + (file.rows.length === 1 ? "" : "s") }));
-      else kids.push(el("div", { class: "meta", text: hint }));
-      return el("div", { class: "filecard " + (file ? "ok" : "empty") }, kids);
-    };
-    var files = el("div", { class: "files" }, [
-      slot("Registration Data (not loaded)", state.reg, "drop registration_data*.csv"),
-      slot("Activity Registrant Data (not loaded)", state.act, "drop activity_registrant_data*.csv")
-    ]);
-    var pick = el("input", { type: "file", accept: ".csv", multiple: "multiple", style: "display:none" });
-    pick.addEventListener("change", function () { ingestFiles(pick.files); pick.value = ""; });
-    var pickBtn = el("button", { class: "btn" }, ["Choose CSV files…"]);
-    pickBtn.addEventListener("click", function () { pick.click(); });
-
-    var body = [
-      el("h2", { text: "Drop the two ClubExpress CSV exports here" }),
-      el("div", { class: "hint", text: "Order doesn't matter — the app detects which file is which. Everything stays on this computer; nothing is uploaded." }),
-      files,
-      el("div", { style: "margin-top:12px" }, [pickBtn, pick])
-    ];
-    if (problems && problems.length) {
-      body.push(el("ul", { class: "messages", style: "margin-top:12px;text-align:left" },
-        problems.map(function (p) { return el("li", { text: p }); })));
-    }
-    drop.innerHTML = "";
-    body.forEach(function (n) { drop.appendChild(n); });
-  }
-
   // ---------- views ----------
   function renderViews() {
     var app = $("#app");
@@ -301,7 +204,7 @@
     app.appendChild(buildTabs());
 
     // Sponsors are manually entered and independent of the loaded CSVs, so
-    // this tab works even before the two ClubExpress files have been dropped.
+    // this tab works even before a registration CSV pair has been imported.
     if (state.tab === "sponsors") {
       app.appendChild(buildSponsorsToolbar());
       app.appendChild(buildSponsorsView());
@@ -310,7 +213,7 @@
 
     if (!state.result) {
       app.appendChild(el("div", { class: "empty-state" },
-        ["Drop the two ClubExpress CSVs above to see " + (state.tab === "sum" ? "the summary." : "the registration list.")]));
+        ["No registration data loaded yet — use the menu's Developer → Import Registrations to load the first CSV export."]));
       return;
     }
     if (!state.result.ok) {
@@ -341,17 +244,9 @@
     return el("div", { class: "loadedinfo" }, ["CSVs loaded: " + fmtDate(state.result.meta.generatedAt)]);
   }
 
-  function buildChangeFilesBtn() {
-    var b = el("button", { class: "btn" }, ["📂 Load different files"]);
-    b.addEventListener("click", showDropZone);
-    return b;
-  }
-
   function buildRegToolbar() {
     var search = el("input", { type: "search", placeholder: "Search name, club, email…", value: state.search });
     search.addEventListener("input", function () { state.search = search.value; renderRegBody(); });
-    var wk = el("input", { type: "checkbox" }); wk.checked = state.showWalkins;
-    wk.addEventListener("change", function () { state.showWalkins = wk.checked; renderRegBody(); });
 
     var statusGroup = el("span", { class: "statusgroup" }, [
       el("span", { class: "hint" }, ["Status:"])
@@ -376,37 +271,18 @@
     var count = el("span", { class: "count", id: "rowcount" });
     var kids = [
       search,
-      el("label", {}, [wk, document.createTextNode(" walk-ins")]),
       statusGroup,
       count,
       el("span", { class: "spacer" }),
       zoomGroup
     ];
-    // On the hosted site, CSVs are always loaded server-side (see index.php) and
-    // there's no reason to re-export what the app already reads live — both
-    // buttons stay for the offline tool, which has no other way to load data
-    // or get a workbook out.
-    if (!LIVE) kids.push(buildChangeFilesBtn());
     kids.push(prn);
-    if (!LIVE) {
-      var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
-      xls.addEventListener("click", function () { downloadExcel(); });
-      kids.push(xls);
-    }
     return el("div", { class: "toolbar no-print" }, kids);
   }
   function buildSummaryToolbar() {
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", function () { clearPrintHost(); window.print(); });
-    var kids = [el("span", { class: "spacer" })];
-    if (!LIVE) kids.push(buildChangeFilesBtn());
-    kids.push(prn);
-    if (!LIVE) {
-      var xls = el("button", { class: "btn primary" }, ["⬇ Download Excel"]);
-      xls.addEventListener("click", function () { downloadExcel(); });
-      kids.push(xls);
-    }
-    return el("div", { class: "toolbar no-print" }, kids);
+    return el("div", { class: "toolbar no-print" }, [el("span", { class: "spacer" }), prn]);
   }
 
   // ---------- print (Registration tab: print every column, not just what's on screen) ----------
@@ -434,7 +310,7 @@
         return el("td", {}, [v == null ? "" : String(v)]);
       });
       cells.push(el("td", { class: "shirtsum" }, [shirtSummaryText(r)]));
-      return el("tr", r._isWalkIn ? { class: "walkin" } : {}, cells);
+      return el("tr", {}, cells);
     }));
     host.appendChild(el("h2", { text: state.result.meta.title }));
     host.appendChild(el("table", { class: "grid" }, [thead, tbody]));
@@ -486,22 +362,30 @@
   // Both are `position: sticky`, so the second one needs its `left` set to the
   // rendered width of the first — otherwise they'd both sit at left:0 and
   // overlap/mangle each other's text.
+  // Reg Type, Last Name, First Name — the three identifying columns stay
+  // frozen while scrolling right, same idea as when Last Name/First Name
+  // were the only two.
   function pinnedClass(idx) {
     if (idx === 0) return " pinned pin-1";
     if (idx === 1) return " pinned pin-2";
+    if (idx === 2) return " pinned pin-3";
     return "";
   }
   function updatePinnedOffsets() {
     var table = $(".tablewrap table.grid");
     var headRow = table && table.querySelector("thead tr");
-    var firstCell = headRow && headRow.children[0];
-    if (!firstCell) return;
+    var c0 = headRow && headRow.children[0];
+    var c1 = headRow && headRow.children[1];
+    if (!c0 || !c1) return;
     // getBoundingClientRect is in post-zoom (visual) px; the `zoom` CSS property
     // re-scales inline-style lengths too, so divide back out or the offset
     // would be applied twice.
-    var w = firstCell.getBoundingClientRect().width / state.zoom;
-    var cells = table.querySelectorAll(".pin-2");
-    for (var i = 0; i < cells.length; i++) cells[i].style.left = w + "px";
+    var w0 = c0.getBoundingClientRect().width / state.zoom;
+    var w1 = c1.getBoundingClientRect().width / state.zoom;
+    var cells2 = table.querySelectorAll(".pin-2");
+    for (var i = 0; i < cells2.length; i++) cells2[i].style.left = w0 + "px";
+    var cells3 = table.querySelectorAll(".pin-3");
+    for (var j = 0; j < cells3.length; j++) cells3[j].style.left = (w0 + w1) + "px";
   }
 
   // ---------- zoom (shrink the table so all columns fit without horizontal scrolling) ----------
@@ -546,13 +430,12 @@
 
   // The exact set of rows currently on screen, in order — shared by the table
   // body and the detail modal's Prev/Next so paging through the modal follows
-  // the same sort/search/walk-in state the user has the table set to.
+  // the same sort/search state the user has the table set to.
   function visibleRows() {
     var cols = visibleColumns();
     var q = state.search.trim().toLowerCase();
     return sortedRows().filter(function (r) {
-      if (!state.showWalkins && r._isWalkIn) return false;
-      if (!r._isWalkIn && !state.statusFilter[classifyStatus(r["Status"])]) return false;
+      if (!state.statusFilter[classifyStatus(r["Status"])]) return false;
       if (!q) return true;
       return cols.some(function (c) {
         var v = c === SHIRTS_COL ? shirtSummaryText(r) : r[c];
@@ -568,7 +451,7 @@
     var rows = visibleRows();
     var frag = document.createDocumentFragment();
     rows.forEach(function (r) {
-      var tr = el("tr", r._isWalkIn ? { class: "walkin" } : {});
+      var tr = el("tr");
       tr.title = "Click for full details";
       tr.addEventListener("click", function () { openDetail(r); });
       cols.forEach(function (c, idx) {
@@ -656,8 +539,8 @@
   }
 
   // ---------- summary ----------
-  // Recomputed from whatever the Registration tab's search/status/walk-ins
-  // filters currently leave visible, rather than always the full loaded
+  // Recomputed from whatever the Registration tab's search/status filters
+  // currently leave visible, rather than always the full loaded
   // dataset — so this tab always reflects "what I've selected over there".
   // nextMemberNumber is the one exception: it's a capacity-planning figure
   // (next open slot overall), not something filtering should change.
@@ -676,7 +559,7 @@
         li("Generated", fmtDate(m.generatedAt) + "  —  ", el("span", { class: statusCls, text: m.statusMessage })),
         li("Registration file", m.regFileName + "  (" + m.regRows + " rows)"),
         li("Activity file", m.actFileName ? m.actFileName + "  (" + m.actRows + " rows)" : "— none loaded —"),
-        li("Showing", s.registrations + " of " + full.registrations + " registrations — matches the Registration tab's current search/status/walk-ins filters")
+        li("Showing", s.registrations + " of " + full.registrations + " registrations — matches the Registration tab's current search/status filters")
       ])
     ]));
 
@@ -905,21 +788,18 @@
       return SPONSOR_COLS.some(function (c) { return sponsorFieldText(s, c.key).toLowerCase().indexOf(q) !== -1; });
     });
   }
-  // Local state is updated optimistically either way; in LIVE mode the write
-  // additionally (asynchronously) goes to the server instead of localStorage —
-  // every officer viewing the hosted site reads that same server copy on
-  // their next page load, so no separate Import step is needed there.
+  // Local state is updated optimistically; the write additionally
+  // (asynchronously) goes to the server — every officer viewing the site
+  // reads that same server copy on their next page load.
   function upsertSponsor(record) {
     var idx = -1;
     state.sponsors.forEach(function (s, i) { if (s.id === record.id) idx = i; });
     if (idx === -1) state.sponsors.push(record); else state.sponsors[idx] = record;
-    if (LIVE) pushSponsorToServer("upsert", { sponsor: record });
-    else saveSponsors(state.sponsors);
+    pushSponsorToServer("upsert", { sponsor: record });
   }
   function removeSponsor(id) {
     state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });
-    if (LIVE) pushSponsorToServer("delete", { id: id });
-    else saveSponsors(state.sponsors);
+    pushSponsorToServer("delete", { id: id });
   }
 
   // ---------- row selection (Sponsors tab checkboxes) ----------
@@ -946,10 +826,10 @@
   // is rare enough for this club-sized app that "last write wins, reload to see
   // others' changes" is an acceptable tradeoff versus building real-time sync.
   function pushSponsorToServer(action, payload) {
-    if (!LIVE || !LIVE.sponsorsApiUrl) return;
+    if (!SITE_CONFIG.sponsorsApiUrl) return;
     var body = { action: action };
     Object.keys(payload).forEach(function (k) { body[k] = payload[k]; });
-    fetch(LIVE.sponsorsApiUrl, {
+    fetch(SITE_CONFIG.sponsorsApiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -968,22 +848,7 @@
   function closeClearSponsorsConfirm() { state.clearSponsorsOpen = false; renderClearSponsorsConfirm(); }
   function clearAllSponsors() {
     state.sponsors = [];
-    if (LIVE) {
-      fetch(LIVE.sponsorsApiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "clear" })
-      }).then(function (res) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        state.sponsorSyncError = null;
-        if (state.tab === "sponsors") renderViews();
-      }).catch(function () {
-        state.sponsorSyncError = "Could not clear sponsors on the server — check your connection and try again.";
-        if (state.tab === "sponsors") renderViews();
-      });
-    } else {
-      saveSponsors(state.sponsors);
-    }
+    pushSponsorToServer("clear", {});
     renderViews();
   }
   function renderClearSponsorsConfirm() {
@@ -1005,7 +870,7 @@
 
     var body = el("div", { class: "modal-body" }, [
       el("p", {}, ["This permanently removes all " + count + " sponsor" + (count === 1 ? "" : "s") +
-        (LIVE ? " from the server" : "") + ". This cannot be undone."]),
+        " from the server. This cannot be undone."]),
       el("div", { class: "settings-actions" }, [yesBtn, noBtn])
     ]);
 
@@ -1042,7 +907,7 @@
 
     var body = el("div", { class: "modal-body" }, [
       el("p", {}, ["This permanently removes the " + count + " selected sponsor" + (count === 1 ? "" : "s") +
-        (LIVE ? " from the server" : "") + ". This cannot be undone."]),
+        " from the server. This cannot be undone."]),
       el("div", { class: "settings-actions" }, [yesBtn, noBtn])
     ]);
 
@@ -1073,16 +938,8 @@
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
     delBtn.addEventListener("click", openDeleteSelectedConfirm);
-    var kids = [search, typeGroup, count, el("span", { class: "spacer" })];
-    if (LIVE) {
-      // Always current already — every edit here already went to the server,
-      // so there's nothing to pull; a manual Import step would be redundant.
-      kids.push(el("span", { class: "count", title: "This list is read from and saved straight to the server." }, ["🔄 Live"]));
-    } else {
-      var importBtn = el("button", { class: "btn" }, ["⇩ Import from Server"]);
-      importBtn.addEventListener("click", openImportModal);
-      kids.push(importBtn);
-    }
+    var kids = [search, typeGroup, count, el("span", { class: "spacer" }),
+      el("span", { class: "count", title: "This list is read from and saved straight to the server." }, ["🔄 Live"])];
     kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
@@ -1258,91 +1115,6 @@
     host.appendChild(backdrop);
   }
 
-  // ---------- import sponsors submitted through the public web form ----------
-  // Pulls sponsor-submissions.php (password-protected, see App/deploy/README.md)
-  // and merges any records not already present locally (matched by id) into
-  // state.sponsors. This is the offline tool's only path to see submissions
-  // from deploy/sponsor-form.php, since it has no shared session cross-origin.
-  function openImportModal() { state.importOpen = true; renderImportModal(); }
-  function closeImportModal() { state.importOpen = false; renderImportModal(); }
-
-  function renderImportModal() {
-    var host = $("#importHost");
-    if (!host) return;
-    host.innerHTML = "";
-    if (!state.importOpen) return;
-
-    var closeBtn = el("button", { class: "btn" }, ["✕"]);
-    closeBtn.addEventListener("click", closeImportModal);
-    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Import from Server" }), el("span", { class: "spacer" }), closeBtn]);
-
-    var urlInput = el("input", { type: "text", value: DEFAULT_IMPORT_URL });
-    var pwInput = el("input", { type: "password", value: "" });
-    var statusMsg = el("div", { class: "form-error" });
-
-    var body = el("div", { class: "modal-body" }, [
-      el("div", { class: "hint", style: "margin-bottom:10px" },
-        ["Pulls sponsorships submitted through the public web form into this browser's Sponsors list. Requires the site password."]),
-      el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Server URL" }), urlInput]),
-      el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Site Password" }), pwInput]),
-      statusMsg
-    ]);
-
-    var importBtn = el("button", { class: "btn primary" }, ["Import"]);
-    importBtn.addEventListener("click", function () {
-      var url = urlInput.value.trim();
-      var pw = pwInput.value;
-      statusMsg.style.color = "var(--warn)";
-      if (!url) { statusMsg.textContent = "Server URL is required."; return; }
-      if (!pw) { statusMsg.textContent = "Password is required."; return; }
-      statusMsg.textContent = "";
-      importBtn.setAttribute("disabled", "disabled");
-      importBtn.textContent = "Importing…";
-      fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw })
-      }).then(function (res) {
-        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
-      }).then(function (r) {
-        importBtn.removeAttribute("disabled");
-        importBtn.textContent = "Import";
-        if (!r.ok || !r.data || !r.data.ok) {
-          statusMsg.style.color = "var(--warn)";
-          statusMsg.textContent = (r.data && r.data.error) ? r.data.error : "Import failed.";
-          return;
-        }
-        var incoming = r.data.sponsors || [];
-        var existingIds = {};
-        state.sponsors.forEach(function (s) { existingIds[s.id] = true; });
-        var added = 0;
-        incoming.forEach(function (s) {
-          if (s && s.id && !existingIds[s.id]) { state.sponsors.push(s); existingIds[s.id] = true; added++; }
-        });
-        if (added) saveSponsors(state.sponsors);
-        statusMsg.style.color = "var(--good)";
-        statusMsg.textContent = added
-          ? "Imported " + added + " new sponsor" + (added === 1 ? "" : "s") + "."
-          : "No new submissions to import.";
-        renderSponsorsBody();
-      }).catch(function () {
-        importBtn.removeAttribute("disabled");
-        importBtn.textContent = "Import";
-        statusMsg.style.color = "var(--warn)";
-        statusMsg.textContent = "Could not reach the server. Check the URL and your connection.";
-      });
-    });
-    var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
-    cancelBtn.addEventListener("click", closeImportModal);
-    body.appendChild(el("div", { class: "settings-actions" }, [importBtn, cancelBtn]));
-
-    var modal = el("div", { class: "modal" }, [head, body]);
-    modal.addEventListener("click", function (e) { e.stopPropagation(); });
-    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
-    backdrop.addEventListener("click", closeImportModal);
-    host.appendChild(backdrop);
-  }
-
   // Print-only table (mirrors the on-screen columns; sponsors don't have the
   // Registration tab's 24-shirt-column collapsing problem, so no separate
   // "full column" build is needed the way printRegistration() has).
@@ -1365,42 +1137,9 @@
     return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear() + " " + h + ":" + p(d.getMinutes()) + " " + ap;
   }
 
-  // ---------- Excel export (ExcelJS) ----------
-  function downloadExcel() {
-    var res = state.result && state.result.ok ? state.result : null;
-    if (!res && !state.sponsors.length) return;
-    var wb = window.CarShowExcel.build(ExcelJS, res, state.sponsors);
-    wb.xlsx.writeBuffer().then(function (buf) {
-      var blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "ETCCCarShow.xlsx";
-      document.body.appendChild(a); a.click();
-      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-    });
-  }
-
-  // ---------- drag/drop wiring ----------
-  function wireDrop() {
-    var drop = $("#drop");
-    ["dragenter", "dragover"].forEach(function (ev) {
-      drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add("drag"); });
-    });
-    ["dragleave", "drop"].forEach(function (ev) {
-      drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove("drag"); });
-    });
-    drop.addEventListener("drop", function (e) {
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) ingestFiles(e.dataTransfer.files);
-    });
-    // also accept a global drop anywhere
-    ["dragover", "drop"].forEach(function (ev) { window.addEventListener(ev, function (e) { e.preventDefault(); }); });
-  }
-
   // ---------- header menu (hamburger) / settings ----------
-  // Order (LIVE mode): Logout, Developer (password-gated — reveals Import
-  // Members / Import Registrations / Run Regression Tests / Change Log once
-  // unlocked). Offline tool only ever has Settings — everything else here
-  // needs the hosted site's session/server.
+  // Order: Logout, Developer (password-gated — reveals Import Members /
+  // Import Registrations / Run Regression Tests / Change Log once unlocked).
   function buildHeaderMenu() {
     var header = $("header.app");
     if (!header) return;
@@ -1496,20 +1235,9 @@
       btn.setAttribute("aria-expanded", state.menuOpen ? "true" : "false");
     }
     menu.innerHTML = "";
-    var items = [];
-    if (LIVE) {
-      var logoutItem = el("a", { class: "hdr-menu-item", href: "logout.php" }, ["🚪 Logout"]);
-      logoutItem.addEventListener("click", closeMenu);
-      items.push(logoutItem);
-      items = items.concat(buildDeveloperMenuItems());
-    } else {
-      // Settings (regression tests, zoom presets) has no LIVE-mode equivalent
-      // need — Logout/Developer replaced it there; the offline tool still
-      // needs a way to reach it.
-      var settingsItem = el("button", { id: "settingsMenuItem", class: "hdr-menu-item" }, ["⚙ Settings"]);
-      settingsItem.addEventListener("click", function () { closeMenu(); openSettings(); });
-      items.push(settingsItem);
-    }
+    var logoutItem = el("a", { class: "hdr-menu-item", href: "logout.php" }, ["🚪 Logout"]);
+    logoutItem.addEventListener("click", closeMenu);
+    var items = [logoutItem].concat(buildDeveloperMenuItems());
     items.forEach(function (it) { menu.appendChild(it); });
     if (state.menuOpen && state.developerOpen && !state.developerUnlocked) {
       var pw = menu.querySelector(".hdr-dev-pw");
@@ -1597,7 +1325,7 @@
     host.appendChild(backdrop);
   }
 
-  // Change Log (Developer submenu, LIVE mode only) — modeled on
+  // Change Log (Developer submenu) — modeled on
   // SilentAuctionManager's Change Log screen: pulls commit history straight
   // from the public GitHub repo's REST API (no server endpoint of our own
   // needed) and shows the same repo-stats + commit-table shape. Re-fetched
@@ -1779,20 +1507,17 @@
     document.body.appendChild(el("div", { id: "settingsHost" }));
     document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
-    document.body.appendChild(el("div", { id: "importHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
-    // window.__carshowLive is set (by index.php, before this script runs) only
-    // when served from the hosted site — see the LIVE comment near its
-    // declaration above. Read it here, not at module-load time, since init()
-    // is what's guaranteed to run after every inline script in the document.
-    LIVE = window.__carshowLive || null;
-    state.sponsors = LIVE ? [] : loadSponsors(); // LIVE mode: filled by ingestSponsors() instead
+    // window.__carshowSite is set (by index.php, before this script runs) —
+    // see the declaration comment near SITE_CONFIG above. Read it here, not
+    // at module-load time, since init() is what's guaranteed to run after
+    // every inline script in the document.
+    SITE_CONFIG = window.__carshowSite || {};
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
-      if (e.key === "Escape" && state.importOpen) { closeImportModal(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }
       if (e.key === "Escape" && state.deleteSelectedOpen) { closeDeleteSelectedConfirm(); return; }
       if (e.key === "Escape" && state.menuOpen) { closeMenu(); return; }
@@ -1801,8 +1526,6 @@
       else if (e.key === "ArrowLeft") stepDetail(-1);
       else if (e.key === "ArrowRight") stepDetail(1);
     });
-    renderDrop([]);
-    wireDrop();
     renderViews();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
@@ -1814,16 +1537,14 @@
     ingestRows: function (regRows, actRows, generatedAt) {
       state.reg = { name: "registration.csv", rows: regRows };
       state.act = actRows ? { name: "activity.csv", rows: actRows } : null;
-      finishIngest([], generatedAt);
+      regenerate(generatedAt);
     },
-    // Called by index.php's boot script (LIVE mode only) with the sponsor list
-    // read fresh from the server on this page load — bypasses localStorage
-    // entirely, same as the fixture-loading hooks below bypass file I/O.
+    // Called by index.php's boot script with the sponsor list read fresh
+    // from the server on this page load.
     ingestSponsors: function (list) {
       state.sponsors = Array.isArray(list) ? list : [];
       renderViews();
     },
-    showDropZone: showDropZone,
     setTab: function (t) { state.tab = t; renderViews(); },
     setSearch: function (q) { state.search = q; renderRegBody(); },
     openDetail: openDetail,
@@ -1834,8 +1555,6 @@
     runRegressionTests: runRegressionTests,
     openSponsorForm: openSponsorForm,
     closeSponsorForm: closeSponsorForm,
-    openImportModal: openImportModal,
-    closeImportModal: closeImportModal,
     openClearSponsorsConfirm: openClearSponsorsConfirm,
     closeClearSponsorsConfirm: closeClearSponsorsConfirm,
     clearAllSponsors: clearAllSponsors,

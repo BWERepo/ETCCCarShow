@@ -18,9 +18,8 @@ function jsStringLiteral(s) {
   return JSON.stringify(s).split(LS).join("\\u2028").split(PS).join("\\u2029");
 }
 
-// Settings -> Run Regression Tests needs the fixture CSVs available in the
-// browser with no network/file access — embed them as a global the same way
-// the deploy snapshot embeds real CSVs (see deploy/build-snapshot.js).
+// Developer > Run Regression Tests needs the fixture CSVs available in the
+// browser with no network/file access — embed them as a global.
 var fixturesScript = "window.CarShowFixtures = { regCsv: " +
   jsStringLiteral(read("test/fixtures/registration.csv")) + ", actCsv: " +
   jsStringLiteral(read("test/fixtures/activity.csv")) + " };";
@@ -74,7 +73,6 @@ var html =
 '  <h1>ETCC Car Show</h1>\n' +
 '</header>\n' +
 '<div class="wrap">\n' +
-'  <div id="drop" class="drop"></div>\n' +
 '  <div id="app"></div>\n' +
 '</div>\n' +
 '<footer class="app-footer">\n' +

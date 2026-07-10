@@ -1,29 +1,36 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-10 (end of session, git commit `7e66bf8`, app version 1.38)
+Last updated: 2026-07-10 (session in progress — latest committed hash `8afbbe5`/v1.43,
+with three substantial additional changes **uncommitted and ready to checkpoint** —
+see "This session's work" below for details)
 
 This file exists so a brand-new Claude Code session can pick up this project with no
-prior conversation history. Read this fully before making changes. (The previous
-revision of this file, covering the session that ended at commit `a06df91`/v1.20, is
-still in git history if you need that context — this revision supersedes it.)
+prior conversation history. Read this fully before making changes. Previous revisions
+(ending at commits `a06df91`/v1.20 and `7e66bf8`/v1.38) are in git history if you need
+older context. This revision covers the session span from v1.43 to present and focuses
+on a major refactor: **complete removal of the offline/standalone tool** — the codebase
+now supports one deployment only (the hosted site). See "This session's work" for a
+comprehensive breakdown.
 
 ## What this is
 
 A web app for East Tennessee Corvette Club (ETCC) officers to turn ClubExpress CSV
 exports into a searchable Registration table, a Summary dashboard, and a Sponsors
-tracker — matching/replacing an old macro-driven `.xlsm` workbook. It exists in **two
-very different deployments that share the same `src/` code**:
+tracker — matching/replacing an old macro-driven `.xlsm` workbook. It is **one
+deployment**: the hosted site at `https://etccapps.com/apps/carshow/`, password-
+protected, fully live/dynamic — registrations, sponsors, and the member roster all live
+as JSON files on the server and are read fresh on every page load.
 
-1. **The offline tool** (`App/ETCCCarShow.html`) — a single self-contained HTML file
-   you open locally (double-click, or a local dev server) and drag the two CSVs onto.
-   Everything runs client-side; nothing is uploaded anywhere, by design. Sponsors are
-   stored in the browser's `localStorage`. This is the original, private/offline
-   experience.
-2. **The hosted site** (`https://etccapps.com/apps/carshow/`) — password-protected,
-   fully live/dynamic: registrations, sponsors, and the member roster all live as JSON
-   files on the server and are read fresh on every page load. This session added a
-   second password-gated public entry point (`sponsor-form.php`) and two more
-   browser-based officer tools (`registrations-import.php`, `logout.php`) — see below.
+There used to be a second deployment — an offline, self-contained HTML file an officer
+could double-click and drag CSVs onto, with sponsors in `localStorage` — but this
+session **removed it entirely** at the user's request ("I only need the deployable
+version of the website... remove all standalone code to simplify"). `App/src/app.js`
+no longer has a `LIVE`/offline branch at all; it unconditionally assumes it's running
+on the hosted site, reading `window.__carshowSite` (renamed from `__carshowLive`,
+injected by `deploy/index.php`) for the sponsors API URL. `App/ETCCCarShow.html` is
+still built by `node build.js` — but now purely as the intermediate artifact
+`ftp-deploy.sh` uploads as `app-bundle.html`, not as something meant to be opened
+directly. See "This session's work" for the full list of what was deleted.
 
 ## Repo / paths
 
@@ -56,33 +63,39 @@ very different deployments that share the same `src/` code**:
 
 ```
 App/
-  ETCCCarShow.html        # BUILT output — the offline app AND the template the hosted
-                            # site's index.php stitches live data into (as app-bundle.html
-                            # on the server — see Deployment). Don't hand-edit.
+  ETCCCarShow.html        # BUILT output — the template deploy/index.php stitches live
+                            # data into (as app-bundle.html on the server — see
+                            # Deployment). Not meant to be opened directly anymore
+                            # (that was the now-removed offline tool). Don't hand-edit.
   build.js                # Builds ETCCCarShow.html from src/ + vendor/ + assets/
   version.json            # Auto-bumped by build.js each run (major.minor + lastBuilt)
-  serve.js                # Zero-dep static file server for local preview (node serve.js [port])
-  package.json            # deps: exceljs, jsdom, papaparse (devDependencies for tests/build)
+  package.json            # deps: exceljs, jsdom, papaparse
   AUTOPULL-NOTES.md        # Why CSV export is browser-automation, not a real API
   tools/check-csvs.js      # Ad-hoc sanity check against a real (non-fixture) CSV pair —
-                            # not part of the automated suite; predates this session.
+                            # not part of the automated suite.
 
   src/                    # Hand-edited source, inlined into ETCCCarShow.html by build.js
     config.js              # Business rules: shirt buckets, status classification,
-                             # SPONSOR_TYPES, SPONSOR_SHIRT_SIZES/SPONSOR_SIZE_INDEX
+                             # SPONSOR_TYPES, SPONSOR_SHIRT_SIZES/SPONSOR_SIZE_INDEX,
+                             # REG_TYPE (Registration tab's first column)
     logic.js               # Pure generate(regRows, actRows, opts) -> result object.
                              # Also captures rec._sponsorShirtSize (per-registrant Individual
                              # Sponsorship bonus-shirt size) for the app's CSV-sponsor sync.
-    excel.js               # Builds the "Download Excel" workbook, incl. a SponsorsSheet
-                             # (its own SPONSOR_COLS — NOT the same array as app.js's; if
-                             # you add a column to one, check whether the other needs it too)
+    excel.js               # Builds a workbook (incl. a SponsorsSheet — its own SPONSOR_COLS,
+                             # NOT the same array as app.js's; if you add a column to one,
+                             # check whether the other needs it too). No longer reachable
+                             # from any UI button (the offline tool's "Download Excel" was
+                             # removed this session) — only still exercised by Developer >
+                             # Run Regression Tests' Excel round-trip assertions.
     regression-tests.js     # Shared assertions (see Testing) — used by BOTH the Node CLI
-                             # test and the in-app Settings "Run Regression Tests"
-    app.js                 # DOM rendering, state, event wiring, hamburger/settings modal,
-                             # Sponsors tab (local + LIVE modes), CSV->Sponsors auto-sync,
-                             # LIVE-mode detection (window.__carshowLive) — see this
-                             # session's substantial changes below
-    styles.css              # All CSS, incl. the new off-canvas nav drawer this session
+                             # test and the in-app Developer > "Run Regression Tests"
+    app.js                 # DOM rendering, state, event wiring, hamburger menu (Logout +
+                             # password-gated Developer submenu — Import Members/
+                             # Registrations/Run Regression Tests/Change Log), Sponsors tab
+                             # (server-synced only — no more localStorage/offline branch),
+                             # CSV->Sponsors auto-sync. Reads window.__carshowSite (renamed
+                             # from __carshowLive) for the sponsors API URL.
+    styles.css              # All CSS, incl. the off-canvas nav drawer
 
   assets/
     ETCClogoWhiteBackground.png   # Canonical logo copy — build.js embeds as base64 in the
@@ -138,10 +151,10 @@ App/
                               # membership CSV -> members-data.json. Linked from the
                               # hamburger's "Developer" submenu (moved there this session —
                               # used to be its own direct "Member Database" menu item).
-    logout.php                  # NEW this session — destroys the shared PHP session and
-                              # redirects to the club's main site
+    logout.php                  # Destroys the shared PHP session and redirects to the
+                              # club's main site
                               # (https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652).
-                              # Linked from the hamburger menu (LIVE mode only).
+                              # Linked from the hamburger menu.
     forgot-password.php        # PUBLIC — "Forgot password?" link target. Emails a
                               # time-limited token to a FIXED admin address via
                               # carshow_send_mail(). Stores the token in password-reset.json.
@@ -151,12 +164,11 @@ App/
     .ftp-credentials.example   # Committed template for .ftp-credentials
     .ftp-credentials            # GITIGNORED — real FTP host/user/pass, read at runtime by
                               # ftp-deploy.sh if present.
-    ftp-deploy.sh               # Uploads CODE only. Now also uploads registrations-import.php
-                              # and logout.php (added to the list this session). Deliberately
-                              # does NOT upload secrets.php or any *-data.json file.
-    build-snapshot.js          # DEPRECATED for the live site — kept only for producing a
-                              # portable single-file snapshot to email someone without
-                              # server access.
+    ftp-deploy.sh               # Uploads CODE only: app-bundle.html + the .php/.html files
+                              # + logo + .htaccess. Deliberately does NOT upload secrets.php
+                              # or any *-data.json file. (build-snapshot.js — a separate,
+                              # already-broken/deprecated "portable snapshot" script — was
+                              # deleted this session; it's unrelated to this normal flow.)
     README.md                  # Deploy-specific docs, kept up to date throughout this
                               # session — the most detailed reference for hamburger-menu
                               # behavior, the sponsor-form gate, and registrations-import.php.
@@ -166,19 +178,25 @@ App/
 
 Run from `App/`:
 
-- **Build the offline app:** `node build.js` → writes `ETCCCarShow.html`, bumps `version.json`
-- **Run logic/Excel tests:** `node test/run-tests.js` (44 assertions)
-- **Run full UI smoke test:** `node test/dom-test.js` (59 assertions)
-- **Preview locally:** `node serve.js [port]` then open `http://localhost:<port>/`. A
-  `.claude/launch.json` exists for the `preview_start` MCP tool (`name: "carshow-app"`,
-  port 5799). **Per this project's workflow rules below, don't use the Claude Preview
-  tools or self-verify unless the user explicitly asks.**
-- **Refresh the LIVE site's registration data** — now two ways:
+- **Build the app:** `node build.js` → writes `ETCCCarShow.html`, bumps `version.json`.
+  This is still required before every deploy — `ETCCCarShow.html` is the artifact
+  `ftp-deploy.sh` uploads as `app-bundle.html` — even though there's no longer an
+  offline distribution of it.
+- **Run logic/Excel tests:** `node test/run-tests.js` — file currently has 44
+  assertions written against the *pre-Reg-Type-column, pre-walk-in-removal* fixture
+  shape; **will fail as written** until updated (see Testing/Known follow-ups below).
+- **Run full UI smoke test:** `node test/dom-test.js` — file currently has 59
+  assertions written against the *removed offline code path* (drop zone, "Load
+  different files", "Download Excel", localStorage sponsors); **will fail almost
+  immediately as written** until substantially rewritten (see Testing below). Per this
+  project's rule, only touch either test file when explicitly asked via a "test"
+  prompt — don't fix them proactively.
+- **Refresh the site's registration data** — two ways:
   - CLI: `CARSHOW_SITE_PASSWORD=... node deploy/upload-registrations.js`
-  - Browser (new this session): hosted site → hamburger → Developer (site password) →
-    Import Registrations → `registrations-import.php`, pick the two CSVs, submit.
-- **Refresh the LIVE site's member roster:** hamburger → Developer → Import Members →
-  `members-import.php` (unchanged this session except its menu location moved).
+  - Browser: hosted site → hamburger → Developer (site password) → Import
+    Registrations → `registrations-import.php`, pick the two CSVs, submit.
+- **Refresh the site's member roster:** hamburger → Developer → Import Members →
+  `members-import.php`.
 - **Deploy a code change:** `node build.js` then `bash deploy/ftp-deploy.sh` (reads
   credentials from `deploy/.ftp-credentials` automatically if present).
 - **Manually push `secrets.php`:** see the one-off `curl` command documented in
@@ -260,8 +278,9 @@ stored in this file, in git, or in Claude's memory system.
   drawer with a backdrop. LIVE-mode order: **Logout**, **Developer** (client-side
   password re-check via the same `action=login` endpoint — reveals **Import Members**
   and **Import Registrations** once entered correctly). Settings and Become a Car Show
-  Sponsor were removed from this menu entirely this session (Settings still exists for
-  the offline tool, which has no Logout/Developer equivalent).
+  Sponsor were removed from this menu entirely this session (Settings still existed for
+  the offline tool at the time — **that tool, and the "LIVE mode" distinction itself,
+  were later removed entirely**; see the top of this doc and "This session's work").
 - **`sponsor-form.php` is now password-gated** (same shared session/password as
   `index.php`, not a separate credential) — it used to be deliberately public/no-login.
   It also gained a Cancel button that always navigates to
@@ -374,34 +393,132 @@ and a bare `checkpoint`'s deploy step were each blocked once by the auto-mode
 classifier and succeeded on a repeated/rephrased request — see the Workflow rules
 section above.
 
+## This session's work (v1.43 → present, 2026-07-10)
+
+Five commits landed and were deployed (checkpointed) in order:
+
+1. **`f2e8558`** — Added "🧪 Run Regression Tests" to the Developer submenu (reuses
+   the existing Settings modal/`runRegressionTests()`, not a new implementation).
+2. **`c8bbc5d`** — Added "📋 Change Log" to the Developer submenu: a modal that pulls
+   commit history + repo stats live from the public GitHub API (`BWERepo/ETCCCarShow`),
+   modeled on SilentAuctionManager's Change Log screen.
+3. **`3d3e440`** — Fixed the Change Log's `api.github.com` fetches being silently
+   blocked: Hostinger's default `Content-Security-Policy: default-src 'self'` header
+   has no explicit `connect-src`, so it fell back to `default-src`'s host-only `'self'`.
+   Fixed by setting an explicit CSP in `deploy/.htaccess` that allowlists
+   `api.github.com` for `connect-src` while preserving the inline-script/style
+   allowances the rest of this single-file app already needs.
+4. **`28ae420`** — Restyled the Change Log to match SAM's actual card structure more
+   precisely (one card for the stat grid as plain label/value pairs, a second flush
+   card for the commit table) instead of an earlier looser approximation.
+5. **`8afbbe5`** — Converted the Change Log from a centered modal into a full-page
+   overlay (`.changelog-page`, fixed/full-viewport with a Back button), matching how
+   SAM's Change Log is its own nav "screen," not a dialog.
+
+**Uncommitted as of this doc's writing** (three more substantial changes, done in this
+same session but not yet checkpointed):
+
+6. Added **Reg Type** as the Registration table's first column (`config.js`
+   `REG_TYPE`), three planned values (Pre-Registered / Walk-in Member / Walk-in
+   Nonmember) — every CSV-sourced row is unconditionally `"Pre-Registered"`. Extended
+   the on-screen table's column-pinning from 2 to 3 frozen columns
+   (`pinnedClass`/`updatePinnedOffsets` in `app.js`) so Last Name/First Name stayed
+   frozen alongside the new leading column; bumped Excel's frozen-pane `xSplit` from 2
+   to 3 to match.
+7. **Removed walk-in rows and the "walk-ins" checkbox entirely** (`logic.js` no longer
+   generates the 25 blank `z-> Walk-In NN` placeholder rows; `_isWalkIn`,
+   `state.showWalkins`, and every branch that checked them are gone from `app.js`;
+   `--walkin`/`tr.walkin` CSS removed). `REG_TYPE` in `config.js` was pared down to
+   just `PRE_REGISTERED` as part of this same change — the `WALKIN_MEMBER`/
+   `WALKIN_NONMEMBER` values it briefly had are gone, since nothing can produce them
+   anymore. Every row shows `"Pre-Registered"`.
+8. **Removed the offline/standalone tool entirely** (see the top of this doc for the
+   summary) — the user's explicit direction was "I only need the deployable version...
+   remove all standalone code to simplify." Concretely:
+   - `app.js`: deleted `loadSponsors`/`saveSponsors`/`SPONSORS_STORAGE_KEY`,
+     `DEFAULT_IMPORT_URL`, `parseCsv`/`classify`/`ingestFiles`, the drop-zone
+     (`showDropZone`/`renderDrop`/`wireDrop`, `#drop` div), `buildChangeFilesBtn`
+     ("Load different files"), `downloadExcel` ("Download Excel" — dropped rather than
+     given a Developer-menu equivalent, per explicit choice), the "Import from Server"
+     modal (`openImportModal`/`closeImportModal`/`renderImportModal`), and every
+     `if (LIVE)`/`if (!LIVE)` branch — the LIVE-only behavior is now unconditional.
+     Renamed the `LIVE` variable/global to `SITE_CONFIG`/`window.__carshowSite`
+     (was `window.__carshowLive`) since there's no more "not live" mode to contrast
+     with. The empty-state message (no registrations loaded yet) now points to
+     Developer → Import Registrations instead of a drop zone that no longer exists.
+   - `deploy/index.php`: renamed the injected global to `window.__carshowSite` to
+     match.
+   - Deleted `App/serve.js` (offline-only local-preview server) and
+     `App/deploy/build-snapshot.js` (an already-broken, unrelated "email a portable
+     snapshot" script — it referenced a subtitle string removed in an earlier session
+     and would throw on any invocation).
+   - `styles.css`: removed the `.drop`/`.filecard` rules and the vestigial
+     `header.app .sub` rule (never emitted by `build.js` since the subtitle was
+     removed).
+   - `build.js`: no longer emits the `<div id="drop">` container.
+   - **`.claude/launch.json` (pointed `preview_start`'s "carshow-app" config at the now-
+     deleted `serve.js`) was NOT deleted** — the auto-mode classifier blocked it as
+     "agent startup/config territory," out of scope for a code-cleanup request. It's
+     now dead/broken (would fail if `preview_start` were ever invoked with that name),
+     but per this project's rules Claude Preview tools aren't used anyway. A human (or
+     an explicit future ask) needs to delete or fix it.
+   - Updated `deploy/README.md` (removed every offline-tool callout: the Sponsors
+     section's "Offline tool" bullet, the Hamburger menu section's contrast clause and
+     stale item list, the `build-snapshot.js` layout entry, the final "Dropping CSVs
+     into the offline tool" paragraph) and this doc's own top sections.
+   - **Not touched**: `regression-tests.js` and `dom-test.js` — per this project's
+     rule, test files are only edited on an explicit "test" prompt. Both suites will
+     fail as currently written; see Testing below for exactly what's now stale.
+
+**Summary of uncommitted changes (items 6–8):** All three changes have been implemented,
+syntax-checked (`node --check` on `.js` files passed clean), and built successfully
+(`node build.js` produced a 1100 KB `ETCCCarShow.html` with no stale references to
+offline code). Everything is production-ready and awaiting a `checkpoint` command to
+commit and deploy. Once checkpointed, the codebase will be fundamentally simpler: a
+single, unconditional hosted-site code path with no dual-deployment branches, offline
+file handling, or localStorage persistence. The product-level changes (Reg Type column,
+walk-in removal, offline tool elimination) are real and intentional — not regressions.
+
 ## Testing
 
-- `test/run-tests.js` (44 assertions) — pure logic + Excel export round-trip.
-  **Unaffected by this session's changes** (still passed clean when run).
-- `test/dom-test.js` (59 assertions) — full jsdom UI smoke test. **Required two fixes
-  this session**, both to keep pace with intentional UI changes, not regressions:
-  (1) the Shirts-panel selector (looked for an `h3` "Shirts", which the Reg-Date/
-  shirt-matrix work removed — see commit `852800b`); (2) the hamburger menu-state
-  assertions, changed from checking a `.hidden` class to checking the new `.open`
-  class after the off-canvas drawer redesign (commit `d3d6176`).
-- Both suites were run explicitly (user said **"test"**) after fix (1) and passed
-  clean, 44/44 and 59/59. **Fix (2) and the row-height CSS fix (`7e66bf8`) were made
-  *after* that test run and have NOT been re-verified by an actual suite run** — the
-  `dom-test.js` edits for fix (2) look correct by inspection (mirrors fix (1)'s
-  pattern exactly) but a future session should run `node test/dom-test.js` once to
-  confirm, especially before making further hamburger-menu changes.
-- The Sponsors tab's checkbox/bulk-delete UI, the LIVE-mode server sync, the
-  Developer password gate, and all the PHP endpoints (including the two new ones,
-  `registrations-import.php` and `logout.php`) have **no automated test coverage** —
-  verified only by manual review (no local PHP interpreter available) and the
-  deploys/checkpoints during this session.
+**Both suites are currently stale and will fail if run** — not from a regression, but
+because three substantial product changes (Reg Type column, walk-in removal, and the
+offline-tool removal) landed without matching test-file updates, per this project's
+rule that test files are only touched on an explicit "test" prompt (see Workflow rules
+above). A future session asked to "test" should expect to spend real time updating
+both files, not just running them:
+
+- `test/run-tests.js` — pure logic + Excel round-trip against the frozen fixture.
+  Still expects the old walk-in-inflated numbers (28 registrations instead of 3 real
+  fixture rows, member-number-8027 instead of 8002, a 30-row Excel sheet instead of 5,
+  a first-column header of "Last Name" instead of the new leading "Reg Type" column)
+  — see `src/regression-tests.js`.
+- `test/dom-test.js` — full jsdom UI smoke test. Exercises `src/app.js` **without ever
+  setting `window.__carshowSite`**, which used to mean "the offline code path" back
+  when that branch existed — now that the offline branch is gone entirely, most of
+  this file's early assertions reference elements that no longer exist at all (the
+  drop zone, "walk-ins" checkbox, "Load different files"/"Download Excel" buttons,
+  the top-level "⚙ Settings" hamburger item) and it will fail well before reaching the
+  later, still-relevant assertions (Summary/Registration tab rendering, detail modal,
+  zoom, Developer→Run Regression Tests). This file needs more than number updates — it
+  needs the offline-specific assertions removed and, ideally, some coverage added for
+  what used to be genuinely untested LIVE-only behavior (Logout/Developer menu,
+  Change Log, server-synced sponsors) now that it's the *only* behavior.
+- The Sponsors tab's checkbox/bulk-delete UI, the Developer password gate, the Change
+  Log, and all the PHP endpoints have **no automated test coverage** — verified only
+  by manual review (no local PHP interpreter available) and prior deploys/checkpoints.
 
 ## Known follow-ups / things a new session might need to know
 
-- **No open bugs** as of this doc's writing. The Reg Date backfill bug and the
-  edit-modal field-dropping bug (both found and fixed this session) are resolved.
-- **Run `node test/dom-test.js` once** before extending the hamburger menu or Sponsors
-  tab further — see Testing above for exactly what's unverified and why.
+- **No open bugs** as of this doc's writing, but **both test suites are currently
+  broken as written** (see Testing above) — this is expected staleness from three
+  uncommitted product changes, not a regression, and per this project's rule won't be
+  fixed until the user explicitly says "test."
+- **`.claude/launch.json` still points `preview_start`'s "carshow-app" config at the
+  now-deleted `App/serve.js`.** Claude was blocked from deleting this file (auto-mode
+  classifier treats `.claude/` config changes as out of scope for a code-cleanup ask)
+  — it's dead/broken but harmless since this project's rules already say not to use
+  Claude Preview tools. Delete or fix it by hand, or explicitly ask a future session to.
 - **The site password and SMTP mailbox password are real, active, unknown to Claude.**
   Do not attempt to regenerate/guess/reset either without being explicitly asked.
 - **`registrations-data.json` and `members-data.json` changed on the live server mid-

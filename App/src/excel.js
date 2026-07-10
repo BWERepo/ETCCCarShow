@@ -70,7 +70,7 @@
 
   function regSheet(wb, res) {
     var cols = res.columns, n = cols.length;
-    var ws = wb.addWorksheet("RegistrationSheet", { views: [{ state: "frozen", xSplit: 2, ySplit: 2 }] });
+    var ws = wb.addWorksheet("RegistrationSheet", { views: [{ state: "frozen", xSplit: 3, ySplit: 2 }] });
     ws.mergeCells(1, 1, 1, n);
     var t = ws.getCell(1, 1);
     t.value = res.meta.title; t.font = { bold: true, size: 16 }; t.alignment = { horizontal: "center" }; t.fill = YELLOW;
@@ -93,7 +93,7 @@
       });
     });
     ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: n } };
-    var widthFor = { "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
+    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
     ws.columns.forEach(function (col, i) {
       var name = cols[i];
       col.width = widthFor[name] || (isShirt(res, name) ? 7 : Math.min(Math.max(name.length + 2, 8), 20));

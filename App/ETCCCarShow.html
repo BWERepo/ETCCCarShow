@@ -316,7 +316,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.47 &middot; Deployed 7/11/2026 4:03 PM</div>
+  <div>v2.48 &middot; Deployed 7/11/2026 4:05 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -3334,11 +3334,32 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   }
 
   function backfillPaymentDefaults() {
+    // Fill missing amounts in existing payments
     state.payments.forEach(function (payment) {
       if (payment.amount === null || payment.amount === undefined || payment.amount === "") {
         var sponsor = state.sponsors.find(function (s) { return s.id === payment.sponsorId; });
         if (sponsor && sponsor.sponsorType === "individual") {
           payment.amount = 100;
+        }
+      }
+    });
+
+    // Create default payment records for individual sponsors without any payments
+    state.sponsors.forEach(function (sponsor) {
+      if (sponsor.sponsorType === "individual") {
+        var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
+        if (!hasPayment && sponsor.regDate) {
+          var defaultPayment = {
+            id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+            sponsorId: sponsor.id,
+            sponsorName: sponsor.name,
+            paymentType: "Credit Card",
+            checkNum: "",
+            date: sponsor.regDate,
+            amount: 100,
+            recordedAt: new Date().toISOString()
+          };
+          state.payments.push(defaultPayment);
         }
       }
     });

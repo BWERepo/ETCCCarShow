@@ -1949,11 +1949,32 @@
   }
 
   function backfillPaymentDefaults() {
+    // Fill missing amounts in existing payments
     state.payments.forEach(function (payment) {
       if (payment.amount === null || payment.amount === undefined || payment.amount === "") {
         var sponsor = state.sponsors.find(function (s) { return s.id === payment.sponsorId; });
         if (sponsor && sponsor.sponsorType === "individual") {
           payment.amount = 100;
+        }
+      }
+    });
+
+    // Create default payment records for individual sponsors without any payments
+    state.sponsors.forEach(function (sponsor) {
+      if (sponsor.sponsorType === "individual") {
+        var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
+        if (!hasPayment && sponsor.regDate) {
+          var defaultPayment = {
+            id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+            sponsorId: sponsor.id,
+            sponsorName: sponsor.name,
+            paymentType: "Credit Card",
+            checkNum: "",
+            date: sponsor.regDate,
+            amount: 100,
+            recordedAt: new Date().toISOString()
+          };
+          state.payments.push(defaultPayment);
         }
       }
     });

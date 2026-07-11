@@ -1579,8 +1579,6 @@
     // ClubExpress/the club's main site) — see its post-submit redirect.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
     addBtn.addEventListener("click", function () { window.open("sponsor-form.php?from=app", "_blank", "noopener"); });
-    var paymentBtn = el("button", { class: "btn" }, ["💳 Record Payment"]);
-    paymentBtn.addEventListener("click", function () { state.sponsorPaymentOpen = true; renderPaymentModal(); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
@@ -1594,7 +1592,7 @@
     var zoomLabel = el("span", { class: "count", text: Math.round(state.sponsorZoom * 100) + "%" });
     var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
     var kids = [search, typeGroup, count, el("span", { class: "spacer" }), zoomGroup];
-    kids.push(paymentBtn, prn, delBtn, addBtn);
+    kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
 

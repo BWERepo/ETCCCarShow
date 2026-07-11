@@ -316,7 +316,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.51 &middot; Deployed 7/11/2026 4:11 PM</div>
+  <div>v2.52 &middot; Deployed 7/11/2026 4:13 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -2970,8 +2970,6 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     // ClubExpress/the club's main site) — see its post-submit redirect.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
     addBtn.addEventListener("click", function () { window.open("sponsor-form.php?from=app", "_blank", "noopener"); });
-    var paymentBtn = el("button", { class: "btn" }, ["💳 Record Payment"]);
-    paymentBtn.addEventListener("click", function () { state.sponsorPaymentOpen = true; renderPaymentModal(); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
@@ -2985,7 +2983,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var zoomLabel = el("span", { class: "count", text: Math.round(state.sponsorZoom * 100) + "%" });
     var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
     var kids = [search, typeGroup, count, el("span", { class: "spacer" }), zoomGroup];
-    kids.push(paymentBtn, prn, delBtn, addBtn);
+    kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
 

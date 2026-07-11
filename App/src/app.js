@@ -1743,6 +1743,42 @@
     });
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "T-Shirt" }), shirtSel]));
 
+    body.appendChild(el("div", { style: "border-top: 1px solid var(--line); margin: 20px 0; padding-top: 20px" }, [
+      el("h4", { text: "Record Payment", style: "margin: 0 0 15px 0; font-size: 13px; color: var(--muted); text-transform: uppercase" })
+    ]));
+
+    var paymentTypeSelect = el("select", {});
+    ["Cash", "Check", "Credit Card"].forEach(function (t) {
+      paymentTypeSelect.appendChild(el("option", { value: t, text: t }));
+    });
+    if (editing.sponsorType === "individual") paymentTypeSelect.value = "Credit Card";
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Payment Type" }),
+      paymentTypeSelect
+    ]));
+
+    var paymentAmountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0", value: editing.sponsorType === "individual" ? "100" : "" });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Amount" }),
+      paymentAmountInput
+    ]));
+
+    var paymentDateInput = el("input", { type: "date", value: new Date().toISOString().split("T")[0] });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Date Received" }),
+      paymentDateInput
+    ]));
+
+    var checkNumInput = el("input", { type: "text", placeholder: "Check #" });
+    var checkNumRow = el("div", { class: "form-row", style: "display:" + (paymentTypeSelect.value === "Check" ? "" : "none") }, [
+      el("span", { class: "form-label", text: "Check #" }),
+      checkNumInput
+    ]);
+    paymentTypeSelect.addEventListener("change", function () {
+      checkNumRow.style.display = paymentTypeSelect.value === "Check" ? "" : "none";
+    });
+    body.appendChild(checkNumRow);
+
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 
@@ -1761,6 +1797,22 @@
       var record = buildSponsorRecord(editing, fieldEls, typeSel, shirtSel);
       if (!record) { errorMsg.textContent = "Sponsor Name is required."; return; }
       upsertSponsor(record);
+
+      var paymentAmount = paymentAmountInput.value.trim();
+      if (paymentAmount) {
+        var payment = {
+          id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+          sponsorId: editing.id,
+          sponsorName: record.name,
+          paymentType: paymentTypeSelect.value,
+          checkNum: paymentTypeSelect.value === "Check" ? checkNumInput.value.trim() : "",
+          date: paymentDateInput.value,
+          amount: Number(paymentAmount),
+          recordedAt: new Date().toISOString()
+        };
+        recordPayment(payment);
+      }
+
       closeSponsorForm();
       renderSponsorsBody();
     });

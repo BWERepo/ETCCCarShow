@@ -101,6 +101,7 @@
 
     // --- Column Rename Table (Old -> New) ---
     renameMap: {
+      "Member Number": "Reg Number",
       "CorvetteClubName": "Club Name",
       "Postal Code": "Zip",
       "CorvetteYear": "Year",
@@ -128,7 +129,7 @@
     // applySponsorshipTextDefault() in logic.js) or by hand via the detail
     // modal's Edit mode. See PROJECT_STATUS.md for why.
     baseColumnOrder: [
-      "Reg Type", "Last Name", "First Name", "Spouse First Name", "Member Number", "Reg Date",
+      "Reg Number", "Reg Type", "Last Name", "First Name", "Spouse First Name", "Reg Date",
       "#", "Club Name", "Phone", "Email", "Address", "City", "State",
       "Zip", "Total Fee", "Individual Sponsorship", "Individual Sponsorship Text", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"

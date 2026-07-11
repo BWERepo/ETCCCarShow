@@ -208,7 +208,7 @@ can't be silently discarded by an accidental click or arrow key. Applies to **ev
 row, CSV-imported or Walk-In, per the user's explicit choice (matching the bulk-delete
 scope decision):
 
-- **Editable:** Member Number, Club Name, Status, Total Fee, Individual Sponsorship,
+- **Editable:** Reg Number, Club Name, Status, Total Fee, Individual Sponsorship,
   Spouse First Name, Individual Sponsorship Text, #, Phone, Email, Address, City, State,
   Zip, Year, Model, Color, In Car Show?.
 - **Not editable:** Reg Date, Reg Type, Gen (system/derived — Gen auto-recomputes from
@@ -261,26 +261,37 @@ guessed. Both start blank on every fresh CSV row.
 `members-data.json` (Developer → Import Members → `members-import.php`) started out
 holding only `{name, lastName, firstName}` — enough for `sponsor-form.php`'s "ETCC
 Member Name" datalist/validation. It now also captures whichever of `memberNumber`,
-`phone`, `email`, `address`, `city`, `state`, `zip`, `year`, `model`, `color` the
-imported CSV has recognizable columns for (`Member Number`/`Member No`/`Member #`/
-`Member ID`/`ID`, `Phone`, `Email`, `Address`, `City`, `State`, `Zip`, `Year`/`Corvette
-Year`, `Model`/`Corvette Model`, `Color`/`Corvette Color` — same normalized,
-case/space/underscore-insensitive matching last/first name already used). Any field the
-CSV doesn't have a column for is just `""` for every record — harmless, that field falls
-through to manual entry. **Note:** this only takes effect from the *next* re-import —
-code changes here don't retroactively add fields to whatever's already sitting in
-`members-data.json` on the server, so re-import after any code change that touches this
-file's column detection.
+`phone`, `email`, `address`, `city`, `state`, `zip`, `year`, `model`, `color`,
+`spouseFirstName` the imported CSV has recognizable columns for (`Member Number`/`Member
+No`/`Member #`/`Member ID`/`ID`, `Phone`, `Email`, `Address`, `City`, `State`, `Zip`,
+`Year`/`Corvette Year`, `Model`/`Corvette Model`, `Color`/`Corvette Color`, `Spouse First
+Name`/`Spouse`/`Spouse Name` — same normalized, case/space/underscore-insensitive
+matching last/first name already used). Any field the CSV doesn't have a column for is
+just `""` for every record — harmless, that field falls through to manual entry.
+**Note:** this only takes effect from the *next* re-import — code changes here don't
+retroactively add fields to whatever's already sitting in `members-data.json` on the
+server, so re-import after any code change that touches this file's column detection.
 
 - **On page load**, `index.php` injects the roster via `ingestMembers()` (`state.members`).
 - **Add Registration form** — when Reg Type is Walk-In Member, a "Look Up Member" field
   (a `<datalist>` of `"Last, First"` names, same pattern as the sponsor form's member
-  field) auto-fills the *whole form* on an exact match — Last Name, First Name, Member
+  field) auto-fills the *whole form* on an exact match — Last Name, First Name, Reg
   Number, Phone, Email, Address, City, State, Zip, Corvette Year, Model, Color from that
   roster entry, plus Club Name unconditionally set to `"ETCC"` (every roster entry is, by
   definition, an ETCC member — not itself a roster field). Still just a convenience —
   every field stays manually editable, and fields the roster doesn't have data for are
-  simply left as whatever was already typed.
+  simply left as whatever was already typed. (No Spouse First Name field on this form
+  today — a Walk-In's spouse name, if needed, is still only settable via the detail
+  modal afterward.)
+- **CSV-imported registrations** — `regenerate()` (`app.js`) backfills a blank Spouse
+  First Name from the roster too, matching by Reg Number against the roster's own
+  `memberNumber`. ClubExpress's own registration/activity export has **no** spouse
+  column at all (confirmed — neither file's header has anything resembling one), so this
+  roster cross-reference is the only automatic source for that field on a CSV row; it's
+  insert-only, same as Individual Sponsorship Text's own default, so it never overwrites
+  an officer's own detail-modal edit. Non-members (an auto-assigned placeholder Reg
+  Number, not a real membership number) never match any roster entry, which is
+  correct — there's nothing to backfill from for them.
 
 ## Settings: Developer → ⚙ Settings
 
@@ -352,8 +363,8 @@ session is never involved) and shows the raw HTTP status + response body.
 
 ## Registration tab: row checkboxes + bulk delete
 
-A select-all/per-row checkbox column (leftmost, pinned alongside Reg Type/Last
-Name/First Name while scrolling — `PINNED_COUNT` in app.js is now 4, not 3) plus a
+A select-all/per-row checkbox column (leftmost, pinned alongside Reg Number/Reg
+Type/Last Name/First Name while scrolling — `PINNED_COUNT` in app.js is now 5) plus a
 "🗑 Delete" toolbar button, same UX as the Sponsors tab's row selection. Deletion is
 routed differently depending on the row's origin, since only Walk-Ins have a real
 per-row server record:

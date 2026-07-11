@@ -1,16 +1,16 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-10 (session in progress — latest committed hash `20e74a2`).
-**Git and the live site were brought back in sync this session** — commit `20e74a2`
-(covering the "+ Add Registration"/Walk-In feature and everything through the test-suite
-overhaul below) was committed, pushed, and is live. Since that checkpoint: a small
-`CSSponsorName`→Individual Sponsorship Text CSV mapping was implemented, tested ("test"),
-and deployed via `ftp-deploy.sh`, then folded into that same `20e74a2` commit before it
-was pushed — so git and live are **fully in sync as of `20e74a2`**. Most recently, a new
-**Paid Registrations API** feature (external read-only endpoint + Developer > 🔌 API
-screen) was implemented and built but is **not yet deployed or committed** — see "This
-session's work (Paid Registrations API...)" below. Say "checkpoint" to commit it, "ftp"
-to deploy it (or both).
+Last updated: 2026-07-11 (session in progress — latest committed hash `5925a28`).
+**Git is at `5925a28`; the live site is one round ahead of git.** `5925a28` (the
+`CSSponsorName` mapping + external Paid Registrations API) is committed, pushed, and
+live. Since then, the Registration table's "Member Number" column was **moved (before
+Reg Type) and renamed to "Reg Number"** — implemented, built, **and deployed via `ftp`**,
+but **not yet committed to git** (see "This session's work (Reg Number column
+rename/reorder...)" below, including a confirmed live-data caveat still unresolved).
+Most recently (a new day, 2026-07-11), a follow-up **Spouse First Name backfill from the
+member roster** was implemented and built but is **not yet deployed or committed** — see
+"This session's work (Spouse First Name from member roster...)" below. Say "checkpoint"
+to commit both rounds, "ftp" to deploy the second one (or both).
 
 This file exists so a brand-new Claude Code session can pick up this project with no
 prior conversation history. Read this fully before making changes. Previous revisions
@@ -1027,24 +1027,150 @@ as-is. What happened:
   (2026-07-08 exports) is now stale; the Exports folder's newest files are the
   2026-07-10 ones referenced throughout this doc.
 
+## This session's work (Reg Number column rename/reorder, 2026-07-10, uncommitted)
+
+Two small asks: move the "Member Number" column to sit before "Reg Type" (was after
+"Spouse First Name"), and rename it to "Reg Number". Since this column doubles as both
+the app's internal data key (`rec["Member Number"]`, read/written throughout
+`logic.js`/`app.js`/`excel.js`) and its own display label everywhere it appears — this
+codebase has no separate internal-key-vs-display-label concept for any column — the
+rename is a pervasive find-and-replace, not a cosmetic label swap.
+
+**Scope boundary (deliberately NOT renamed):** the ETCC **member roster** lookup
+feature (`members-import.php`, `state.members`, `match.memberNumber`, the Add
+Registration form's "Look Up Member" datalist) is a distinct concept — a roster entry's
+own stored membership number, independent of any specific registration — and was left
+untouched. The Summary tab's/Excel's "Next Member #"/"Next Available Member Number"
+capacity-planning figure (`summary.nextMemberNumber`) is also a separate, pre-existing
+concept and was left untouched. The **external Paid Registrations API's** JSON field
+name (`memberNumber`, in `paid-registrations-api.php`'s response) was deliberately kept
+stable as a public contract for the other website already consuming it — only its
+internal source (`r["Reg Number"]`, was `r["Member Number"]`) was updated to match.
+
+Concretely:
+- **`config.js`** — `baseColumnOrder` moved `"Reg Number"` (renamed from `"Member
+  Number"`) to the front, before `"Reg Type"`. Added `renameMap: {"Member Number": "Reg
+  Number", ...}` so CSV import still correctly maps ClubExpress's own literal "Member
+  Number" header (unchanged on their end) into the app's renamed column.
+- **`logic.js`** — every `rec["Member Number"]` read/write (non-member auto-numbering,
+  `buildRecord`/`blankRecord`, `buildManualRegistration`) renamed to `rec["Reg
+  Number"]`. `buildManualRegistration`'s own `fields.memberNumber`/
+  `fields.nextAvailableMemberNumber` parameter names were deliberately left as-is (they
+  describe the walk-in form's own "what number to use" input, not the column itself).
+- **`app.js`** — every table/detail-modal/Excel-numeric-coercion/sort/search touch point
+  renamed (`NUMERIC_BASE`, `NARROW_HEADER_COLS`, `EDITABLE_FIELDS`, `INT_EDIT_FIELDS`,
+  the detail modal's fixed first field, the Sponsors auto-sync's `isMember` check, the
+  Walk-In numbering pool's collision check). `PINNED_COUNT` bumped 4 -> 5 (checkbox, Reg
+  Number, Reg Type, Last Name, First Name) so the newly-inserted leading column joins
+  the frozen set while scrolling instead of displacing First Name out of it. The Add
+  Registration form's number field/label/error-message and its local
+  `memberNumberInput`/`syncMemberNumberField` were renamed to
+  `regNumberInput`/`syncRegNumberField` and "Reg Number" for consistency with the
+  renamed column they feed. `syncPaidRegistrationsCache()`'s source read updated to
+  `r["Reg Number"]`, its output field name (`memberNumber`) intentionally unchanged —
+  see scope boundary above.
+- **`excel.js`** — frozen-pane `xSplit` bumped 3 -> 4 (matching the new 4-column pinned
+  set, mirroring the `PINNED_COUNT` change); the numeric-coercion check renamed to `c
+  === "Reg Number"`.
+- **`regression-tests.js`** — all four `"Member Number"` assertions renamed to `"Reg
+  Number"`; the Excel round-trip's "header A2" assertion updated from `"Reg Type"` to
+  `"Reg Number"` (the new first column).
+- **`deploy/README.md`** — "Editable:" field list and the checkbox/bulk-delete section's
+  pinned-column description updated.
+
+**Status:** implemented, syntax-checked (`node --check` on all five touched `.js`
+files), verified against both the frozen test fixture (58/58 `run-tests.js` assertions
+passing) and today's real ClubExpress export (`registration_data20260710.csv` —
+confirmed `columns[0..2]` = `["Reg Number", "Reg Type", "Last Name"]`, zero messages,
+Susan Crown's real member number 133 flows through correctly via the new `renameMap`
+entry). Built successfully (`node build.js` → 1155 KB `ETCCCarShow.html`, every inline
+`<script>` block parse-checked). Not yet deployed or committed.
+
+**Deployed via `ftp-deploy.sh` this same session** (user said "ftp"). **Confirmed
+caveat, flagged to the user, not yet resolved:** an FTP directory listing right after
+this deploy showed `walkin-registrations.json` already present on the server (last
+modified the prior day) — meaning real Walk-In data existed under the old
+`"Member Number"` key before this rename shipped. Any such record shows blank for that
+field until re-saved (delete + re-add the walk-in, or re-edit that field via the detail
+modal) — no automatic migration was built, matching this codebase's established
+tolerance for exactly this kind of small drift-on-rename (see the earlier
+`walkInAuctionFee` -> `walkInNonCarShowFee` rename, reasoned through the same way). The
+user has not yet confirmed whether any live Walk-In rows actually need re-saving — check
+the live Registration tab for blank Reg Number on any Walk-In row.
+
+## This session's work (Spouse First Name from member roster, 2026-07-11, uncommitted)
+
+Follow-up to a report that "registration: spouse first name is not populated." Confirmed
+by grepping every column header in both real ClubExpress export files
+(`registration_data20260710.csv`, `activity_registrant_data20260710.csv`) — there is
+genuinely no spouse/companion-name column anywhere (only "Companion Count", a number,
+already mapped to `#`) — so a blank Spouse First Name on every CSV-imported row was
+expected/by-design, not a bug. Offered the user two options via AskUserQuestion (leave
+manual-entry-only, or derive it from `CSSponsorName`'s "X & Y Z" pattern); the user
+dismissed that question and instead supplied new information directly: **the member
+roster CSV** (imported via Developer > Import Members, separate from the registration
+CSV) **has its own `spouse_first_name` column.**
+
+Concretely:
+- **`members-import.php`** — `spouseFirstName` added to the optional-column alias table
+  (`spousefirstname`/`spouse`/`spousename`, same normalized matching as every other
+  optional field), captured into `members-data.json` alongside `memberNumber`/`phone`/
+  etc.
+- **`app.js`** — new `fillSpouseFirstNameFromRoster(rec)`, called from `regenerate()`
+  (after the existing deletion-filter/override-patch steps, before
+  `syncSponsorsFromRegistrations()`): for a CSV-imported registration with a blank
+  Spouse First Name, looks up `state.members` by `Number(rec["Reg Number"]) ===
+  Number(m.memberNumber)` and backfills from the matching roster entry's
+  `spouseFirstName` if present. Insert-only (never overwrites an officer's own
+  detail-modal edit), and non-members (an auto-assigned placeholder Reg Number) never
+  match any roster entry — correct, since there's no real membership record to backfill
+  from. Routed through the existing `applyRecordPatch()` so Individual Sponsorship
+  Text's own default recomputes too, in case a newly-filled spouse name is what makes
+  "First and Spouse Last" possible.
+- **Add Registration form deliberately NOT changed** — still no Spouse First Name field
+  there (out of scope for this ask); a Walk-In's spouse name remains settable only via
+  the detail modal afterward, same as before.
+- **`deploy/README.md`** — "Member roster" section updated with the new field and the
+  CSV-registration backfill behavior.
+
+**Status:** implemented, syntax-checked (`node --check` on `app.js`), built successfully
+(`node build.js` → 1157 KB `ETCCCarShow.html`, every inline `<script>` block
+parse-checked, confirmed `spouseFirstName`/`fillSpouseFirstNameFromRoster` present in
+the bundle). `run-tests.js` still 58/58 (this feature doesn't touch `logic.js`/
+`config.js`, and has no fixture roster to exercise it against — see Testing). Not yet
+deployed or committed. **Takes effect only after both a code deploy AND a fresh member
+roster re-import** (same "re-import after any code change here" rule as every other
+`members-import.php` column-detection change) — the user's real roster CSV needs
+re-importing through the updated `members-import.php` to actually populate
+`spouseFirstName` into `members-data.json` before any Spouse First Name backfill can
+happen.
+
 ## **CRITICAL: Current Deployment State**
 
-**Git and the live site are in sync at commit `20e74a2`.** That checkpoint covers
-everything through the test-suite overhaul and the `CSSponsorName` mapping (both
-committed, pushed to `origin/main`, and deployed via `ftp-deploy.sh` in the same
-session).
+**Git is at commit `5925a28`. The live site is AHEAD of git** — it also has the Reg
+Number column rename/reorder (deployed via `ftp-deploy.sh`, not yet committed). Local
+working tree is ahead of the live site too — it additionally has the not-yet-deployed
+Spouse First Name roster backfill.
 
-**Since `20e74a2`, one new feature is implemented + built locally but NOT yet deployed
-or committed:** the **Paid Registrations API** (external read-only endpoint at
-`paid-registrations-api.php?key=...`, plus a new Developer > 🔌 API screen to
-show/test/rotate the key) — see "This session's work (Paid Registrations API...)"
-above for the full breakdown. New/changed files: `App/src/app.js`, `App/src/styles.css`,
-`App/deploy/index.php`, `App/deploy/app-settings.php`, `App/deploy/.htaccess`,
-`App/deploy/ftp-deploy.sh`, `App/deploy/README.md`, plus two new PHP files
-(`App/deploy/paid-registrations-cache.php`, `App/deploy/paid-registrations-api.php`)
-and the rebuilt `App/ETCCCarShow.html`.
+**Three-way state, in order:**
+1. **Git (`5925a28`):** Paid Registrations API only.
+2. **Live site:** `5925a28` + Reg Number column rename/reorder (deployed but
+   uncommitted — see that section above for the confirmed live-Walk-In-data caveat,
+   still unresolved).
+3. **Local working tree (uncommitted, undeployed):** all of the above + the Spouse
+   First Name roster backfill (see that section immediately above this one).
 
-### Next session: say "checkpoint" to commit, "ftp" to deploy (or both) the Paid
-Registrations API work above. If the user asks for a brand-new feature instead, mention
-this one round is still uncommitted/undeployed and ask whether they want it
+New/changed files since `5925a28`: `App/src/config.js`, `App/src/logic.js`,
+`App/src/app.js`, `App/src/excel.js`, `App/src/regression-tests.js`,
+`App/deploy/members-import.php`, `App/deploy/README.md`, and the rebuilt
+`App/ETCCCarShow.html`.
+
+### Next session: say "checkpoint" to commit everything (bringing git level with the
+live site's rename/reorder plus the new roster-backfill round), "ftp" to deploy the
+roster-backfill round (or both — deploying will bring the live site level with git too).
+Before or after either action, double-check with the user whether any live Walk-In
+registrations need re-saving (Reg Number rename's caveat) and whether they've re-run
+Import Members with a roster CSV that has a spouse-name column (roster-backfill round's
+prerequisite — see that section). If the user asks for a brand-new feature instead,
+mention the current three-way git/live/local state above and ask whether they want it
 checkpointed first (most likely yes, to avoid losing work).

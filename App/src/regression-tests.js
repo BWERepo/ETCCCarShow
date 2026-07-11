@@ -69,12 +69,12 @@
     var regTypes = out.registrations.map(function (r) { return r["Reg Type"]; });
     eq(results, regTypes, ["Pre-Registered", "Pre-Registered", "Pre-Registered"], "all 3 rows are Pre-Registered");
     var alice = out.registrations.filter(function (r) { return r["First Name"] === "Alice"; })[0];
-    eq(results, alice["Member Number"], 100, "Alice keeps her own member #");
+    eq(results, alice["Reg Number"], 100, "Alice keeps her own member #");
     eq(results, alice["Phone"], "(555) 555-0100", "Alice phone formatted");
     eq(results, alice["Gen"], "C6", "Alice gen C6");
     eq(results, alice["In Car Show?"], "Yes", "Alice In Car Show? = Yes");
     var bob = out.registrations.filter(function (r) { return r["First Name"] === "Bob"; })[0];
-    eq(results, bob["Member Number"], 8001, "Bob (non-member) assigned 8001");
+    eq(results, bob["Reg Number"], 8001, "Bob (non-member) assigned 8001");
     var sponsor = out.registrations.filter(function (r) { return r["First Name"] === "Sponsor"; })[0];
     eq(results, sponsor["Status"], "Cancelled", "Sponsor row kept (showCancelled=true)");
     eq(results, Number(sponsor["Total Fee"]), 140, "Sponsor fee = 140");
@@ -112,7 +112,7 @@
       totalFee: "50", status: "Paid", regDate: "7/10/2026 6:00 PM"
     });
     eq(results, member["Reg Type"], "Walk-In Member", "manual: Reg Type preserved");
-    eq(results, member["Member Number"], 42, "manual: typed Member Number kept, coerced to a number");
+    eq(results, member["Reg Number"], 42, "manual: typed Reg Number kept, coerced to a number");
     eq(results, member["#"], 1, "manual: attendee count always 1");
     eq(results, member["Gen"], "C2", "manual: Gen derived from Year (1965 -> C2)");
     eq(results, member["Men's Free LG"], 1, "manual: free shirt bucket bumped from FreeTShirtSize");
@@ -125,7 +125,7 @@
       memberNumber: "", nextAvailableMemberNumber: 2005,
       freeTShirtSize: "", inCarShow: "No", status: "Not Paid"
     });
-    eq(results, nonmember["Member Number"], 2005, "manual: blank Member Number falls back to nextAvailableMemberNumber");
+    eq(results, nonmember["Reg Number"], 2005, "manual: blank Reg Number falls back to nextAvailableMemberNumber");
     eq(results, nonmember["FreeTShirtSize"], "", "manual: no shirt picked -> no bucket bumped");
     var shirtSum = CONFIG.SHIRT_BUCKETS.reduce(function (sum, b) { return sum + (nonmember[b.col] || 0); }, 0);
     eq(results, shirtSum, 0, "manual: all 24 shirt buckets zero when no size picked");
@@ -163,7 +163,7 @@
       eq(results, !!reg, true, "RegistrationSheet exists");
       eq(results, !!sum, true, "SummarySheet exists");
       eq(results, reg.getCell(1, 1).value, out.meta.title, "title row A1");
-      eq(results, reg.getCell(2, 1).value, "Reg Type", "header A2 = Reg Type");
+      eq(results, reg.getCell(2, 1).value, "Reg Number", "header A2 = Reg Number");
       eq(results, reg.actualRowCount, 5, "reg sheet has 5 rows (title + header + 3 fixture rows)");
       eq(results, !!reg.autoFilter, true, "autofilter set");
       eq(results, reg.views[0].state, "frozen", "frozen panes");

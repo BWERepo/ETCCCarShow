@@ -93,11 +93,11 @@
   // viewing the site sees the same live list.
   var SITE_CONFIG = {};
 
-  var NUMERIC_BASE = { "Member Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Reg Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Member Number": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
+  var NARROW_HEADER_COLS = { "Reg Number": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
@@ -174,17 +174,20 @@
       generatedAt: generatedAt || new Date()
     });
     // Exclude rows removed via the Registration tab's checkbox/bulk-delete,
-    // then re-apply any detail-modal field edits — generate() has no notion
-    // of either, so both run against its fresh output every time. Order
-    // matters: both must run before syncSponsorsFromRegistrations() so a
-    // deleted/edited row's Individual Sponsorship is reflected in the sync.
+    // then re-apply any detail-modal field edits, then backfill Spouse First
+    // Name from the member roster — generate() has no notion of any of the
+    // three, so all run against its fresh output every time. Order matters:
+    // all three must run before syncSponsorsFromRegistrations() so a
+    // deleted/edited/backfilled row's Individual Sponsorship (Text) is
+    // reflected in the sync.
     if (state.result.ok) {
       state.result.registrations = state.result.registrations
         .filter(function (r) { return !state.deletedCsvKeys[csvRegKey(r)]; })
         .map(function (r) {
           var patch = state.csvOverrides[csvRegKey(r)];
           return patch ? applyRecordPatch(r, patch) : r;
-        });
+        })
+        .map(fillSpouseFirstNameFromRoster);
     }
     state.sortCol = null; state.sortDir = 1;
     syncSponsorsFromRegistrations();
@@ -199,8 +202,8 @@
   // never creates duplicates, and never overwrites a sponsor an officer has
   // since edited by hand (e.g. added a website).
   //
-  // The id is derived from Reg Date + name, NOT Member Number: non-member
-  // registrants get a Member Number auto-assigned fresh by generate() on
+  // The id is derived from Reg Date + name, NOT Reg Number: non-member
+  // registrants get a Reg Number auto-assigned fresh by generate() on
   // every load (see regenerate() -> LOGIC.generate()), and that assignment
   // depends on row order, so the same numeric value could mean a different
   // person on a re-export. Reg Date (the registration transaction's own
@@ -236,6 +239,27 @@
     LOGIC.applySponsorshipTextDefault(merged);
     return merged;
   }
+
+  // Backfills Spouse First Name from the member roster (members-data.json,
+  // via Developer > Import Members) for a CSV-imported registration whose
+  // own Reg Number (the registrant's real ETCC member number) matches a
+  // roster entry with a spouseFirstName on file — see members-import.php's
+  // comment. Insert-only, same as applySponsorshipTextDefault: never
+  // overwrites an officer's own detail-modal edit. Non-members (an
+  // auto-assigned placeholder Reg Number) never match any roster entry,
+  // which is correct — there's no roster record to backfill from. Routed
+  // through applyRecordPatch so Individual Sponsorship Text's own default
+  // recomputes too, in case a spouse name showing up is what makes "First
+  // and Spouse Last" possible for a sponsor whose text is still blank.
+  function fillSpouseFirstNameFromRoster(rec) {
+    if (rec["Spouse First Name"]) return rec;
+    var num = Number(rec["Reg Number"]);
+    if (!num) return rec;
+    var match = state.members.filter(function (m) { return Number(m.memberNumber) === num; })[0];
+    if (!match || !match.spouseFirstName) return rec;
+    return applyRecordPatch(rec, { "Spouse First Name": match.spouseFirstName });
+  }
+
   function syncSponsorsFromRegistrations() {
     if (!state.result || !state.result.ok) return;
     var byId = {};
@@ -262,7 +286,7 @@
       }
       var cityStateZip = [rec["City"], rec["State"]].filter(Boolean).join(", ") + (rec["Zip"] ? " " + rec["Zip"] : "");
       var sponsorName = (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : "");
-      var isMember = Number(rec["Member Number"]) < CONFIG.firstNonMember;
+      var isMember = Number(rec["Reg Number"]) < CONFIG.firstNonMember;
       upsertSponsor({
         id: id,
         name: sponsorName,
@@ -458,7 +482,7 @@
   // Each pinned cell is `position: sticky`; every one after the first needs
   // its `left` set to the summed rendered width of the pinned cells before
   // it, or they'd all sit at left:0 and overlap/mangle each other.
-  var PINNED_COUNT = 4; // checkbox, Reg Type, Last Name, First Name
+  var PINNED_COUNT = 5; // checkbox, Reg Number, Reg Type, Last Name, First Name
   function pinnedClass(idx) {
     return idx < PINNED_COUNT ? " pinned pin-" + (idx + 1) : "";
   }
@@ -523,7 +547,10 @@
     var registrations = allRegistrations()
       .filter(function (r) { return classifyStatus(r["Status"]) === "paid"; })
       .map(function (r) {
-        var mn = r["Member Number"];
+        // Source field renamed to "Reg Number" internally — the external
+        // API's own JSON field name (memberNumber) is a stable public
+        // contract and stays as-is regardless of this internal rename.
+        var mn = r["Reg Number"];
         return {
           memberNumber: mn === "" || mn == null ? null : Number(mn),
           firstName: r["First Name"] || "",
@@ -663,7 +690,7 @@
   function nextAvailableWalkinNumber() {
     var next = Number(state.appSettings.walkinFirstNonMember) || 2000;
     state.walkins.forEach(function (w) {
-      var n = Number(w["Member Number"]);
+      var n = Number(w["Reg Number"]);
       if (n >= next) next = n + 1;
     });
     return next;
@@ -770,12 +797,12 @@
   // config.js/applySponsorshipTextDefault) — editing here is the only way to
   // set the former, and to override the latter's auto-generated default.
   var EDITABLE_FIELDS = {
-    "Member Number": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Reg Number": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
     "Spouse First Name": 1, "Individual Sponsorship Text": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
   };
-  var INT_EDIT_FIELDS = { "Member Number": 1, "#": 1, "Year": 1 };
+  var INT_EDIT_FIELDS = { "Reg Number": 1, "#": 1, "Year": 1 };
   var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
 
   function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
@@ -897,7 +924,7 @@
 
     var body = el("div", { class: "modal-body" }, [
       el("ul", { class: "meta-list" }, [
-        detailFieldItem(r, "Member Number", fieldEls),
+        detailFieldItem(r, "Reg Number", fieldEls),
         detailFieldItem(r, "Club Name", fieldEls)
       ])
     ]);
@@ -1572,7 +1599,7 @@
 
     // Walk-In Member only: type a name and pick a match from the imported
     // roster (state.members, from Developer > Import Members) to auto-fill
-    // the whole form — Last/First Name, Member Number, and whichever contact
+    // the whole form — Last/First Name, Reg Number, and whichever contact
     // fields that roster entry has — same "Last, First" datalist pattern
     // sponsor-form.php's "ETCC Member Name" field uses. Manual entry still
     // works if the person isn't in the roster, or the last import didn't
@@ -1595,7 +1622,7 @@
       if (!match) return;
       lastNameInput.value = match.lastName || "";
       firstNameInput.value = match.firstName || "";
-      if (match.memberNumber) memberNumberInput.value = match.memberNumber;
+      if (match.memberNumber) regNumberInput.value = match.memberNumber;
       clubNameInput.value = "ETCC"; // every roster entry is, by definition, an ETCC member
       if (match.phone) phoneInput.value = match.phone;
       if (match.email) emailInput.value = match.email;
@@ -1613,20 +1640,20 @@
     // deliberately separate from the CSV import's own nonmember numbers (see
     // nextAvailableWalkinNumber()) and locked, so two walk-ins added back to
     // back never collide.
-    var memberNumberInput = el("input", { type: "text" });
-    row("Member Number", memberNumberInput);
-    function syncMemberNumberField() {
+    var regNumberInput = el("input", { type: "text" });
+    row("Reg Number", regNumberInput);
+    function syncRegNumberField() {
       lookupRow.style.display = regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER ? "" : "none";
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_NONMEMBER) {
-        memberNumberInput.value = String(nextAvailableWalkinNumber());
-        memberNumberInput.setAttribute("disabled", "disabled");
+        regNumberInput.value = String(nextAvailableWalkinNumber());
+        regNumberInput.setAttribute("disabled", "disabled");
       } else {
-        memberNumberInput.value = "";
-        memberNumberInput.removeAttribute("disabled");
+        regNumberInput.value = "";
+        regNumberInput.removeAttribute("disabled");
       }
     }
-    regTypeSel.addEventListener("change", syncMemberNumberField);
-    syncMemberNumberField();
+    regTypeSel.addEventListener("change", syncRegNumberField);
+    syncRegNumberField();
 
     var clubNameInput = el("input", { type: "text" });
     row("Club Name", clubNameInput);
@@ -1682,8 +1709,8 @@
     saveBtn.addEventListener("click", function () {
       var lastName = lastNameInput.value.trim();
       if (!lastName) { errorMsg.textContent = "Last Name is required."; return; }
-      if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !memberNumberInput.value.trim()) {
-        errorMsg.textContent = "Member Number is required for a Walk-In Member.";
+      if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !regNumberInput.value.trim()) {
+        errorMsg.textContent = "Reg Number is required for a Walk-In Member.";
         return;
       }
       var record = LOGIC.buildManualRegistration({
@@ -1691,7 +1718,7 @@
         regType: regTypeSel.value,
         lastName: lastName,
         firstName: firstNameInput.value.trim(),
-        memberNumber: memberNumberInput.value.trim(),
+        memberNumber: regNumberInput.value.trim(),
         nextAvailableMemberNumber: nextAvailableWalkinNumber(),
         clubName: clubNameInput.value.trim(),
         phone: phoneInput.value.trim(),

@@ -5,12 +5,17 @@
 // contains member PII, blocked from direct HTTP access by .htaccess).
 // sponsor-form.php reads that file to populate the ETCC Member Name
 // datalist/autocomplete and to validate submissions against it. If the CSV
-// also has a member number, contact, and/or vehicle columns (Member Number,
-// Phone, Email, Address, City, State, Zip, Year, Model, Color — same
-// normalized, case/space/underscore-insensitive matching as last/first name;
-// whichever of these are present are captured, the rest are left blank),
-// they're captured too; the Registration tab's Add Registration form uses
-// them to auto-fill a Walk-In Member's whole form by looking up their name.
+// also has a member number, contact, vehicle, and/or spouse-first-name
+// columns (Member Number, Phone, Email, Address, City, State, Zip, Year,
+// Model, Color, Spouse First Name — same normalized, case/space/underscore-
+// insensitive matching as last/first name; whichever of these are present
+// are captured, the rest are left blank), they're captured too; the
+// Registration tab's Add Registration form uses them to auto-fill a Walk-In
+// Member's whole form by looking up their name, and regenerate() (app.js)
+// uses spouseFirstName to backfill a CSV-imported registration's own blank
+// Spouse First Name column when its Reg Number matches a roster entry —
+// ClubExpress's own export has no spouse column at all, so this roster
+// cross-reference is the only automatic source for that field.
 //
 // Gated by the same PHP session as index.php — no separate password prompt,
 // but you must already be logged into the app to reach this page.
@@ -49,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['members_csv'])) {
             // these differently.
             $optionalIdx = ['memberNumber' => null, 'phone' => null, 'email' => null,
                 'address' => null, 'city' => null, 'state' => null, 'zip' => null,
-                'year' => null, 'model' => null, 'color' => null];
+                'year' => null, 'model' => null, 'color' => null, 'spouseFirstName' => null];
             // Some exports (confirmed: this club's member database) prefix contact
             // columns with "primary_" (e.g. "primary_email") — covered alongside the
             // unprefixed names for every contact field, not just email, since that
@@ -64,7 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['members_csv'])) {
                 'zip' => ['zip', 'zipcode', 'postalcode', 'primaryzip', 'primaryzipcode', 'primarypostalcode'],
                 'year' => ['year', 'corvetteyear', 'modelyear'],
                 'model' => ['model', 'corvettemodel'],
-                'color' => ['color', 'corvettecolor']
+                'color' => ['color', 'corvettecolor'],
+                'spouseFirstName' => ['spousefirstname', 'spouse', 'spousename']
             ];
             foreach ($header as $i => $h) {
                 $h = str_replace([' ', '_', '-', '.'], '', strtolower(trim($h)));

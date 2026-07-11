@@ -14,6 +14,7 @@
     sortDir: 1,
     search: "",
     statusFilter: { paid: true, notpaid: false, cancelled: false, empty: false },
+    inCarShowFilter: false, // Registration tab toolbar's "In Car Show" checkbox — when checked, only rows with In Car Show? = Yes are shown
     tab: "sum",
     detailRow: null,  // registration row currently shown in the detail modal, or null
     zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
@@ -55,7 +56,9 @@
       walkInCarShowFee: 50,
       walkInNonCarShowFee: 0,
       preregistrationFee: 40,
-      externalApiKey: ""
+      externalApiKey: "",
+      windowCardPdf: "",
+      tshirtVendorEmail: ""
     },
     appSettingsSaving: false,
     appSettingsError: null,   // set when a Settings save fails; shown in the Settings modal
@@ -66,6 +69,9 @@
     apiTestResult: null,      // { status, ok, bodyText } | null
     apiRotating: false,
     apiRotateError: null,
+    windowCardUploading: false,
+    windowCardError: null,
+    windowCardPdfVersion: 0, // bumped on every successful upload, for cache-busting the fetch() that fills it
     deletedCsvKeys: {},       // csvRegKey(rec) -> true, for CSV-derived rows removed via the
                                // Registration tab's checkbox/bulk-delete — filled by
                                // ingestDeletedRegistrations(); excluded from state.result.registrations
@@ -93,12 +99,12 @@
   // viewing the site sees the same live list.
   var SITE_CONFIG = {};
 
-  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Ind. Spon.": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Ind. Spon.": 1, "In Car Show?": 1 };
-  var CURRENCY_COLS = { "Total Fee": 1, "Ind. Spon.": 1 };
+  var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
+  var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
   function isNumericCol(c) { return NUMERIC_BASE[c] || isShirtCol(c); }
@@ -273,20 +279,25 @@
     var byId = {};
     state.sponsors.forEach(function (s) { byId[s.id] = s; });
     state.result.registrations.forEach(function (rec) {
-      var fee = rec["Ind. Spon."];
+      var fee = rec["Individual Sponsorship"];
       if (fee === "" || fee == null || Number(fee) <= 0) return;
       var id = csvSponsorId(rec);
       var existing = byId[id];
       if (existing) {
-        // Backfill Reg Date on sponsors synced before that column existed.
-        // Safe to patch unconditionally here — unlike every other field,
-        // which stays insert-only so an officer's hand-edit (e.g. adding a
-        // website) is never overwritten — because Reg Date is derived,
-        // system-set data that's never edited by hand.
-        if (!existing.regDate && rec["Reg Date"]) {
+        // Backfill Reg Date / Ind. Spon. Text on sponsors synced before those
+        // columns existed. Reg Date is safe to patch unconditionally — it's
+        // derived, system-set data nobody hand-edits. Ind. Spon. Text is only
+        // backfilled the one time it's missing; afterward it's insert-only
+        // like every other copied field (phone, email, Member, ...), so an
+        // officer's own edit to a sponsor's displayed acknowledgment text
+        // survives future re-syncs.
+        var patch = {};
+        if (!existing.regDate && rec["Reg Date"]) patch.regDate = rec["Reg Date"];
+        if (!existing.individualSponsorshipText && rec["Ind. Spon. Text"]) patch.individualSponsorshipText = rec["Ind. Spon. Text"];
+        if (Object.keys(patch).length) {
           var patched = {};
           Object.keys(existing).forEach(function (k) { patched[k] = existing[k]; });
-          patched.regDate = rec["Reg Date"];
+          Object.keys(patch).forEach(function (k) { patched[k] = patch[k]; });
           byId[id] = patched;
           upsertSponsor(patched);
         }
@@ -306,7 +317,8 @@
         website: "",
         etccMemberName: isMember ? sponsorName : "",
         sponsorType: "individual",
-        shirtSize: rec._sponsorShirtSize || ""
+        shirtSize: rec._sponsorShirtSize || "",
+        individualSponsorshipText: rec["Ind. Spon. Text"] || ""
       });
     });
   }
@@ -365,19 +377,24 @@
     var search = el("input", { type: "search", placeholder: "Search name, club, email…", value: state.search });
     search.addEventListener("input", function () { state.search = search.value; renderRegBody(); });
 
+    var inCarShowCb = el("input", { type: "checkbox" }); inCarShowCb.checked = state.inCarShowFilter;
+    inCarShowCb.addEventListener("change", function () { state.inCarShowFilter = inCarShowCb.checked; renderRegBody(); });
     var statusGroup = el("span", { class: "statusgroup" }, [
       el("span", { class: "hint" }, ["Status:"])
     ].concat(STATUS_BUCKETS.map(function (b) {
       var cb = el("input", { type: "checkbox" }); cb.checked = state.statusFilter[b.key];
       cb.addEventListener("change", function () { state.statusFilter[b.key] = cb.checked; renderRegBody(); });
       return el("label", {}, [cb, document.createTextNode(" " + b.label)]);
-    })));
+    })).concat([el("label", {}, [inCarShowCb, document.createTextNode(" In Car Show")])]));
 
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printRegistration);
 
     var delBtn = el("button", { class: "btn", id: "regDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
     delBtn.addEventListener("click", openDeleteRegSelectedConfirm);
+
+    var printCardsBtn = el("button", { class: "btn", id: "regPrintCardsBtn", disabled: "disabled" }, ["🪟 Print Window Cards"]);
+    printCardsBtn.addEventListener("click", printSelectedWindowCards);
 
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Registration"]);
     addBtn.addEventListener("click", openAddRegistration);
@@ -399,7 +416,7 @@
       el("span", { class: "spacer" }),
       zoomGroup
     ];
-    kids.push(prn, delBtn, addBtn);
+    kids.push(prn, printCardsBtn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
   function buildSummaryToolbar() {
@@ -736,6 +753,7 @@
     var q = state.search.trim().toLowerCase();
     return sortedRows().filter(function (r) {
       if (!state.statusFilter[classifyStatus(r["Status"])]) return false;
+      if (state.inCarShowFilter && String(r["In Car Show?"]).trim().toLowerCase() !== "yes") return false;
       if (!q) return true;
       return cols.some(function (c) {
         var v = c === SHIRTS_COL ? shirtSummaryText(r) : r[c];
@@ -791,13 +809,24 @@
       delBtn.textContent = "🗑 Delete" + (n ? " (" + n + ")" : "");
       if (n) delBtn.removeAttribute("disabled"); else delBtn.setAttribute("disabled", "disabled");
     }
+    var printCardsBtn = $("#regPrintCardsBtn");
+    if (printCardsBtn) {
+      var byKey = {};
+      allRegistrations().forEach(function (r) { byKey[rowKey(r)] = r; });
+      var printable = selectedRegKeys().filter(function (key) {
+        var r = byKey[key];
+        return r && String(r["In Car Show?"]).trim().toLowerCase() === "yes";
+      }).length;
+      printCardsBtn.textContent = "🪟 Print Window Cards" + (printable ? " (" + printable + ")" : "");
+      if (printable) printCardsBtn.removeAttribute("disabled"); else printCardsBtn.setAttribute("disabled", "disabled");
+    }
   }
 
   // ---------- detail modal ----------
   // Click any row to see every field for that one registration without scrolling —
   // grouped into readable sections instead of the table's 40+ side-by-side columns.
   var DETAIL_SECTIONS = [
-    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Ind. Spon.", "Spouse First Name", "Ind. Spon. Text", "#"] },
+    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "Spouse First Name", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
     { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] }
   ];
@@ -805,18 +834,21 @@
   // values, never hand-edited. Gen recomputes automatically if Year changes
   // (see applyRecordPatch). Shirts (a separate section below, not part of
   // DETAIL_SECTIONS) stay read-only too — a 24-bucket editor is a separate,
-  // bigger task than these plain text/select fields. Spouse First Name and
-  // Individual Sponsorship Text have no CSV source at all (see
-  // config.js/applySponsorshipTextDefault) — editing here is the only way to
-  // set the former, and to override the latter's auto-generated default.
+  // bigger task than these plain text/select fields. Spouse First Name has
+  // no CSV source at all (see config.js) — editing here is the only way to
+  // set it. Ind. Spon. Text isn't shown/editable here anymore (removed from
+  // the Registration tab/detail modal) — it's still computed on every record
+  // (see applySponsorshipTextDefault in logic.js) and feeds the Sponsors
+  // tab's own Ind. Spon. Text column at sync time, just not a
+  // baseColumnOrder column here.
   var EDITABLE_FIELDS = {
-    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Ind. Spon.": 1,
-    "Spouse First Name": 1, "Ind. Spon. Text": 1, "#": 1,
+    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Spouse First Name": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
   };
   var INT_EDIT_FIELDS = { "Reg #": 1, "#": 1, "Year": 1 };
-  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Ind. Spon.": 1 };
+  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
 
   function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
   function closeDetail() { state.detailRow = null; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
@@ -924,6 +956,8 @@
     nextBtn.addEventListener("click", function () { stepDetail(1); });
     var editBtn = el("button", { class: "btn" }, ["✎ Edit"]);
     editBtn.addEventListener("click", openDetailEdit);
+    var printCardBtn = el("button", { class: "btn" }, ["🪟 Print Window Card"]);
+    printCardBtn.addEventListener("click", function () { printWindowCard(r); });
 
     var name = (r["Last Name"] || "") + (r["First Name"] ? ", " + r["First Name"] : "");
     var headKids = [
@@ -931,7 +965,7 @@
       el("span", { class: "count", text: i > -1 ? (i + 1) + " of " + list.length : "" }),
       prevBtn, nextBtn
     ];
-    if (!editing) headKids.push(editBtn);
+    if (!editing) headKids.push(editBtn, printCardBtn);
     headKids.push(closeBtn);
     var head = el("div", { class: "modal-head" }, headKids);
 
@@ -974,7 +1008,15 @@
   // dataset — so this tab always reflects "what I've selected over there".
   function buildSummaryView() {
     var s = LOGIC.summarizeRecords(visibleRows(), CONFIG);
-    var paidRegistrations = visibleRows().filter(function (r) { return classifyStatus(r["Status"]) === "paid"; }).length;
+    // Funds = registrations' own Total Fee (s.funds, includes each
+    // registrant's own Individual Sponsorship add-on fee, since that's part
+    // of their registration) + Premier/Corporate sponsor fees, which are
+    // standalone businesses with no registration of their own to carry a
+    // Total Fee. Individual sponsors are deliberately excluded here — their
+    // $100 is already counted once via the registrant's own Total Fee, so
+    // adding sponsorStatsByType("individual").total too would double it.
+    var sponsorFunds = sponsorStatsByType("premier").total + sponsorStatsByType("corporate").total;
+    var totalFunds = Number(s.funds) + sponsorFunds;
     var m = state.result.meta, C = CONFIG;
     var container = el("div", { class: "view" });
 
@@ -993,8 +1035,7 @@
     // totals cards
     container.appendChild(el("div", { class: "cards" }, [
       card("Registrations", s.registrations),
-      card("Paid Registrations", paidRegistrations),
-      card("Funds", "$" + Number(s.funds).toLocaleString(undefined, { minimumFractionDigits: 0 }))
+      card("Funds", "$" + totalFunds.toLocaleString(undefined, { minimumFractionDigits: 0 }))
     ]));
 
     // sponsor cards (independent of the loaded CSVs — reads state.sponsors directly)
@@ -1130,8 +1171,9 @@
     { key: "email", label: "Email" },
     { key: "address", label: "Address" },
     { key: "website", label: "Website" },
-    { key: "etccMemberName", label: "ETCC Member Name" },
+    { key: "etccMemberName", label: "Member" },
     { key: "sponsorType", label: "Sponsor Type" },
+    { key: "individualSponsorshipText", label: "Ind. Spon. Text" },
     { key: "shirtSize", label: "T-Shirt" }
   ];
   function sponsorTypeLabel(key) {
@@ -1390,9 +1432,11 @@
     // Adding a sponsor goes through the same public "Become a Car Show
     // Sponsor" form (sponsor-form.php) anyone else uses, instead of the
     // in-app modal — keeps one path for entries to land in
-    // sponsor-submissions.json.
+    // sponsor-submissions.json. The from=app marker tells that page a
+    // successful submission came from inside this app (vs. a link on
+    // ClubExpress/the club's main site) — see its post-submit redirect.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
-    addBtn.addEventListener("click", function () { window.open("sponsor-form.php", "_blank", "noopener"); });
+    addBtn.addEventListener("click", function () { window.open("sponsor-form.php?from=app", "_blank", "noopener"); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
@@ -1466,12 +1510,14 @@
     { key: "email", label: "Email" },
     { key: "address", label: "Address" },
     { key: "website", label: "Website" },
-    { key: "etccMemberName", label: "ETCC Member Name" }
+    { key: "etccMemberName", label: "Member" },
+    { key: "individualSponsorshipText", label: "Ind. Spon. Text" }
   ];
   function blankSponsor() {
     return {
       id: null, name: "", contactPerson: "", phone: "", email: "", address: "", website: "",
-      etccMemberName: "", sponsorType: CONFIG.SPONSOR_TYPES[0].key, shirtSize: ""
+      etccMemberName: "", sponsorType: CONFIG.SPONSOR_TYPES[0].key, shirtSize: "",
+      individualSponsorshipText: ""
     };
   }
   function openSponsorForm(sponsor) {
@@ -1545,6 +1591,7 @@
         address: fieldEls.address.value.trim(),
         website: fieldEls.website.value.trim(),
         etccMemberName: fieldEls.etccMemberName.value.trim(),
+        individualSponsorshipText: fieldEls.individualSponsorshipText.value.trim(),
         sponsorType: typeSel.value,
         shirtSize: shirtSel.value
       };
@@ -1775,6 +1822,129 @@
     window.print();
   }
 
+  // Fills one copy of the uploaded Car Show Window Card PDF template
+  // (Developer > Settings) with a single registrant's Owner/CarNumber/Year/
+  // Model/Generation AcroForm fields, then flattens it (bakes the field
+  // values into the page content, removing the interactive form) so it
+  // copies cleanly into the merged multi-card document below without any
+  // field-name collisions between cards. A field missing from the template
+  // (e.g. an officer uploads a template that dropped one) is silently
+  // skipped rather than treated as an error — same tolerant-optional-field
+  // philosophy as members-import.php's column detection.
+  //
+  // Text is rendered bold and at a fixed larger size (not the template's own
+  // default appearance) — setFontSize() per field plus a single
+  // form.updateFieldAppearances(boldFont) call (regenerates every field's
+  // appearance stream using that font) right before flatten().
+  var WINDOW_CARD_FIELD_FONT_SIZE = 28;
+  function fillOneWindowCard(templateBytes, r) {
+    var PDFLib = window.PDFLib;
+    return PDFLib.PDFDocument.load(templateBytes).then(function (doc) {
+      return doc.embedFont(PDFLib.StandardFonts.HelveticaBold).then(function (boldFont) {
+        var form = doc.getForm();
+        var name = (r["First Name"] || "") + (r["Last Name"] ? " " + r["Last Name"] : "");
+        var values = {
+          Owner: name,
+          CarNumber: String(r["Reg #"] || ""),
+          Year: String(r["Year"] || ""),
+          Model: String(r["Model"] || ""),
+          Generation: String(r["Gen"] || "")
+        };
+        Object.keys(values).forEach(function (key) {
+          try {
+            var field = form.getTextField(key);
+            field.setText(values[key]);
+            field.setFontSize(WINDOW_CARD_FIELD_FONT_SIZE);
+          } catch (e) { /* field not in this template */ }
+        });
+        try {
+          form.updateFieldAppearances(boldFont);
+          form.flatten();
+        } catch (e) { /* leave fields unflattened rather than fail the whole print */ }
+        return doc;
+      });
+    });
+  }
+
+  // One registrant's window card — the uploaded Car Show Window Card PDF
+  // template (Developer > Settings), filled with that registrant's fields
+  // via pdf-lib (vendored client-side; see fillOneWindowCard above). Each
+  // filled card is embedded (not just copied) onto its own fresh 8.5x11in
+  // landscape output page, scaled down and centered so it occupies at most
+  // half that page's width and half its height (whichever is more
+  // constraining, so the template's own aspect ratio is preserved rather
+  // than stretched) — the template's native page size is a print-shop
+  // design canvas much larger than a normal sheet, not meant to be printed
+  // at 1:1. One output page per row in `list`, merged into a single
+  // multi-page PDF and opened in a new tab (the browser's own PDF viewer
+  // handles printing from there — more reliable across browsers than trying
+  // to script window.print() against content this app doesn't control the
+  // rendering of). Used both by the detail modal's single-row button
+  // (printWindowCard, a 1-element wrapper below) and the Registration tab's
+  // bulk "Print Window Cards" button (printSelectedWindowCards).
+  function printWindowCards(list) {
+    if (!list.length) return;
+    var pdfName = state.appSettings.windowCardPdf;
+    if (!pdfName) {
+      alert("No Car Show Window Card template uploaded yet — upload one in Developer > Settings first.");
+      return;
+    }
+    var PDFLib = window.PDFLib;
+    if (!PDFLib) {
+      alert("PDF library failed to load — try reloading the page.");
+      return;
+    }
+    var SHEET_W = 792; // 11in landscape US Letter, in PDF points (72/in)
+    var SHEET_H = 612; // 8.5in
+    fetch(pdfName + "?v=" + state.windowCardPdfVersion)
+      .then(function (res) {
+        if (!res.ok) throw new Error("Could not load the window card template.");
+        return res.arrayBuffer();
+      })
+      .then(function (templateBytes) {
+        return PDFLib.PDFDocument.create().then(function (outDoc) {
+          var chain = Promise.resolve();
+          list.forEach(function (r) {
+            chain = chain
+              .then(function () { return fillOneWindowCard(templateBytes, r); })
+              .then(function (filledDoc) {
+                return outDoc.embedPage(filledDoc.getPages()[0]).then(function (embedded) {
+                  var scale = Math.min((SHEET_W * 0.5) / embedded.width, (SHEET_H * 0.5) / embedded.height);
+                  var w = embedded.width * scale;
+                  var h = embedded.height * scale;
+                  var page = outDoc.addPage([SHEET_W, SHEET_H]);
+                  page.drawPage(embedded, { x: (SHEET_W - w) / 2, y: (SHEET_H - h) / 2, width: w, height: h });
+                });
+              });
+          });
+          return chain.then(function () { return outDoc.save(); });
+        });
+      })
+      .then(function (bytes) {
+        var blob = new Blob([bytes], { type: "application/pdf" });
+        window.open(URL.createObjectURL(blob), "_blank");
+      })
+      .catch(function (err) {
+        alert("Could not generate the window card PDF: " + (err && err.message || err));
+      });
+  }
+  function printWindowCard(r) { printWindowCards([r]); }
+
+  // Registration tab's bulk "Print Window Cards" button — only the checked
+  // rows whose In Car Show? is exactly "Yes" actually print; a selected row
+  // with any other value is silently skipped (see the toolbar button's own
+  // count, which already only counts qualifying rows, so nothing here comes
+  // as a surprise at print time).
+  function printSelectedWindowCards() {
+    var byKey = {};
+    allRegistrations().forEach(function (r) { byKey[rowKey(r)] = r; });
+    var toPrint = selectedRegKeys()
+      .map(function (key) { return byKey[key]; })
+      .filter(function (r) { return r && String(r["In Car Show?"]).trim().toLowerCase() === "yes"; });
+    if (!toPrint.length) return;
+    printWindowCards(toPrint);
+  }
+
   function fmtDate(d) {
     d = d instanceof Date ? d : new Date(d);
     function p(n) { return (n < 10 ? "0" : "") + n; }
@@ -1923,6 +2093,38 @@
     });
   }
 
+  // Multipart upload (not JSON like every other settings save, since it's a
+  // real file) for the Car Show Window Card fillable PDF template — see
+  // window-card-pdf.php, which saves it to disk and updates
+  // app-settings.json's windowCardPdf key server-side. Same session-cookie
+  // auth as every other same-origin write in this app (no password field
+  // needed — carshow_authed() checks the session first).
+  function uploadWindowCardPdf(file) {
+    if (!SITE_CONFIG.windowCardPdfApiUrl) return;
+    state.windowCardUploading = true;
+    state.windowCardError = null;
+    renderSettingsModal();
+    var body = new FormData();
+    body.append("pdf", file);
+    fetch(SITE_CONFIG.windowCardPdfApiUrl, { method: "POST", body: body })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (r) {
+        state.windowCardUploading = false;
+        if (r.ok && r.data && r.data.ok) {
+          state.appSettings.windowCardPdf = r.data.windowCardPdf;
+          state.windowCardPdfVersion++;
+        } else {
+          state.windowCardError = (r.data && r.data.error) || "Upload failed.";
+        }
+        renderSettingsModal();
+      })
+      .catch(function () {
+        state.windowCardUploading = false;
+        state.windowCardError = "Could not upload — check your connection and try again.";
+        renderSettingsModal();
+      });
+  }
+
   // Runs the same fixture-based assertions as test/run-tests.js, entirely in
   // this tab (src/regression-tests.js + embedded fixture CSVs, both baked
   // into the build) — it never touches whatever CSVs the user currently has
@@ -1983,6 +2185,32 @@
       el("span", { class: "form-label", text: "First NonMember Number" }), firstNonMemberInput
     ]));
 
+    // ---- Car Show Window Card ----
+    body.appendChild(el("h4", { text: "Car Show Window Card" }));
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
+      ["Fillable PDF template for printed window cards (Registration tab's detail modal → " +
+       "🪟 Print Window Card). Each registrant's Name, Reg #, Year, Model, and Generation are " +
+       "filled into the template's Owner/CarNumber/Year/Model/Generation form fields."]));
+    if (state.appSettings.windowCardPdf) {
+      var windowCardLink = el("a", {
+        href: state.appSettings.windowCardPdf + "?v=" + state.windowCardPdfVersion,
+        target: "_blank", rel: "noopener", text: "View current template (" + state.appSettings.windowCardPdf + ")"
+      });
+      body.appendChild(el("div", { style: "margin:6px 0" }, [windowCardLink]));
+    } else {
+      body.appendChild(el("div", { class: "hint" }, ["No template uploaded yet."]));
+    }
+    var windowCardFileInput = el("input", { type: "file", accept: "application/pdf" });
+    var windowCardUploadBtn = el("button", { class: "btn" }, [state.windowCardUploading ? "Uploading…" : "Upload"]);
+    if (state.windowCardUploading) windowCardUploadBtn.setAttribute("disabled", "disabled");
+    windowCardUploadBtn.addEventListener("click", function () {
+      var f = windowCardFileInput.files && windowCardFileInput.files[0];
+      if (!f) { state.windowCardError = "Choose a PDF first."; renderSettingsModal(); return; }
+      uploadWindowCardPdf(f);
+    });
+    body.appendChild(el("div", { class: "form-row" }, [windowCardFileInput, windowCardUploadBtn]));
+    if (state.windowCardError) body.appendChild(el("div", { class: "form-error" }, [state.windowCardError]));
+
     // ---- Registration Fees ----
     body.appendChild(el("h4", { text: "Registration Fees" }));
     body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
@@ -1995,6 +2223,13 @@
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Non Car Show Registration" }), nonCarShowFeeInput]));
     var preregFeeInput = el("input", { type: "text", value: String(state.appSettings.preregistrationFee) });
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Preregistration" }), preregFeeInput]));
+
+    // ---- T-Shirt Vendor ----
+    body.appendChild(el("h4", { text: "T-Shirt Vendor" }));
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
+      ["Reference contact only — not used to send anything automatically anywhere in the app."]));
+    var tshirtVendorEmailInput = el("input", { type: "text", value: state.appSettings.tshirtVendorEmail || "" });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Vendor Email" }), tshirtVendorEmailInput]));
 
     var settingsSaveBtn = el("button", { class: "btn primary" }, [state.appSettingsSaving ? "Saving…" : "Save"]);
     if (state.appSettingsSaving) settingsSaveBtn.setAttribute("disabled", "disabled");
@@ -2016,6 +2251,13 @@
         }
         patch[key] = n;
       }
+      var vendorEmail = tshirtVendorEmailInput.value.trim();
+      if (vendorEmail && vendorEmail.indexOf("@") === -1) {
+        state.appSettingsError = "Vendor Email doesn't look like a valid email address.";
+        renderSettingsModal();
+        return;
+      }
+      patch.tshirtVendorEmail = vendorEmail;
       saveAppSettings(patch);
     });
     var settingsActions = [settingsSaveBtn];
@@ -2385,6 +2627,11 @@
     // at module-load time, since init() is what's guaranteed to run after
     // every inline script in the document.
     SITE_CONFIG = window.__carshowSite || {};
+    // sponsor-form.php redirects here with #sponsors after a successful
+    // submission (opened in its own tab from the Sponsors tab's "+ Add
+    // Sponsor" button) — land on a fresh Sponsors tab, already showing the
+    // new submission, instead of the default Summary tab.
+    if (location.hash === "#sponsors") state.tab = "sponsors";
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }

@@ -33,6 +33,7 @@ var css = read("src/styles.css");
 var scripts = [
   read("vendor/papaparse.min.js"),
   read("vendor/exceljs.min.js"),
+  read("vendor/pdf-lib.min.js"),
   read("src/config.js"),
   read("src/logic.js"),
   read("src/excel.js"),

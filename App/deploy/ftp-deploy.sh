@@ -81,6 +81,7 @@ upload "deleted-registrations.php"
 upload "registration-overrides.php"
 upload "paid-registrations-cache.php"
 upload "paid-registrations-api.php"
+upload "window-card-pdf.php"
 upload "registrations-upload.php"
 upload "members-import.php"
 upload "registrations-import.php"
@@ -101,9 +102,10 @@ upload ".htaccess"
 #   curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T deploy/secrets.php "$BASE/secrets.php"
 # sponsor-submissions.json, walkin-registrations.json, app-settings.json,
 # deleted-registrations.json, registration-overrides.json, registrations-data.json,
-# members-data.json, password-reset.json, and paid-registrations-cache.json are
-# likewise deliberately never uploaded here — they're live, server-accumulated
-# data with no meaningful
+# members-data.json, password-reset.json, paid-registrations-cache.json, and
+# window-card.pdf (the fillable template currently uploaded, via
+# window-card-pdf.php) are likewise deliberately never uploaded here —
+# they're live, server-accumulated data with no meaningful
 # local copy to overwrite them with. See upload-registrations.js, members-import.php, and the Sponsors/Registration
 # tabs (including its Developer > Settings) for how those actually get
 # refreshed.

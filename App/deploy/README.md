@@ -144,7 +144,14 @@ the Sponsors tab reads/writes when viewed on the hosted site — there's exactly
 sponsor list, not a per-officer local cache that needs importing.
 
 - **Sponsor form** (`sponsor-form.php`, gated by the same shared password as
-  `index.php`) — appends a new sponsor.
+  `index.php`) — appends a new sponsor. Where both Submit and Cancel send them
+  afterward depends on a hidden `from` field: the Sponsors tab's "+ Add Sponsor" button
+  opens this form with `?from=app`, and from there both a successful submit and Cancel
+  redirect back to `index.php#sponsors` (a fresh page load — Submit's landing on a
+  Sponsors tab that already shows the new entry). Reached any other way (e.g. a link on
+  ClubExpress/the club's main site, with no `from=app`) both instead redirect to
+  `https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652`, since an outside
+  sponsor/business has no reason to land inside the internal app either way.
 - **Hosted Sponsors tab** — on page load, `index.php` injects the current list via
   `ingestSponsors()`; every add/edit/delete in the tab pushes immediately to
   `sponsor-submissions.php` (session-authenticated, no extra password prompt needed
@@ -208,10 +215,9 @@ can't be silently discarded by an accidental click or arrow key. Applies to **ev
 row, CSV-imported or Walk-In, per the user's explicit choice (matching the bulk-delete
 scope decision):
 
-- **Editable:** Reg #, Club Name, Status, Total Fee, Ind. Spon. (the app's own column
-  name for the "Individual Sponsorship" ClubExpress activity's fee — see below),
-  Spouse First Name, Ind. Spon. Text, #, Phone, Email, Address, City, State,
-  Zip, Year, Model, Color, In Car Show?.
+- **Editable:** Reg #, Club Name, Status, Total Fee, Individual Sponsorship,
+  Spouse First Name, #, Phone, Email, Address, City, State, Zip, Year, Model, Color,
+  In Car Show?. (Ind. Spon. Text is **not** shown/editable here — see below.)
 - **Not editable:** Reg Date, Reg Type, Gen (system/derived — Gen auto-recomputes from
   Year if Year changes, see `applyRecordPatch()`), and the Shirts section (a 24-bucket
   editor is a separate, bigger task).
@@ -235,26 +241,26 @@ scope decision):
 
 ## Ind. Spon. Text (and Spouse First Name)
 
-Two columns in `baseColumnOrder` (`config.js`) with **no ClubExpress CSV source at
-all** — confirmed by checking a real, current registration export's headers, not
-guessed. Both start blank on every fresh CSV row.
+Spouse First Name is a `baseColumnOrder` (`config.js`) column with **no ClubExpress
+CSV source at all** — confirmed by checking a real, current registration export's
+headers, not guessed. Starts blank on every fresh CSV row; only settable by hand via
+the detail modal's Edit mode.
 
-- **Ind. Spon. Text** (the app's own shortened name for what was originally called
-  "Individual Sponsorship Text") — sits right after **Ind. Spon.** in the Registration
-  table/Excel export. `Ind. Spon.` is this app's own (shortened) column name for the fee
-  from ClubExpress's real "Individual Sponsorship" activity — `config.js` keeps that
-  distinction explicit: `sponsorshipActivityTitle` stays the literal ClubExpress activity
-  name (must match their export verbatim), while `individualSponsorshipCol` is the
-  separate, renameable column/data-key this app stores and displays that fee under.
-  Auto-defaults to `"First [and Spouse First] Last"` (e.g. "John Smith" or "John and Jane
-  Smith") the moment Ind. Spon. is > 0 **and** the Text field is still blank — see
-  `logic.js`'s `applySponsorshipTextDefault()`, called from `generate()` (fresh CSV rows),
-  `buildManualRegistration()` (fresh Walk-Ins, currently a no-op since that form has no
-  Ind. Spon. field), and app.js's `applyRecordPatch()` (every edit/override
-  re-application, so an edit that pushes Ind. Spon. above 0 — or clears the Text field
-  back to blank — re-triggers the default). Insert-only: never overwrites a value that's
-  already there, whether from a prior default or an officer's hand-edit via the detail
-  modal.
+**Ind. Spon. Text is deliberately NOT a `baseColumnOrder` column** — removed from the
+Registration tab/detail modal/Excel export at the user's request, since it's no longer
+shown there. It's still computed on every record, though: `logic.js`'s
+`sponsorshipDefaultText()`/`applySponsorshipTextDefault()` auto-defaults it to
+`"First [and Spouse First] Last"` (e.g. "John Smith" or "John and Jane Smith") the
+moment Individual Sponsorship is > 0 and it's still blank, and `generate()` also sets
+it directly from the CSV's `CSSponsorName` activity column when present (see
+`config.js`'s `sponsorNameColumn`). `blankRecord()` initializes it to `""` on every
+record even though it's not in `columns`, so it behaves consistently whether or not
+anything ends up setting it. The only consumer left is
+`syncSponsorsFromRegistrations()` (`app.js`), which reads a registration's
+`rec["Ind. Spon. Text"]` once to seed the Sponsors tab's own **Ind. Spon. Text**
+column (a real, editable, insert-only field on the sponsor record from then on — see
+"Sponsors: one always-current list" above) — it is otherwise invisible anywhere in
+the app.
 - **Spouse First Name** — purely a manual-entry field (via the detail modal's Edit mode);
   nothing currently populates it automatically. Exists so an officer can supply a
   sponsor's plus-one name, making the "and Spouse" branch above actually fire.
@@ -323,6 +329,64 @@ are its first two sections, regression tests are the third). Current settings:
   this setting.
 - **externalApiKey** — not an editable form field here; see "Paid Registrations API"
   below. Stored in the same `app-settings.json`, generated automatically.
+- **Car Show Window Card** (`windowCardPdf`) — the fillable PDF template used when printing
+  a registrant's window card; see "Car Show Window Card printing" below.
+- **T-Shirt Vendor → Vendor Email** (`tshirtVendorEmail`) — reference contact only, not
+  used to send anything automatically anywhere in the app. Light validation only
+  requires an `@` if non-blank.
+
+## Car Show Window Card printing
+
+Officers can print a per-registrant "window card" (a small card meant for a car's
+dashboard/windshield) either one at a time from the Registration tab's detail modal, or
+in bulk for a checked selection from the Registration tab's own toolbar. This fills a
+real fillable PDF template client-side via the vendored `pdf-lib` library
+(`vendor/pdf-lib.min.js`, inlined into the build by `build.js` same as `exceljs`/
+`papaparse` — exposes a `window.PDFLib` global), rather than drawing text over an
+uploaded background image in HTML/CSS as an earlier version of this feature did.
+
+- **Uploading the template** — Developer → ⚙ Settings → "Car Show Window Card" has a
+  file picker (PDF only, 10 MB max) + Upload button, plus a "View current template" link
+  when one's already uploaded. Unlike every other setting here (plain JSON values), this
+  is a real file, so it's a separate multipart upload to its own endpoint,
+  `window-card-pdf.php` — not folded into `app-settings.php`'s JSON-body `save` action.
+  That endpoint validates the upload is actually `application/pdf` (via `finfo`), saves
+  it to disk as `window-card.pdf` (overwriting any prior upload), then updates
+  `app-settings.json`'s `windowCardPdf` key with the filename — same
+  read-modify-write-without-clobbering pattern `app-settings.php` itself uses. The PDF is
+  **not** denied by `.htaccess` (unlike the JSON data files) — it's meant to be publicly
+  fetchable (`fetch("window-card.pdf")`) so `pdf-lib` can load its bytes client-side.
+- **Template's expected form fields** — the uploaded PDF's AcroForm must have text fields
+  named exactly `Owner`, `CarNumber`, `Year`, `Model`, `Generation`. A template missing
+  one of these just leaves that field unfilled rather than failing the whole print (see
+  `fillOneWindowCard()`'s per-field try/catch) — same tolerant-optional-field philosophy
+  as `members-import.php`'s column detection.
+- **Printing one card** — the detail modal's "🪟 Print Window Card" button calls
+  `printWindowCard(r)`, a 1-element wrapper around the shared `printWindowCards(list)`
+  (see below).
+- **Printing several at once** — the Registration tab toolbar's "🪟 Print Window Cards"
+  button (`printSelectedWindowCards()`) prints one card per **checked row whose In Car
+  Show? is exactly "Yes"** — a checked row with any other value (No, blank) is silently
+  skipped. The button's own label shows a live count of how many checked rows currently
+  qualify (e.g. "🪟 Print Window Cards (3)") and stays disabled at 0, so there's no
+  surprise about what's about to print. Reuses the same `state.regSelected` checkbox
+  state the bulk-delete button already reads.
+- **`printWindowCards(list)`** fetches the uploaded template's bytes once, then for each
+  row: loads a fresh `PDFDocument` from those bytes (`fillOneWindowCard()`), fills its
+  Owner/CarNumber/Year/Model/Generation fields with that registrant's Name/Reg #/Year/
+  Model/Gen, and flattens the form (bakes the values into the page content) — flattening
+  first avoids any field-name collision when multiple filled copies get merged into one
+  document next. Each flattened single-page PDF's page is copied into one shared output
+  `PDFDocument` (`outDoc.copyPages`/`addPage`), which is then saved to bytes, wrapped in a
+  `Blob`, and opened in a new tab via `window.open(URL.createObjectURL(blob), "_blank")`
+  — the browser's own PDF viewer handles printing from there (Ctrl+P / its print icon),
+  which is more reliable across browsers than trying to script `window.print()` against
+  PDF content this app doesn't control the rendering of.
+- **No template uploaded yet, or `pdf-lib` fails to load/fill** — both surface as a plain
+  `alert()` rather than a modal error state, since print is a fire-and-forget toolbar/
+  detail-modal action with no natural "stays open" surface to show an inline error in
+  (unlike Settings/the detail modal's own edit form, which do use `state.*Error` fields
+  rendered inline).
 
 ## Paid Registrations API: Developer → 🔌 API
 

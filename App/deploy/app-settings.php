@@ -12,6 +12,16 @@
 //  - preregistrationFee: reference value only (what a CSV-preregistered
 //    attendee pays) — not applied anywhere in the UI, since preregistered
 //    people come from the CSV import, not this form.
+//  - windowCardPdf: filename (currently always "window-card.pdf" once
+//    uploaded) of the current Car Show Window Card fillable PDF template,
+//    uploaded via window-card-pdf.php (Developer > Settings > Car Show
+//    Window Card) — that endpoint owns the actual file upload/storage and
+//    writes this key directly; this file only ever reads/passes it through.
+//    Empty string means no template has been uploaded yet. app.js fills the
+//    template's Owner/CarNumber/Year/Model/Generation AcroForm fields
+//    client-side via pdf-lib.
+//  - tshirtVendorEmail: reference contact only (Developer > Settings > T-Shirt
+//    Vendor) — not used to send anything automatically anywhere in the app.
 //  - externalApiKey: credential for the EXTERNAL Paid Registrations API
 //    (paid-registrations-api.php) — a separate, narrower credential than
 //    this app's own site password, meant to be handed to another website's
@@ -57,7 +67,9 @@ $defaults = [
     'walkinFirstNonMember' => 2000,
     'walkInCarShowFee' => 50,
     'walkInNonCarShowFee' => 0,
-    'preregistrationFee' => 40
+    'preregistrationFee' => 40,
+    'windowCardPdf' => '',
+    'tshirtVendorEmail' => ''
 ];
 
 if ($action === 'get') {

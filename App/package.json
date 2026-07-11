@@ -16,6 +16,7 @@
   "dependencies": {
     "exceljs": "^4.4.0",
     "jsdom": "^29.1.1",
-    "papaparse": "^5.5.4"
+    "papaparse": "^5.5.4",
+    "pdf-lib": "^1.17.1"
   }
 }

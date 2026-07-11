@@ -256,7 +256,7 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .loadedinfo, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }
@@ -279,4 +279,8 @@ table.matrix td.z { color: #c2c8d0; }
     font-size: 6px; line-height: 1.25; padding: 2px 3px;
     white-space: normal; word-break: break-word; overflow-wrap: break-word;
   }
+  /* Window cards (printWindowCards() in app.js) are no longer printed via
+     this page's own @media print rules — they're generated as a real,
+     separately-opened PDF (the uploaded fillable template, filled per
+     registrant via pdf-lib) instead of an HTML/CSS overlay. */
 }

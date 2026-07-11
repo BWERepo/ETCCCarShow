@@ -76,7 +76,7 @@
   // applyRecordPatch() (every edit/override re-application), so the default
   // reliably (re)applies wherever a record's fields can change.
   function applySponsorshipTextDefault(rec) {
-    if (toNum(rec["Ind. Spon."]) > 0 && isBlank(rec["Ind. Spon. Text"])) {
+    if (toNum(rec["Individual Sponsorship"]) > 0 && isBlank(rec["Ind. Spon. Text"])) {
       rec["Ind. Spon. Text"] = sponsorshipDefaultText(rec);
     }
     return rec;
@@ -109,7 +109,7 @@
       var attendee = toInt(rec["#"]) || 0;
       totalAttendees += attendee;
       totalFunds += toNum(rec["Total Fee"]);
-      totalSponsorship += toNum(rec[C.individualSponsorshipCol]);
+      totalSponsorship += toNum(rec[C.sponsorshipActivityTitle]);
       C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] += Number(rec[b.col]) || 0; });
 
       var gen = rec["Gen"];
@@ -209,7 +209,7 @@
           var sb = C.freeSizeMap[sponsorShirtRaw];
           if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
           else messages.push("Invalid sponsor shirt size '" + sponsorShirtRaw + "'");
-          rec[C.individualSponsorshipCol] = (toNum(rec[C.individualSponsorshipCol]) || 0) + toNum(a["Activity Fee"]);
+          rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
           // Not a real CSV column — the app reads this to auto-add a Sponsors-tab
           // entry for this registrant without having to guess their shirt size
           // back out of the (possibly ambiguous, if it matches their own free
@@ -323,6 +323,12 @@
     columns.forEach(function (c) { rec[c] = ""; });
     shirtCols.forEach(function (c) { rec[c] = 0; });
     rec["Reg #"] = "";
+    // Not a baseColumnOrder column (removed from the Registration
+    // tab/detail modal/Excel export) but still computed on every record —
+    // initialize it here so it's reliably "" rather than undefined until
+    // applySponsorshipTextDefault() sets it, same guarantee every other
+    // field already has.
+    rec["Ind. Spon. Text"] = "";
     return rec;
   }
 

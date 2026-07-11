@@ -83,11 +83,14 @@ foreach ($members as $m) {
 }
 
 $errors = [];
-$submitted = false;
 $values = [
     'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
     'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
 ];
+// See the post-submit redirect below for what this actually controls —
+// carried as a hidden form field (not just the URL's query string) so it
+// survives a validation-error re-render too.
+$fromParam = (string)($_POST['from'] ?? ($_GET['from'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website', 'etccMemberName'] as $f) {
@@ -124,11 +127,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         $file = __DIR__ . '/sponsor-submissions.json';
         if (carshow_append_json_list($file, $record)) {
-            $submitted = true;
-            $values = [
-                'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-                'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
-            ];
+            // Where to send them after a successful submission depends on
+            // where they came from — read from the hidden "from" field
+            // (populated server-side from ?from=app, the marker app.js's
+            // "+ Add Sponsor" button adds to its window.open() URL). The
+            // Cancel button below branches the exact same way via $cancelUrl.
+            //   - from=app: an officer, inside the car show app itself — sent
+            //     straight back to the Sponsors tab (a fresh page load, so
+            //     the new submission is already in the list) instead of a
+            //     static "Thank you" page. See app.js's init() for the
+            //     #sponsors -> Sponsors-tab handoff.
+            //   - anything else: a sponsor/business who reached this form via
+            //     a link on ClubExpress/the club's main site, not from inside
+            //     the app — they have no reason to land in the internal app,
+            //     so they're sent back to the club's main site instead.
+            if (($_POST['from'] ?? '') === 'app') {
+                header('Location: index.php#sponsors');
+            } else {
+                header('Location: https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652');
+            }
+            exit;
         } else {
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
         }
@@ -166,7 +184,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   .btn-secondary:hover { background:#f4f6f8; }
   .errors { background:#fff5f5; border-left:4px solid var(--red); border-radius:6px; padding:10px 14px; margin-bottom:14px; color:var(--red-dark); font-size:13px; }
   .errors ul { margin:4px 0 0; padding-left:18px; }
-  .success { background:#f2fbf5; border:1px solid #bfe2c9; border-radius:10px; padding:24px; text-align:center; color: var(--good); font-weight:600; }
   .footer { text-align:center; color:var(--muted); font-size:11px; margin-top:22px; }
 </style>
 </head>
@@ -176,15 +193,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <h1>Become a Car Show Sponsor</h1>
   <div class="sub">East Tennessee Corvette Club</div>
   <div class="panel">
-  <?php if ($submitted): ?>
-    <div class="success">Thank you! Your sponsorship information has been submitted.</div>
-  <?php else: ?>
     <?php if ($errors): ?>
       <div class="errors"><strong>Please fix the following:</strong><ul>
         <?php foreach ($errors as $e) echo '<li>' . htmlspecialchars($e) . '</li>'; ?>
       </ul></div>
     <?php endif; ?>
     <form method="post" novalidate>
+      <input type="hidden" name="from" value="<?php echo htmlspecialchars($fromParam); ?>">
       <div class="form-row">
         <label for="f-name">Sponsor Name *</label>
         <input type="text" id="f-name" name="name" required value="<?php echo htmlspecialchars($values['name']); ?>">
@@ -238,12 +253,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <?php endforeach; ?>
         </select>
       </div>
+      <?php $cancelUrl = $fromParam === 'app' ? 'index.php#sponsors' : 'https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652'; ?>
       <div class="btn-row">
-        <button type="button" class="btn btn-secondary" onclick="location.href='https://www.etccwebsite.com/content.aspx?page_id=0&amp;club_id=313652'">Cancel</button>
+        <button type="button" class="btn btn-secondary" onclick="location.href='<?php echo htmlspecialchars($cancelUrl, ENT_QUOTES); ?>'">Cancel</button>
         <button type="submit" class="btn">Submit Sponsorship</button>
       </div>
     </form>
-  <?php endif; ?>
   </div>
   <div class="footer">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </div>

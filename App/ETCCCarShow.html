@@ -303,7 +303,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.24 &middot; Deployed 7/11/2026 10:55 AM</div>
+  <div>v2.26 &middot; Deployed 7/11/2026 11:01 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -3203,7 +3203,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // default appearance) — setFontSize() per field plus a single
   // form.updateFieldAppearances(boldFont) call (regenerates every field's
   // appearance stream using that font) right before flatten().
-  var WINDOW_CARD_FIELD_FONT_SIZE = 28;
+  var WINDOW_CARD_FIELD_FONT_SIZE = 36;
   function fillOneWindowCard(templateBytes, r) {
     var PDFLib = window.PDFLib;
     return PDFLib.PDFDocument.load(templateBytes).then(function (doc) {
@@ -3238,7 +3238,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // via pdf-lib (vendored client-side; see fillOneWindowCard above). Each
   // filled card is embedded (not just copied) onto its own fresh 8.5x11in
   // landscape output page, scaled down and centered so it occupies at most
-  // half that page's width and half its height (whichever is more
+  // 75% of that page's width and 75% of its height (whichever is more
   // constraining, so the template's own aspect ratio is preserved rather
   // than stretched) — the template's native page size is a print-shop
   // design canvas much larger than a normal sheet, not meant to be printed
@@ -3276,7 +3276,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
               .then(function () { return fillOneWindowCard(templateBytes, r); })
               .then(function (filledDoc) {
                 return outDoc.embedPage(filledDoc.getPages()[0]).then(function (embedded) {
-                  var scale = Math.min((SHEET_W * 0.5) / embedded.width, (SHEET_H * 0.5) / embedded.height);
+                  var scale = Math.min((SHEET_W * 0.75) / embedded.width, (SHEET_H * 0.75) / embedded.height);
                   var w = embedded.width * scale;
                   var h = embedded.height * scale;
                   var page = outDoc.addPage([SHEET_W, SHEET_H]);

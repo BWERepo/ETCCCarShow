@@ -1836,7 +1836,7 @@
   // default appearance) — setFontSize() per field plus a single
   // form.updateFieldAppearances(boldFont) call (regenerates every field's
   // appearance stream using that font) right before flatten().
-  var WINDOW_CARD_FIELD_FONT_SIZE = 28;
+  var WINDOW_CARD_FIELD_FONT_SIZE = 36;
   function fillOneWindowCard(templateBytes, r) {
     var PDFLib = window.PDFLib;
     return PDFLib.PDFDocument.load(templateBytes).then(function (doc) {
@@ -1871,7 +1871,7 @@
   // via pdf-lib (vendored client-side; see fillOneWindowCard above). Each
   // filled card is embedded (not just copied) onto its own fresh 8.5x11in
   // landscape output page, scaled down and centered so it occupies at most
-  // half that page's width and half its height (whichever is more
+  // 75% of that page's width and 75% of its height (whichever is more
   // constraining, so the template's own aspect ratio is preserved rather
   // than stretched) — the template's native page size is a print-shop
   // design canvas much larger than a normal sheet, not meant to be printed
@@ -1909,7 +1909,7 @@
               .then(function () { return fillOneWindowCard(templateBytes, r); })
               .then(function (filledDoc) {
                 return outDoc.embedPage(filledDoc.getPages()[0]).then(function (embedded) {
-                  var scale = Math.min((SHEET_W * 0.5) / embedded.width, (SHEET_H * 0.5) / embedded.height);
+                  var scale = Math.min((SHEET_W * 0.75) / embedded.width, (SHEET_H * 0.75) / embedded.height);
                   var w = embedded.width * scale;
                   var h = embedded.height * scale;
                   var page = outDoc.addPage([SHEET_W, SHEET_H]);

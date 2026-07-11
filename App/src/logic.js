@@ -57,7 +57,7 @@
   }
 
   // "First [and Spouse First] Last" — e.g. "John Smith" or "John and Jane
-  // Smith". Neither "Spouse First Name" nor "Individual Sponsorship Text"
+  // Smith". Neither "Spouse First Name" nor "Ind. Spon. Text"
   // have a ClubExpress CSV source; both are blank until this default fires
   // or an officer hand-fills them via the detail modal.
   function sponsorshipDefaultText(rec) {
@@ -67,7 +67,7 @@
     return (first + (spouse ? " and " + spouse : "") + " " + last).trim();
   }
   // Insert-only, same rationale as the Sponsors-tab Reg Date backfill: fires
-  // only while "Individual Sponsorship Text" is still blank, so it never
+  // only while "Ind. Spon. Text" is still blank, so it never
   // overwrites an officer's hand-edit (including a deliberate blank — if
   // Individual Sponsorship stays > 0, the next thing that touches this
   // record re-defaults it, matching the literal rule requested: "if ...
@@ -76,8 +76,8 @@
   // applyRecordPatch() (every edit/override re-application), so the default
   // reliably (re)applies wherever a record's fields can change.
   function applySponsorshipTextDefault(rec) {
-    if (toNum(rec["Individual Sponsorship"]) > 0 && isBlank(rec["Individual Sponsorship Text"])) {
-      rec["Individual Sponsorship Text"] = sponsorshipDefaultText(rec);
+    if (toNum(rec["Ind. Spon."]) > 0 && isBlank(rec["Ind. Spon. Text"])) {
+      rec["Ind. Spon. Text"] = sponsorshipDefaultText(rec);
     }
     return rec;
   }
@@ -109,7 +109,7 @@
       var attendee = toInt(rec["#"]) || 0;
       totalAttendees += attendee;
       totalFunds += toNum(rec["Total Fee"]);
-      totalSponsorship += toNum(rec[C.sponsorshipActivityTitle]);
+      totalSponsorship += toNum(rec[C.individualSponsorshipCol]);
       C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] += Number(rec[b.col]) || 0; });
 
       var gen = rec["Gen"];
@@ -209,14 +209,14 @@
           var sb = C.freeSizeMap[sponsorShirtRaw];
           if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
           else messages.push("Invalid sponsor shirt size '" + sponsorShirtRaw + "'");
-          rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
+          rec[C.individualSponsorshipCol] = (toNum(rec[C.individualSponsorshipCol]) || 0) + toNum(a["Activity Fee"]);
           // Not a real CSV column — the app reads this to auto-add a Sponsors-tab
           // entry for this registrant without having to guess their shirt size
           // back out of the (possibly ambiguous, if it matches their own free
           // shirt's size) aggregated shirt buckets above.
           rec._sponsorShirtSize = sb ? sponsorShirtRaw : "";
           var sponsorName = a[C.sponsorNameColumn];
-          if (!isBlank(sponsorName)) rec["Individual Sponsorship Text"] = sponsorName;
+          if (!isBlank(sponsorName)) rec["Ind. Spon. Text"] = sponsorName;
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {

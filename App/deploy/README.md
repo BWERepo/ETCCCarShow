@@ -208,8 +208,9 @@ can't be silently discarded by an accidental click or arrow key. Applies to **ev
 row, CSV-imported or Walk-In, per the user's explicit choice (matching the bulk-delete
 scope decision):
 
-- **Editable:** Reg #, Club Name, Status, Total Fee, Individual Sponsorship,
-  Spouse First Name, Individual Sponsorship Text, #, Phone, Email, Address, City, State,
+- **Editable:** Reg #, Club Name, Status, Total Fee, Ind. Spon. (the app's own column
+  name for the "Individual Sponsorship" ClubExpress activity's fee — see below),
+  Spouse First Name, Ind. Spon. Text, #, Phone, Email, Address, City, State,
   Zip, Year, Model, Color, In Car Show?.
 - **Not editable:** Reg Date, Reg Type, Gen (system/derived — Gen auto-recomputes from
   Year if Year changes, see `applyRecordPatch()`), and the Shirts section (a 24-bucket
@@ -232,22 +233,28 @@ scope decision):
   a CSV-row deletion. Each save fully replaces that row's stored patch (the form always
   submits every editable field together, not a partial diff).
 
-## Individual Sponsorship Text (and Spouse First Name)
+## Ind. Spon. Text (and Spouse First Name)
 
 Two columns in `baseColumnOrder` (`config.js`) with **no ClubExpress CSV source at
 all** — confirmed by checking a real, current registration export's headers, not
 guessed. Both start blank on every fresh CSV row.
 
-- **Individual Sponsorship Text** — sits right after Individual Sponsorship in the
-  Registration table/Excel export. Auto-defaults to `"First [and Spouse First] Last"`
-  (e.g. "John Smith" or "John and Jane Smith") the moment Individual Sponsorship is > 0
-  **and** the Text field is still blank — see `logic.js`'s `applySponsorshipTextDefault()`,
-  called from `generate()` (fresh CSV rows), `buildManualRegistration()` (fresh Walk-Ins,
-  currently a no-op since that form has no Individual Sponsorship field), and app.js's
-  `applyRecordPatch()` (every edit/override re-application, so an edit that pushes
-  Individual Sponsorship above 0 — or clears the Text field back to blank — re-triggers
-  the default). Insert-only: never overwrites a value that's already there, whether from
-  a prior default or an officer's hand-edit via the detail modal.
+- **Ind. Spon. Text** (the app's own shortened name for what was originally called
+  "Individual Sponsorship Text") — sits right after **Ind. Spon.** in the Registration
+  table/Excel export. `Ind. Spon.` is this app's own (shortened) column name for the fee
+  from ClubExpress's real "Individual Sponsorship" activity — `config.js` keeps that
+  distinction explicit: `sponsorshipActivityTitle` stays the literal ClubExpress activity
+  name (must match their export verbatim), while `individualSponsorshipCol` is the
+  separate, renameable column/data-key this app stores and displays that fee under.
+  Auto-defaults to `"First [and Spouse First] Last"` (e.g. "John Smith" or "John and Jane
+  Smith") the moment Ind. Spon. is > 0 **and** the Text field is still blank — see
+  `logic.js`'s `applySponsorshipTextDefault()`, called from `generate()` (fresh CSV rows),
+  `buildManualRegistration()` (fresh Walk-Ins, currently a no-op since that form has no
+  Ind. Spon. field), and app.js's `applyRecordPatch()` (every edit/override
+  re-application, so an edit that pushes Ind. Spon. above 0 — or clears the Text field
+  back to blank — re-triggers the default). Insert-only: never overwrites a value that's
+  already there, whether from a prior default or an officer's hand-edit via the detail
+  modal.
 - **Spouse First Name** — purely a manual-entry field (via the detail modal's Edit mode);
   nothing currently populates it automatically. Exists so an officer can supply a
   sponsor's plus-one name, making the "and Spouse" branch above actually fire.

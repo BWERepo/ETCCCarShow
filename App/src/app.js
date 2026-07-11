@@ -93,12 +93,12 @@
   // viewing the site sees the same live list.
   var SITE_CONFIG = {};
 
-  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Ind. Spon.": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
-  var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
+  var NARROW_HEADER_COLS = { "Ind. Spon.": 1, "In Car Show?": 1 };
+  var CURRENCY_COLS = { "Total Fee": 1, "Ind. Spon.": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
   function isNumericCol(c) { return NUMERIC_BASE[c] || isShirtCol(c); }
@@ -273,7 +273,7 @@
     var byId = {};
     state.sponsors.forEach(function (s) { byId[s.id] = s; });
     state.result.registrations.forEach(function (rec) {
-      var fee = rec["Individual Sponsorship"];
+      var fee = rec["Ind. Spon."];
       if (fee === "" || fee == null || Number(fee) <= 0) return;
       var id = csvSponsorId(rec);
       var existing = byId[id];
@@ -469,6 +469,11 @@
 
     cols.forEach(function (c, idx) {
       var label = c === SHIRTS_COL ? "Shirts" : c;
+      // Non-breaking space so this short header never wraps between "Reg"
+      // and "#" even at a narrow column width (table.grid thead th uses
+      // white-space: normal so longer headers like "Spouse First Name" can
+      // wrap onto two lines) — c itself (used for sort/lookup) is untouched.
+      if (label === "Reg #") label = "Reg #";
       var arrow = state.sortCol === c ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
       var th = el("th", { class: (c === SHIRTS_COL ? "shirtsum" : (isNumericCol(c) ? "num" : "")) +
           (NARROW_HEADER_COLS[c] ? " narrow-hdr" : "") + pinnedClass(idx + 1) },
@@ -792,7 +797,7 @@
   // Click any row to see every field for that one registration without scrolling —
   // grouped into readable sections instead of the table's 40+ side-by-side columns.
   var DETAIL_SECTIONS = [
-    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "Spouse First Name", "Individual Sponsorship Text", "#"] },
+    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Ind. Spon.", "Spouse First Name", "Ind. Spon. Text", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
     { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] }
   ];
@@ -805,13 +810,13 @@
   // config.js/applySponsorshipTextDefault) — editing here is the only way to
   // set the former, and to override the latter's auto-generated default.
   var EDITABLE_FIELDS = {
-    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
-    "Spouse First Name": 1, "Individual Sponsorship Text": 1, "#": 1,
+    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Ind. Spon.": 1,
+    "Spouse First Name": 1, "Ind. Spon. Text": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
   };
   var INT_EDIT_FIELDS = { "Reg #": 1, "#": 1, "Year": 1 };
-  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
+  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Ind. Spon.": 1 };
 
   function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
   function closeDetail() { state.detailRow = null; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
@@ -1392,8 +1397,7 @@
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
     delBtn.addEventListener("click", openDeleteSelectedConfirm);
-    var kids = [search, typeGroup, count, el("span", { class: "spacer" }),
-      el("span", { class: "count", title: "This list is read from and saved straight to the server." }, ["🔄 Live"])];
+    var kids = [search, typeGroup, count, el("span", { class: "spacer" })];
     kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }

@@ -299,7 +299,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.66 &middot; Deployed 7/11/2026 5:48 AM</div>
+  <div>v2.3 &middot; Deployed 7/11/2026 6:04 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -458,6 +458,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // handled separately from both registrationActivityTitle (no extra attendee)
     // and activityTitleToBucket (no fee/unitCost quantity math; always exactly 1).
     sponsorshipActivityTitle: "Individual Sponsorship",
+    // The app's own column name for that activity's accumulated fee — kept
+    // separate from sponsorshipActivityTitle above, which must stay exactly
+    // "Individual Sponsorship" to keep matching ClubExpress's own literal
+    // Activity Title. This is just the (shorter) label/data-key this app
+    // displays and stores that fee under.
+    individualSponsorshipCol: "Ind. Spon.",
     sponsorFreeShirtColumn: "CSFreeSponsorShirt",
     sponsorNameColumn: "CSSponsorName",
 
@@ -485,7 +491,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     // --- Final column order (matches today's RegistrationSheet) ---
     // Shirt columns are appended programmatically (all 24, in SHIRT_BUCKETS order).
-    // "Spouse First Name" and "Individual Sponsorship Text" have no CSV source
+    // "Spouse First Name" and "Ind. Spon. Text" have no CSV source
     // (ClubExpress's export has neither) — they start blank on every fresh
     // CSV row and are filled in either automatically (see
     // applySponsorshipTextDefault() in logic.js) or by hand via the detail
@@ -493,7 +499,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     baseColumnOrder: [
       "Reg #", "Reg Type", "Last Name", "First Name", "Spouse First Name", "Reg Date",
       "#", "Club Name", "Phone", "Email", "Address", "City", "State",
-      "Zip", "Total Fee", "Individual Sponsorship", "Individual Sponsorship Text", "Status", "Year", "Model", "Gen", "In Car Show?",
+      "Zip", "Total Fee", "Ind. Spon.", "Ind. Spon. Text", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],
 
@@ -641,7 +647,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   // "First [and Spouse First] Last" — e.g. "John Smith" or "John and Jane
-  // Smith". Neither "Spouse First Name" nor "Individual Sponsorship Text"
+  // Smith". Neither "Spouse First Name" nor "Ind. Spon. Text"
   // have a ClubExpress CSV source; both are blank until this default fires
   // or an officer hand-fills them via the detail modal.
   function sponsorshipDefaultText(rec) {
@@ -651,7 +657,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return (first + (spouse ? " and " + spouse : "") + " " + last).trim();
   }
   // Insert-only, same rationale as the Sponsors-tab Reg Date backfill: fires
-  // only while "Individual Sponsorship Text" is still blank, so it never
+  // only while "Ind. Spon. Text" is still blank, so it never
   // overwrites an officer's hand-edit (including a deliberate blank — if
   // Individual Sponsorship stays > 0, the next thing that touches this
   // record re-defaults it, matching the literal rule requested: "if ...
@@ -660,8 +666,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // applyRecordPatch() (every edit/override re-application), so the default
   // reliably (re)applies wherever a record's fields can change.
   function applySponsorshipTextDefault(rec) {
-    if (toNum(rec["Individual Sponsorship"]) > 0 && isBlank(rec["Individual Sponsorship Text"])) {
-      rec["Individual Sponsorship Text"] = sponsorshipDefaultText(rec);
+    if (toNum(rec["Ind. Spon."]) > 0 && isBlank(rec["Ind. Spon. Text"])) {
+      rec["Ind. Spon. Text"] = sponsorshipDefaultText(rec);
     }
     return rec;
   }
@@ -693,7 +699,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       var attendee = toInt(rec["#"]) || 0;
       totalAttendees += attendee;
       totalFunds += toNum(rec["Total Fee"]);
-      totalSponsorship += toNum(rec[C.sponsorshipActivityTitle]);
+      totalSponsorship += toNum(rec[C.individualSponsorshipCol]);
       C.SHIRT_BUCKETS.forEach(function (b) { shirtTotals[b.key] += Number(rec[b.col]) || 0; });
 
       var gen = rec["Gen"];
@@ -793,14 +799,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           var sb = C.freeSizeMap[sponsorShirtRaw];
           if (sb) rec[bucketCol(sb)] = (rec[bucketCol(sb)] || 0) + 1;
           else messages.push("Invalid sponsor shirt size '" + sponsorShirtRaw + "'");
-          rec[C.sponsorshipActivityTitle] = (toNum(rec[C.sponsorshipActivityTitle]) || 0) + toNum(a["Activity Fee"]);
+          rec[C.individualSponsorshipCol] = (toNum(rec[C.individualSponsorshipCol]) || 0) + toNum(a["Activity Fee"]);
           // Not a real CSV column — the app reads this to auto-add a Sponsors-tab
           // entry for this registrant without having to guess their shirt size
           // back out of the (possibly ambiguous, if it matches their own free
           // shirt's size) aggregated shirt buckets above.
           rec._sponsorShirtSize = sb ? sponsorShirtRaw : "";
           var sponsorName = a[C.sponsorNameColumn];
-          if (!isBlank(sponsorName)) rec["Individual Sponsorship Text"] = sponsorName;
+          if (!isBlank(sponsorName)) rec["Ind. Spon. Text"] = sponsorName;
         } else {
           var bucket = C.activityTitleToBucket[title];
           if (bucket) {
@@ -1067,14 +1073,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       cols.forEach(function (c, ci) {
         var cell = row.getCell(ci + 1), v = rec[c];
         if (isShirt(res, c)) { cell.value = Number(v) > 0 ? Number(v) : null; cell.alignment = { horizontal: "center" }; }
-        else if (c === "Total Fee" || c === "Individual Sponsorship") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
+        else if (c === "Total Fee" || c === "Ind. Spon.") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
         else if (c === "Reg #" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
         else { cell.value = (v === "" || v == null) ? null : v; }
         cell.border = border();
       });
     });
     ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: n } };
-    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Spouse First Name": 14, "Individual Sponsorship Text": 22, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
+    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Spouse First Name": 14, "Ind. Spon. Text": 22, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
     ws.columns.forEach(function (col, i) {
       var name = cols[i];
       col.width = widthFor[name] || (isShirt(res, name) ? 7 : Math.min(Math.max(name.length + 2, 8), 20));
@@ -1223,14 +1229,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var sponsor = out.registrations.filter(function (r) { return r["First Name"] === "Sponsor"; })[0];
     eq(results, sponsor["Status"], "Cancelled", "Sponsor row kept (showCancelled=true)");
     eq(results, Number(sponsor["Total Fee"]), 140, "Sponsor fee = 140");
-    eq(results, Number(sponsor["Individual Sponsorship"]), 100, "Sponsor's Individual Sponsorship column = 100");
-    eq(results, alice["Individual Sponsorship"], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
+    eq(results, Number(sponsor["Ind. Spon."]), 100, "Sponsor's Individual Sponsorship column = 100");
+    eq(results, alice["Ind. Spon."], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
     eq(results, out.summary.sponsorship, 100, "summary.sponsorship = 100");
     // Individual Sponsorship Text has no CSV source — generate() defaults it
     // to "First [and Spouse] Last" whenever Individual Sponsorship > 0 and
     // it's still blank (see applySponsorshipTextDefault in logic.js).
-    eq(results, sponsor["Individual Sponsorship Text"], "Sponsor Sample", "Sponsor's Individual Sponsorship Text defaults to their name");
-    eq(results, alice["Individual Sponsorship Text"], "", "Alice (no sponsorship) has blank Individual Sponsorship Text");
+    eq(results, sponsor["Ind. Spon. Text"], "Sponsor Sample", "Sponsor's Individual Sponsorship Text defaults to their name");
+    eq(results, alice["Ind. Spon. Text"], "", "Alice (no sponsorship) has blank Individual Sponsorship Text");
     eq(results, sponsor["Spouse First Name"], "", "Spouse First Name has no CSV source — always blank on a fresh CSV row");
 
     eq(results, out.registrations[0]["Last Name"], "Sample", "first row sorts to Sample");
@@ -1281,15 +1287,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // applySponsorshipTextDefault() — no CSV/fixture row happens to exercise
   // the "and Spouse" branch (see generate()'s own assertions above), so it's
   // covered directly here instead.
-  function applyText(rec) { LOGIC.applySponsorshipTextDefault(rec); return rec["Individual Sponsorship Text"]; }
+  function applyText(rec) { LOGIC.applySponsorshipTextDefault(rec); return rec["Ind. Spon. Text"]; }
   function sponsorshipTextAssertions(results) {
-    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "" }),
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Ind. Spon.": 100, "Ind. Spon. Text": "" }),
       "John Doe", "sponsorship text: defaults to 'First Last' with no spouse");
-    eq(results, applyText({ "First Name": "John", "Spouse First Name": "Jane", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "" }),
+    eq(results, applyText({ "First Name": "John", "Spouse First Name": "Jane", "Last Name": "Doe", "Ind. Spon.": 100, "Ind. Spon. Text": "" }),
       "John and Jane Doe", "sponsorship text: 'First and Spouse Last' when Spouse First Name is set");
-    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 0, "Individual Sponsorship Text": "" }),
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Ind. Spon.": 0, "Ind. Spon. Text": "" }),
       "", "sponsorship text: stays blank when Individual Sponsorship is 0");
-    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "Custom Text" }),
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Ind. Spon.": 100, "Ind. Spon. Text": "Custom Text" }),
       "Custom Text", "sponsorship text: never overwrites an already-set value");
   }
 
@@ -1427,12 +1433,12 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // viewing the site sees the same live list.
   var SITE_CONFIG = {};
 
-  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Ind. Spon.": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
-  var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
+  var NARROW_HEADER_COLS = { "Ind. Spon.": 1, "In Car Show?": 1 };
+  var CURRENCY_COLS = { "Total Fee": 1, "Ind. Spon.": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
   function isNumericCol(c) { return NUMERIC_BASE[c] || isShirtCol(c); }
@@ -1607,7 +1613,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var byId = {};
     state.sponsors.forEach(function (s) { byId[s.id] = s; });
     state.result.registrations.forEach(function (rec) {
-      var fee = rec["Individual Sponsorship"];
+      var fee = rec["Ind. Spon."];
       if (fee === "" || fee == null || Number(fee) <= 0) return;
       var id = csvSponsorId(rec);
       var existing = byId[id];
@@ -1803,6 +1809,11 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
 
     cols.forEach(function (c, idx) {
       var label = c === SHIRTS_COL ? "Shirts" : c;
+      // Non-breaking space so this short header never wraps between "Reg"
+      // and "#" even at a narrow column width (table.grid thead th uses
+      // white-space: normal so longer headers like "Spouse First Name" can
+      // wrap onto two lines) — c itself (used for sort/lookup) is untouched.
+      if (label === "Reg #") label = "Reg #";
       var arrow = state.sortCol === c ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
       var th = el("th", { class: (c === SHIRTS_COL ? "shirtsum" : (isNumericCol(c) ? "num" : "")) +
           (NARROW_HEADER_COLS[c] ? " narrow-hdr" : "") + pinnedClass(idx + 1) },
@@ -2126,7 +2137,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // Click any row to see every field for that one registration without scrolling —
   // grouped into readable sections instead of the table's 40+ side-by-side columns.
   var DETAIL_SECTIONS = [
-    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "Spouse First Name", "Individual Sponsorship Text", "#"] },
+    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Ind. Spon.", "Spouse First Name", "Ind. Spon. Text", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
     { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] }
   ];
@@ -2139,13 +2150,13 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // config.js/applySponsorshipTextDefault) — editing here is the only way to
   // set the former, and to override the latter's auto-generated default.
   var EDITABLE_FIELDS = {
-    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
-    "Spouse First Name": 1, "Individual Sponsorship Text": 1, "#": 1,
+    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Ind. Spon.": 1,
+    "Spouse First Name": 1, "Ind. Spon. Text": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
   };
   var INT_EDIT_FIELDS = { "Reg #": 1, "#": 1, "Year": 1 };
-  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
+  var NUM_EDIT_FIELDS = { "Total Fee": 1, "Ind. Spon.": 1 };
 
   function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
   function closeDetail() { state.detailRow = null; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
@@ -2726,8 +2737,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
     delBtn.addEventListener("click", openDeleteSelectedConfirm);
-    var kids = [search, typeGroup, count, el("span", { class: "spacer" }),
-      el("span", { class: "count", title: "This list is read from and saved straight to the server." }, ["🔄 Live"])];
+    var kids = [search, typeGroup, count, el("span", { class: "spacer" })];
     kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }

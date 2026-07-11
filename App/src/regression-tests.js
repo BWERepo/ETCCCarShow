@@ -78,14 +78,14 @@
     var sponsor = out.registrations.filter(function (r) { return r["First Name"] === "Sponsor"; })[0];
     eq(results, sponsor["Status"], "Cancelled", "Sponsor row kept (showCancelled=true)");
     eq(results, Number(sponsor["Total Fee"]), 140, "Sponsor fee = 140");
-    eq(results, Number(sponsor["Individual Sponsorship"]), 100, "Sponsor's Individual Sponsorship column = 100");
-    eq(results, alice["Individual Sponsorship"], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
+    eq(results, Number(sponsor["Ind. Spon."]), 100, "Sponsor's Individual Sponsorship column = 100");
+    eq(results, alice["Ind. Spon."], "", "Alice (no sponsorship activity) has blank Individual Sponsorship");
     eq(results, out.summary.sponsorship, 100, "summary.sponsorship = 100");
     // Individual Sponsorship Text has no CSV source — generate() defaults it
     // to "First [and Spouse] Last" whenever Individual Sponsorship > 0 and
     // it's still blank (see applySponsorshipTextDefault in logic.js).
-    eq(results, sponsor["Individual Sponsorship Text"], "Sponsor Sample", "Sponsor's Individual Sponsorship Text defaults to their name");
-    eq(results, alice["Individual Sponsorship Text"], "", "Alice (no sponsorship) has blank Individual Sponsorship Text");
+    eq(results, sponsor["Ind. Spon. Text"], "Sponsor Sample", "Sponsor's Individual Sponsorship Text defaults to their name");
+    eq(results, alice["Ind. Spon. Text"], "", "Alice (no sponsorship) has blank Individual Sponsorship Text");
     eq(results, sponsor["Spouse First Name"], "", "Spouse First Name has no CSV source — always blank on a fresh CSV row");
 
     eq(results, out.registrations[0]["Last Name"], "Sample", "first row sorts to Sample");
@@ -136,15 +136,15 @@
   // applySponsorshipTextDefault() — no CSV/fixture row happens to exercise
   // the "and Spouse" branch (see generate()'s own assertions above), so it's
   // covered directly here instead.
-  function applyText(rec) { LOGIC.applySponsorshipTextDefault(rec); return rec["Individual Sponsorship Text"]; }
+  function applyText(rec) { LOGIC.applySponsorshipTextDefault(rec); return rec["Ind. Spon. Text"]; }
   function sponsorshipTextAssertions(results) {
-    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "" }),
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Ind. Spon.": 100, "Ind. Spon. Text": "" }),
       "John Doe", "sponsorship text: defaults to 'First Last' with no spouse");
-    eq(results, applyText({ "First Name": "John", "Spouse First Name": "Jane", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "" }),
+    eq(results, applyText({ "First Name": "John", "Spouse First Name": "Jane", "Last Name": "Doe", "Ind. Spon.": 100, "Ind. Spon. Text": "" }),
       "John and Jane Doe", "sponsorship text: 'First and Spouse Last' when Spouse First Name is set");
-    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 0, "Individual Sponsorship Text": "" }),
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Ind. Spon.": 0, "Ind. Spon. Text": "" }),
       "", "sponsorship text: stays blank when Individual Sponsorship is 0");
-    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Individual Sponsorship Text": "Custom Text" }),
+    eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Ind. Spon.": 100, "Ind. Spon. Text": "Custom Text" }),
       "Custom Text", "sponsorship text: never overwrites an already-set value");
   }
 

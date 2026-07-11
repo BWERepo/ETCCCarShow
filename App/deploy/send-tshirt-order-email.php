@@ -25,6 +25,8 @@ if (!carshow_authed($_POST['password'] ?? '')) {
 $data = json_decode(file_get_contents('php://input'), true) ?? [];
 $subject = $data['subject'] ?? '';
 $body = $data['body'] ?? '';
+$cc = $data['cc'] ?? '';
+$bcc = $data['bcc'] ?? '';
 
 if (!$subject || !$body) {
     http_response_code(400);
@@ -52,7 +54,7 @@ if (!$recipient) {
     exit;
 }
 
-if (carshow_send_mail($recipient, $subject, $body)) {
+if (carshow_send_mail($recipient, $subject, $body, $cc, $bcc)) {
     echo json_encode(['ok' => true]);
 } else {
     http_response_code(500);

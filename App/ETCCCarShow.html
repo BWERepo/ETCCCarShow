@@ -233,19 +233,14 @@ th.pinned { z-index: 3; }
    above (independent rules, not shared classes, same reasoning as those). Its
    cards/preview reuse .api-card/.api-response directly (a generic card/
    monospace-preview look, not actually API-specific). */
-.email-page { position: fixed; inset: 0; background: #fff; z-index: 300; display: flex; flex-direction: column; }
-.email-page-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.email-page-head h2 { margin: 0; font-size: 18px; flex: 1; }
-.email-page-body { flex: 1; overflow: auto; padding: 20px; }
-.email-page-inner { max-width: 900px; margin: 0 auto; }
-
-/* Developer > T-Shirt Report — same full-page shape as Change Log/API/Email
-   above (independent rules, not shared classes). */
-.tshirt-report-page { position: fixed; inset: 0; background: #fff; z-index: 300; display: flex; flex-direction: column; }
-.tshirt-report-page-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.tshirt-report-page-head h2 { margin: 0; font-size: 18px; flex: 1; }
-.tshirt-report-page-body { flex: 1; overflow: auto; padding: 20px; }
-.tshirt-report-page-inner { max-width: 900px; margin: 0 auto; }
+/* T-Shirts tab — email composer + report */
+.tshirt-view { max-width: 100%; }
+.tshirt-view .panel { margin-bottom: 20px; }
+.tshirt-view .form-group { margin-bottom: 16px; }
+.tshirt-view .form-group label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.tshirt-view .form-group input[type="text"],
+.tshirt-view .form-group textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 4px; font-family: inherit; }
+.tshirt-view .form-value { padding: 8px; background: #f5f5f5; border-radius: 4px; }
 
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -281,7 +276,7 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .email-page, .tshirt-report-page, .loadedinfo, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .tshirt-view, .loadedinfo, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }
@@ -321,7 +316,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.27 &middot; Deployed 7/11/2026 2:42 PM</div>
+  <div>v2.40 &middot; Deployed 7/11/2026 3:25 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1457,12 +1452,13 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     windowCardUploading: false,
     windowCardError: null,
     windowCardPdfVersion: 0, // bumped on every successful upload, for cache-busting the fetch() that fills it
-    emailPageOpen: false,     // Developer > T-Shirt Order Email full-page screen
-    emailSubject: "",         // editable; defaulted in openEmailPage()
+    emailSubject: "",         // editable; defaulted when T-Shirts tab is opened
+    emailBody: "",            // editable; defaulted when T-Shirts tab is opened
+    emailCc: "",              // editable CC recipients
+    emailBcc: "",             // editable BCC recipients
     emailSending: false,
     emailSendError: null,
     emailSent: false,         // brief "Sent!" confirmation after a successful send
-    tshirtReportOpen: false   // Developer > T-Shirt Report full-page screen
     deletedCsvKeys: {},       // csvRegKey(rec) -> true, for CSV-derived rows removed via the
                                // Registration tab's checkbox/bulk-delete — filled by
                                // ingestDeletedRegistrations(); excluded from state.result.registrations
@@ -1728,6 +1724,12 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       return;
     }
 
+    // T-Shirts tab shows email composer and report; also works without CSV data.
+    if (state.tab === "tsh") {
+      app.appendChild(buildTshirtView());
+      return;
+    }
+
     if (!state.result) {
       app.appendChild(el("div", { class: "empty-state" },
         ["No registration data loaded yet — use the menu's Developer → Import Registrations to load the first CSV export."]));
@@ -1755,7 +1757,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       t.addEventListener("click", function () { state.tab = id; renderViews(); });
       return t;
     };
-    return el("div", { class: "tabs no-print" }, [mk("sum", "Summary"), mk("reg", "Registration"), mk("sponsors", "Sponsors")]);
+    return el("div", { class: "tabs no-print" }, [mk("sum", "Summary"), mk("reg", "Registration"), mk("sponsors", "Sponsors"), mk("tsh", "T-Shirts")]);
   }
 
   // CSVs are (re)ingested synchronously right before regenerate() runs, so
@@ -2233,10 +2235,10 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // tab's own Ind. Spon. Text column at sync time, just not a
   // baseColumnOrder column here.
   var EDITABLE_FIELDS = {
-    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Reg #": 1, "Last Name": 1, "First Name": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
     "Spouse First Name": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
-    "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
+    "Year": 1, "Model": 1, "Color": 1, "Gen": 1, "In Car Show?": 1
   };
   var INT_EDIT_FIELDS = { "Reg #": 1, "#": 1, "Year": 1 };
   var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
@@ -3472,11 +3474,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       changelog.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openChangelog(); });
       var apiItem = el("button", { class: "hdr-menu-item" }, ["🔌 API"]);
       apiItem.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openApiPage(); });
-      var emailItem = el("button", { class: "hdr-menu-item" }, ["📧 T-Shirt Order Email"]);
-      emailItem.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openEmailPage(); });
-      var tshirtReportItem = el("button", { class: "hdr-menu-item" }, ["📊 T-Shirt Report"]);
-      tshirtReportItem.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openTshirtReportPage(); });
-      return [importMembers, importRegs, settings, regTests, changelog, apiItem, emailItem, tshirtReportItem];
+      return [importMembers, importRegs, settings, regTests, changelog, apiItem];
     }
     if (!state.developerOpen) {
       var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
@@ -4064,122 +4062,17 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     host.appendChild(page);
   }
 
-  // T-Shirt Order Email (Developer > 📧 T-Shirt Order Email) — Premier/
-  // Corporate/Individual sponsor sections plus a combined shirt-count
-  // breakdown (see buildTshirtOrderEmailBody() above), sent to the Vendor
-  // Email address from Developer > Settings > T-Shirt Vendor. The recipient
-  // is deliberately NOT sent from here — send-tshirt-order-email.php reads
-  // tshirtVendorEmail from app-settings.json itself, so Settings stays the
-  // single source of truth for who this goes to (see that file).
-  function openEmailPage() {
-    state.emailPageOpen = true;
-    state.emailSendError = null;
-    state.emailSent = false;
-    if (!state.emailSubject) state.emailSubject = "ETCC Car Show — T-Shirt Order";
-    renderEmailPage();
-  }
-  function closeEmailPage() { state.emailPageOpen = false; renderEmailPage(); }
+  function printTshirtReport() {
+    var host = $("#printHost");
+    host.innerHTML = "";
 
-  function sendTshirtOrderEmail() {
-    if (!SITE_CONFIG.sendTshirtOrderEmailApiUrl) return;
-    if (!state.appSettings.tshirtVendorEmail) {
-      state.emailSendError = "No Vendor Email set — add one in Developer > Settings first.";
-      renderEmailPage();
-      return;
+    // Get the logo from the header
+    var headerLogo = $("header.app img.hdr-logo");
+    var logoImg = null;
+    if (headerLogo) {
+      logoImg = el("img", { src: headerLogo.src, style: "height:60px; margin:0 auto 16px; display:block" });
     }
-    state.emailSending = true;
-    state.emailSendError = null;
-    state.emailSent = false;
-    renderEmailPage();
-    fetch(SITE_CONFIG.sendTshirtOrderEmailApiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject: state.emailSubject, body: buildTshirtOrderEmailBody() })
-    }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-      .then(function (r) {
-        state.emailSending = false;
-        if (r.ok && r.data && r.data.ok) {
-          state.emailSent = true;
-        } else {
-          state.emailSendError = (r.data && r.data.error) || "Send failed.";
-        }
-        renderEmailPage();
-      })
-      .catch(function () {
-        state.emailSending = false;
-        state.emailSendError = "Could not send — check your connection and try again.";
-        renderEmailPage();
-      });
-  }
 
-  function renderEmailPage() {
-    var host = $("#emailHost");
-    if (!host) return;
-    host.innerHTML = "";
-    if (!state.emailPageOpen) return;
-
-    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
-    closeBtn.addEventListener("click", closeEmailPage);
-    var head = el("div", { class: "email-page-head" }, [closeBtn, el("h2", { text: "T-Shirt Order Email" })]);
-
-    var body = el("div", { class: "email-page-inner" });
-
-    var vendorEmail = state.appSettings.tshirtVendorEmail || "";
-    body.appendChild(el("div", { class: "api-card" }, [
-      el("h4", { text: "To" }),
-      vendorEmail
-        ? el("p", {}, [vendorEmail])
-        : el("div", { class: "form-error" }, ["No Vendor Email set — add one in Developer > Settings > T-Shirt Vendor first."])
-    ]));
-
-    var subjectInput = el("input", { type: "text", value: state.emailSubject || "" });
-    subjectInput.addEventListener("input", function () { state.emailSubject = subjectInput.value; });
-    body.appendChild(el("div", { class: "api-card" }, [
-      el("h4", { text: "Subject" }),
-      el("div", { class: "form-row" }, [subjectInput])
-    ]));
-
-    body.appendChild(el("div", { class: "api-card" }, [
-      el("h4", { text: "Preview" }),
-      el("div", { class: "hint", style: "margin-bottom:4px" },
-        ["Exactly what will be sent — Premier/Corporate sponsors with their websites, Individual " +
-         "sponsors with their Ind. Spon. Text, and combined shirt counts (paid registrations + every " +
-         "sponsor's shirt pick) by size."]),
-      el("pre", { class: "api-response", text: buildTshirtOrderEmailBody() })
-    ]));
-
-    var sendBtn = el("button", { class: "btn primary" }, [state.emailSending ? "Sending…" : "Send"]);
-    if (state.emailSending || !vendorEmail) sendBtn.setAttribute("disabled", "disabled");
-    sendBtn.addEventListener("click", sendTshirtOrderEmail);
-    var sendCardKids = [el("div", { class: "settings-actions" }, [sendBtn])];
-    if (state.emailSent) sendCardKids.push(el("div", { class: "test-summary good" }, ["Sent!"]));
-    if (state.emailSendError) sendCardKids.push(el("div", { class: "form-error" }, [state.emailSendError]));
-    body.appendChild(el("div", { class: "api-card" }, sendCardKids));
-
-    var bodyWrap = el("div", { class: "email-page-body" }, [body]);
-    var page = el("div", { class: "email-page" }, [head, bodyWrap]);
-    host.appendChild(page);
-  }
-
-  // T-Shirt Report (Developer > 📊 T-Shirt Report) — paid registrations
-  // sorted by last name, showing Last Name | First Name | Shirts, including
-  // any registrations that also have Individual Sponsorships.
-  function openTshirtReportPage() { state.tshirtReportOpen = true; renderTshirtReportPage(); }
-  function closeTshirtReportPage() { state.tshirtReportOpen = false; renderTshirtReportPage(); }
-
-  function renderTshirtReportPage() {
-    var host = $("#tshirtReportHost");
-    if (!host) return;
-    host.innerHTML = "";
-    if (!state.tshirtReportOpen) return;
-
-    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
-    closeBtn.addEventListener("click", closeTshirtReportPage);
-    var head = el("div", { class: "tshirt-report-page-head" }, [closeBtn, el("h2", { text: "T-Shirt Report" })]);
-
-    var body = el("div", { class: "tshirt-report-page-inner" });
-
-    // Gather paid registrations (CSV + Walk-Ins) sorted by last name
     var paidRecs = allRegistrations().filter(function (r) {
       return classifyStatus(r["Status"]) === "paid";
     }).sort(function (a, b) {
@@ -4190,32 +4083,188 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       var bFirst = String(b["First Name"] || "").toLowerCase();
       return aFirst < bFirst ? -1 : aFirst > bFirst ? 1 : 0;
     });
+    var rows = paidRecs.map(function (r) {
+      var shirtText = shirtSummaryText(r);
+      return el("tr", {}, [
+        el("td", { text: r["Last Name"] || "—" }),
+        el("td", { text: r["First Name"] || "—" }),
+        el("td", { text: shirtText || "—" })
+      ]);
+    });
 
-    if (!paidRecs.length) {
-      body.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No paid registrations."]));
-    } else {
-      // Build table
-      var rows = paidRecs.map(function (r) {
-        var shirtText = shirtSummaryText(r);
-        return el("tr", {}, [
-          el("td", { text: r["Last Name"] || "—" }),
-          el("td", { text: r["First Name"] || "—" }),
-          el("td", { text: shirtText || "—" })
-        ]);
+    // Header section
+    if (logoImg) host.appendChild(logoImg);
+    host.appendChild(el("h1", {
+      text: "T-Shirt Report",
+      style: "text-align:center; margin:0 0 8px 0; font-size:24px"
+    }));
+    host.appendChild(el("div", {
+      text: "Report Date: " + fmtDate(new Date()),
+      style: "text-align:center; color:#666; font-size:12px; margin-bottom:16px"
+    }));
+
+    host.appendChild(el("table", { class: "matrix" }, [
+      el("thead", {}, [el("tr", {}, [
+        el("th", { text: "Last Name" }),
+        el("th", { text: "First Name" }),
+        el("th", { text: "Shirts" })
+      ])]),
+      el("tbody", {}, rows)
+    ]));
+    window.print();
+  }
+
+  // T-Shirt Order Email (T-Shirts tab) — Premier/Corporate/Individual sponsor
+  // sections plus a combined shirt-count breakdown (see buildTshirtOrderEmailBody()
+  // above), sent to the Vendor Email address from Developer > Settings > T-Shirt
+  // Vendor. The recipient is deliberately NOT sent from here — send-tshirt-order-
+  // email.php reads tshirtVendorEmail from app-settings.json itself, so Settings
+  // stays the single source of truth for who this goes to (see that file).
+  function sendTshirtOrderEmail() {
+    if (!SITE_CONFIG.sendTshirtOrderEmailApiUrl) return;
+    if (!state.appSettings.tshirtVendorEmail) {
+      state.emailSendError = "No Vendor Email set — add one in Developer > Settings first.";
+      renderViews();
+      return;
+    }
+    state.emailSending = true;
+    state.emailSendError = null;
+    state.emailSent = false;
+    renderViews();
+    fetch(SITE_CONFIG.sendTshirtOrderEmailApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject: state.emailSubject, body: state.emailBody, cc: state.emailCc, bcc: state.emailBcc })
+    }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (r) {
+        state.emailSending = false;
+        if (r.ok && r.data && r.data.ok) {
+          state.emailSent = true;
+        } else {
+          state.emailSendError = (r.data && r.data.error) || "Send failed.";
+        }
+        renderViews();
+      })
+      .catch(function () {
+        state.emailSending = false;
+        state.emailSendError = "Could not send — check your connection and try again.";
+        renderViews();
       });
-      body.appendChild(el("table", { class: "matrix" }, [
-        el("thead", {}, [el("tr", {}, [
-          el("th", { text: "Last Name" }),
-          el("th", { text: "First Name" }),
-          el("th", { text: "Shirts" })
-        ])]),
-        el("tbody", {}, rows)
+  }
+
+  function buildTshirtView() {
+    // Initialize defaults if not yet set
+    if (!state.emailSubject) state.emailSubject = "ETCC Car Show — T-Shirt Order";
+
+    var wrap = el("div", { class: "tshirt-view" });
+
+    // Total Shirts Needed For Event card (from Summary tab)
+    if (state.result && state.result.ok) {
+      wrap.appendChild(el("div", { class: "panel" }, [
+        el("div", { class: "cards sponsor-cards" }, [
+          el("div", { class: "sponsor-card" }, [
+            el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }),
+            combinedShirtMatrix(state.result.summary)
+          ])
+        ])
       ]));
     }
 
-    var bodyWrap = el("div", { class: "tshirt-report-page-body" }, [body]);
-    var page = el("div", { class: "tshirt-report-page" }, [head, bodyWrap]);
-    host.appendChild(page);
+    // Email Composer Section
+    var emailSection = el("div", { class: "panel" }, [el("h3", { text: "📧 T-Shirt Order Email" })]);
+
+    var vendorEmail = state.appSettings.tshirtVendorEmail || "";
+    emailSection.appendChild(el("div", { class: "form-group" }, [
+      el("label", { text: "To:" }),
+      vendorEmail
+        ? el("div", { class: "form-value", text: vendorEmail })
+        : el("div", { class: "form-error", text: "No Vendor Email set — add one in Developer > Settings > T-Shirt Vendor first." })
+    ]));
+
+    var subjectInput = el("input", { type: "text", value: state.emailSubject || "" });
+    subjectInput.addEventListener("input", function () { state.emailSubject = subjectInput.value; });
+    emailSection.appendChild(el("div", { class: "form-group" }, [
+      el("label", { text: "Subject:" }),
+      subjectInput
+    ]));
+
+    var ccInput = el("input", { type: "text", value: state.emailCc || "", placeholder: "email@example.com" });
+    ccInput.addEventListener("input", function () { state.emailCc = ccInput.value; });
+    emailSection.appendChild(el("div", { class: "form-group" }, [
+      el("label", { text: "CC:" }),
+      ccInput
+    ]));
+
+    var bccInput = el("input", { type: "text", value: state.emailBcc || "", placeholder: "email@example.com" });
+    bccInput.addEventListener("input", function () { state.emailBcc = bccInput.value; });
+    emailSection.appendChild(el("div", { class: "form-group" }, [
+      el("label", { text: "BCC:" }),
+      bccInput
+    ]));
+
+    var defaultBody = buildTshirtOrderEmailBody();
+    if (!state.emailBody) state.emailBody = defaultBody;
+    var bodyTextarea = el("textarea", { rows: "40", style: "width:100%; font-family:monospace; font-size:13px; padding:8px; border:1px solid #ccc; resize:vertical" });
+    bodyTextarea.value = state.emailBody || "";
+    bodyTextarea.addEventListener("input", function () { state.emailBody = bodyTextarea.value; });
+    emailSection.appendChild(el("div", { class: "form-group" }, [
+      el("label", { text: "Message Body (editable):" }),
+      bodyTextarea
+    ]));
+
+    var sendBtn = el("button", { class: "btn primary" }, [state.emailSending ? "Sending…" : "Send"]);
+    if (state.emailSending || !vendorEmail) sendBtn.setAttribute("disabled", "disabled");
+    sendBtn.addEventListener("click", sendTshirtOrderEmail);
+    var actionRow = el("div", { class: "settings-actions" }, [sendBtn]);
+    if (state.emailSent) actionRow.appendChild(el("div", { class: "test-summary good", text: "Sent!" }));
+    if (state.emailSendError) actionRow.appendChild(el("div", { class: "form-error", text: state.emailSendError }));
+    emailSection.appendChild(actionRow);
+
+    wrap.appendChild(emailSection);
+
+    // T-Shirt Report Section — only show if registration data exists
+    if (state.result && state.result.ok) {
+      var reportSection = el("div", { class: "panel", style: "margin-top:20px" }, [el("h3", { text: "📊 T-Shirt Report" })]);
+
+      var paidRecs = allRegistrations().filter(function (r) {
+        return classifyStatus(r["Status"]) === "paid";
+      }).sort(function (a, b) {
+        var aLast = String(a["Last Name"] || "").toLowerCase();
+        var bLast = String(b["Last Name"] || "").toLowerCase();
+        if (aLast !== bLast) return aLast < bLast ? -1 : 1;
+        var aFirst = String(a["First Name"] || "").toLowerCase();
+        var bFirst = String(b["First Name"] || "").toLowerCase();
+        return aFirst < bFirst ? -1 : aFirst > bFirst ? 1 : 0;
+      });
+
+      if (!paidRecs.length) {
+        reportSection.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No paid registrations."]));
+      } else {
+        var rows = paidRecs.map(function (r) {
+          var shirtText = shirtSummaryText(r);
+          return el("tr", {}, [
+            el("td", { text: r["Last Name"] || "—" }),
+            el("td", { text: r["First Name"] || "—" }),
+            el("td", { text: shirtText || "—" })
+          ]);
+        });
+        reportSection.appendChild(el("table", { class: "matrix" }, [
+          el("thead", {}, [el("tr", {}, [
+            el("th", { text: "Last Name" }),
+            el("th", { text: "First Name" }),
+            el("th", { text: "Shirts" })
+          ])]),
+          el("tbody", {}, rows)
+        ]));
+        var printBtn = el("button", { class: "btn", style: "margin-top:16px" }, ["🖨 Print"]);
+        printBtn.addEventListener("click", printTshirtReport);
+        reportSection.appendChild(printBtn);
+      }
+
+      wrap.appendChild(reportSection);
+    }
+
+    return wrap;
   }
 
   function init() {
@@ -4224,8 +4273,6 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     document.body.appendChild(el("div", { id: "settingsHost" }));
     document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "apiHost" }));
-    document.body.appendChild(el("div", { id: "emailHost" }));
-    document.body.appendChild(el("div", { id: "tshirtReportHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
     document.body.appendChild(el("div", { id: "addRegHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
@@ -4244,8 +4291,6 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.apiPageOpen) { closeApiPage(); return; }
-      if (e.key === "Escape" && state.emailPageOpen) { closeEmailPage(); return; }
-      if (e.key === "Escape" && state.tshirtReportOpen) { closeTshirtReportPage(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.addRegOpen) { closeAddRegistration(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }

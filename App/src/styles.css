@@ -226,19 +226,14 @@ th.pinned { z-index: 3; }
    above (independent rules, not shared classes, same reasoning as those). Its
    cards/preview reuse .api-card/.api-response directly (a generic card/
    monospace-preview look, not actually API-specific). */
-.email-page { position: fixed; inset: 0; background: #fff; z-index: 300; display: flex; flex-direction: column; }
-.email-page-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.email-page-head h2 { margin: 0; font-size: 18px; flex: 1; }
-.email-page-body { flex: 1; overflow: auto; padding: 20px; }
-.email-page-inner { max-width: 900px; margin: 0 auto; }
-
-/* Developer > T-Shirt Report — same full-page shape as Change Log/API/Email
-   above (independent rules, not shared classes). */
-.tshirt-report-page { position: fixed; inset: 0; background: #fff; z-index: 300; display: flex; flex-direction: column; }
-.tshirt-report-page-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.tshirt-report-page-head h2 { margin: 0; font-size: 18px; flex: 1; }
-.tshirt-report-page-body { flex: 1; overflow: auto; padding: 20px; }
-.tshirt-report-page-inner { max-width: 900px; margin: 0 auto; }
+/* T-Shirts tab — email composer + report */
+.tshirt-view { max-width: 100%; }
+.tshirt-view .panel { margin-bottom: 20px; }
+.tshirt-view .form-group { margin-bottom: 16px; }
+.tshirt-view .form-group label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.tshirt-view .form-group input[type="text"],
+.tshirt-view .form-group textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 4px; font-family: inherit; }
+.tshirt-view .form-value { padding: 8px; background: #f5f5f5; border-radius: 4px; }
 
 /* summary */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -274,7 +269,7 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .email-page, .tshirt-report-page, .loadedinfo, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .tshirt-view, .loadedinfo, footer.app-footer { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }

@@ -83,7 +83,7 @@ function carshow_safe_inline_json($value) {
 // Credentials come from secrets.php's $SMTP_* vars; returns false (caller
 // should show an error) if they're not configured or sending fails at any
 // step of the conversation.
-function carshow_send_mail($to, $subject, $body) {
+function carshow_send_mail($to, $subject, $body, $cc = '', $bcc = '') {
     // Plain require (not require_once): require_once tracks inclusion by
     // resolved file path regardless of scope, so if some other code in this
     // request already required secrets.php, require_once here would
@@ -139,10 +139,35 @@ function carshow_send_mail($to, $subject, $body) {
     if (!$expect(250)) return $fail();
     $write('RCPT TO:<' . $to . '>');
     if (!$expect(250)) return $fail();
+
+    // Add CC recipients
+    if (!empty($cc)) {
+        $ccList = array_map('trim', explode(',', $cc));
+        foreach ($ccList as $ccEmail) {
+            if (!empty($ccEmail)) {
+                $write('RCPT TO:<' . $ccEmail . '>');
+                if (!$expect(250)) return $fail();
+            }
+        }
+    }
+
+    // Add BCC recipients
+    if (!empty($bcc)) {
+        $bccList = array_map('trim', explode(',', $bcc));
+        foreach ($bccList as $bccEmail) {
+            if (!empty($bccEmail)) {
+                $write('RCPT TO:<' . $bccEmail . '>');
+                if (!$expect(250)) return $fail();
+            }
+        }
+    }
+
     $write('DATA');
     if (!$expect(354)) return $fail();
 
-    $headers = "From: {$from}\r\nTo: {$to}\r\nSubject: {$subject}\r\n" .
+    $headers = "From: {$from}\r\nTo: {$to}\r\n";
+    if (!empty($cc)) $headers .= "Cc: {$cc}\r\n";
+    $headers .= "Subject: {$subject}\r\n" .
         "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n";
     // Dot-stuffing: a line starting with "." in the body must be escaped to
     // ".." or the SMTP server reads it as the end-of-DATA terminator.

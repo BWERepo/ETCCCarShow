@@ -2,13 +2,14 @@
 
 Last updated: 2026-07-11 (session in progress — latest committed hash `1775d95`).
 **Git is at `1775d95` (checkpoint commit "Window card: bigger field text..."); the live site is 
-currently ahead of it** with additional uncommitted-but-deployed features: T-Shirt Order Email 
-(dev page to compose & send), T-Shirt Report (dev page listing paid registrations by shirt), 
-renaming "Ind. Spon. Text" → "Individual Sponsorship Text" in Sponsors tab, window-card PDF 
-form-filling rework (pdf-lib vendor, rescaled to 75% / 36pt font on landscape sheets). **All 
-of it is built and live**, but **not yet committed to git.** Full details in dedicated 
-sections below. The **"CRITICAL: Current Deployment State"** section is authoritative. 
-**"checkpoint" = commit + push + deploy, all three** (see Claude memory: `feedback-carshow-workflow`).
+currently ahead of it** with multiple uncommitted-but-deployed features from today's session:
+**T-Shirts tab** (new 4th tab with Total Shirts summary card, editable Order Email composer with 
+CC/BCC, printable Report with ETCC logo & date), **enhanced T-Shirt email** (40-row textarea, 
+CC/BCC support with multi-recipient parsing, configurable via Settings), **detail modal expansion** 
+(Last Name, First Name, Gen now editable alongside existing fields). **All of it is built and 
+live**, but **not yet committed to git.** Full details in dedicated sections below. The 
+**"CRITICAL: Current Deployment State"** section is authoritative. **"checkpoint" = commit + push 
++ deploy, all three** (see Claude memory: `feedback-carshow-workflow`).
 
 This file exists so a brand-new Claude Code session can pick up this project with no
 prior conversation history. Read this fully before making changes. Previous revisions
@@ -1485,7 +1486,80 @@ requests mid-session — checkpoint still needs to run to catch git up to what's
   exercise existing helpers only (`tshirtOrderShirtCounts()` calls `LOGIC.summarizeRecords()`
   and `allRegistrations()`, etc.) so no new assertions were needed.
 
-### Next session: say "checkpoint" to commit, push, AND deploy everything above in one
-go (deploy will be a re-upload of what's already live — harmless, but unnecessary if nothing
-else changed since the last live `ftp-deploy.sh`). If git is behind and the user asks for
-brand-new work instead, mention it and ask if they want to checkpoint first.
+## This session's work (T-Shirts tab + email enhancements, 2026-07-11)
+
+**Major work: T-Shirts tab redesign (consolidated email + report into a single tab).**
+
+### Syntax fixes and gotchas
+
+- **Fixed missing comma in state object** (line 80: `emailSent: false` → `emailSent: false,`) after removing `emailPageOpen` and `tshirtReportOpen` flags. This caused "Unexpected identifier 'deletedCsvKeys'" error — a subtle reminder that object literal commas are mandatory between properties even when removing one. Saved as memory `feedback-replace-all-scope-risk` and updated `feedback-tab-content-data-dependency` with the bonus trailing-comma lesson.
+- **Fixed missing `sendTshirtOrderEmail()` function** after a large `replace_all` operation inadvertently consumed it along with the old overlay rendering functions. Always verify function definitions survive large refactors.
+- **Fixed print CSS** — added `.tshirt-view` to the `@media print { display: none !important; }` list so the tab content hides and only `#printHost` (the T-Shirt Report table) prints.
+
+### T-Shirts tab (new 4th tab)
+
+Consolidated two separate Developer submenu items (📧 T-Shirt Order Email, 📊 T-Shirt Report) into a single, cohesive tab alongside Summary/Registration/Sponsors. Removed those menu items entirely.
+
+**Top section: Total Shirts Needed For Event card** — copied from Summary tab, shows men's/women's counts by size combining registration shirts (Free/Xtra collapsed by gender) + all sponsor shirt picks. Displays only when registration data exists.
+
+**Middle section: T-Shirt Order Email composer** —
+- **To field** (read-only): vendor email from Developer > Settings > T-Shirt Vendor
+- **Subject field** (editable): defaults to "ETCC Car Show — T-Shirt Order"
+- **CC field** (new, editable): comma-separated email addresses
+- **BCC field** (new, editable): comma-separated email addresses
+- **Message Body** (editable, **40 rows**, was 12 initially): plaintext, defaults to auto-generated summary (Premier/Corporate/Individual sponsors with websites, shirt counts). Officers can freely customize before sending.
+- **Send button**: disabled if no vendor email configured; shows "Sending…" then "Sent!" confirmation. Sends subject, body, CC, BCC to `send-tshirt-order-email.php`.
+
+**Bottom section: T-Shirt Report** — paid registrations sorted by last name, table with Last Name | First Name | Shirts (using existing `shirtSummaryText()`). Displays only when registration data exists.
+- **Print button** ("🖨 Print"): visible only when there are paid registrations. Opens `printTshirtReport()`, which renders a clean printable version with ETCC logo (60px, centered), centered title "T-Shirt Report", report date ("Report Date: MM/DD/YYYY"), and the table. Only the report prints (tab content hidden via CSS).
+
+### Email infrastructure updates
+
+**Extended `carshow_send_mail()` in `deploy/lib.php`**:
+- Added optional `$cc` and `$bcc` parameters (default empty string)
+- Parses comma-separated email lists (via `explode(',')` and `trim()`)
+- Sends `RCPT TO:<email>` SMTP command for each CC/BCC recipient
+- Adds `Cc: {cc}` header to the email (BCC intentionally omitted from headers per SMTP spec)
+- Maintains full backward compatibility (existing calls still work)
+
+**Updated `send-tshirt-order-email.php`**:
+- Extracts `cc` and `bcc` from JSON request body (defaults to empty string if missing)
+- Passes them to the updated `carshow_send_mail()` call
+- No change to recipient validation — vendor email still read server-side from `app-settings.json`
+
+### Detail modal expansion
+
+Added three new fields to `EDITABLE_FIELDS` so officers can edit them inline in the registration detail modal (click ✎ Edit):
+- **Last Name**, **First Name**: were read-only before; now editable text inputs
+- **Gen**: was read-only before; now editable text input (Corvette generation)
+- All existing editable fields remain (Reg #, Club Name, Status, Total Fee, Individual Sponsorship, Spouse First Name, #, Phone, Email, Address, City, State, Zip, Year, Model, Color, In Car Show?)
+
+Changes persist to server for CSV-imported rows (via `registration-overrides.json`) and Walk-In rows (via `walkin-registrations.json`).
+
+### Print enhancements for T-Shirt Report
+
+- ETCC logo fetched from header, scaled to 60px height, centered at top
+- Centered h1 title "T-Shirt Report" with 24px font
+- Report date line ("Report Date: 7/11/2026") in 12px muted text
+- CSS ensures only the report prints (`#printHost` shown, rest of tab hidden via `display: none !important` in `@media print`)
+
+### Status
+
+**All features implemented, syntax-checked, built (`node build.js` → 1697 KB `ETCCCarShow.html`), deployed via `ftp-deploy.sh` at 19:25 UTC July 11, 2026.**
+- No PHP linting available locally (same limitation as all PHP files here)
+- Test suites unchanged (58/58 assertions passing) — new features exercise existing helpers only
+- Live URL reflects all changes: https://etccapps.com/apps/carshow/
+
+### Known issues / follow-ups
+
+- **Memory notes created** for future sessions (stored in `C:\Users\Admin\.claude\projects\Z--Backup-Websites-CarShow\memory/`):
+  - `feedback-tab-content-data-dependency.md` — guard tab builders with `if (state.result && state.result.ok)` before calling helpers that need registration data
+  - `feedback-replace-all-scope-risk.md` — verify function definitions survive large find-and-replace operations; use `grep` after `replace_all` to confirm
+  - Updated `feedback-tab-content-data-dependency.md` with bonus lesson about object literal trailing commas when removing properties
+- **No automated UI tests for new features** — detail modal edits, email composer, T-Shirt Report all verified manually before deploy
+- **First T-Shirt email send will only work if vendor email is configured** via Developer > Settings > T-Shirt Vendor
+- **CC/BCC fields accept comma-separated addresses** — parser is simple (split on `,`, trim whitespace) with no validation for malformed emails
+
+### Next session: 
+
+Say **"checkpoint"** to commit, push, AND deploy everything above in one go (deploy will be a re-upload of what's already live — harmless, but unnecessary if nothing else changed since 19:25 UTC). If git is behind and the user asks for brand-new work instead, mention it and ask if they want to checkpoint first.

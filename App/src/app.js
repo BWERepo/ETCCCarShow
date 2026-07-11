@@ -967,11 +967,9 @@
   // Recomputed from whatever the Registration tab's search/status filters
   // currently leave visible, rather than always the full loaded
   // dataset — so this tab always reflects "what I've selected over there".
-  // nextMemberNumber is the one exception: it's a capacity-planning figure
-  // (next open slot overall), not something filtering should change.
   function buildSummaryView() {
     var s = LOGIC.summarizeRecords(visibleRows(), CONFIG);
-    s.nextMemberNumber = state.result.summary.nextMemberNumber;
+    var paidRegistrations = visibleRows().filter(function (r) { return classifyStatus(r["Status"]) === "paid"; }).length;
     var m = state.result.meta, C = CONFIG;
     var container = el("div", { class: "view" });
 
@@ -989,10 +987,9 @@
 
     // totals cards
     container.appendChild(el("div", { class: "cards" }, [
-      card("Attendees", s.attendees),
       card("Registrations", s.registrations),
-      card("Funds", "$" + Number(s.funds).toLocaleString(undefined, { minimumFractionDigits: 0 })),
-      card("Next Member #", s.nextMemberNumber)
+      card("Paid Registrations", paidRegistrations),
+      card("Funds", "$" + Number(s.funds).toLocaleString(undefined, { minimumFractionDigits: 0 }))
     ]));
 
     // sponsor cards (independent of the loaded CSVs — reads state.sponsors directly)

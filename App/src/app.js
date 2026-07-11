@@ -1763,29 +1763,39 @@
       el("h4", { text: "Record Payment", style: "margin: 0 0 15px 0; font-size: 13px; color: var(--muted); text-transform: uppercase" })
     ]));
 
+    // Pre-fill from this sponsor's actual payment record (e.g. one already
+    // created by backfillPaymentDefaults()) if one exists, instead of always
+    // showing generic today's-date/blank fields — so re-opening an already
+    // backfilled Individual Sponsorship shows what was actually recorded.
+    var existingPayment = editing.id ? getLastPaymentForSponsor(editing.id) : null;
+
     var paymentTypeSelect = el("select", {});
     ["Cash", "Check", "Credit Card"].forEach(function (t) {
       paymentTypeSelect.appendChild(el("option", { value: t, text: t }));
     });
-    if (editing.sponsorType === "individual") paymentTypeSelect.value = "Credit Card";
+    if (existingPayment) paymentTypeSelect.value = existingPayment.paymentType;
+    else if (editing.sponsorType === "individual") paymentTypeSelect.value = "Credit Card";
     body.appendChild(el("div", { class: "form-row" }, [
       el("span", { class: "form-label", text: "Payment Type" }),
       paymentTypeSelect
     ]));
 
-    var paymentAmountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0", value: editing.sponsorType === "individual" ? "100" : "" });
+    var defaultAmount = existingPayment ? existingPayment.amount
+      : (editing.sponsorType === "individual" ? "100" : "");
+    var paymentAmountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0", value: defaultAmount });
     body.appendChild(el("div", { class: "form-row" }, [
       el("span", { class: "form-label", text: "Amount" }),
       paymentAmountInput
     ]));
 
-    var paymentDateInput = el("input", { type: "date", value: new Date().toISOString().split("T")[0] });
+    var defaultDate = existingPayment ? dateInputValue(existingPayment.date) : new Date().toISOString().split("T")[0];
+    var paymentDateInput = el("input", { type: "date", value: defaultDate });
     body.appendChild(el("div", { class: "form-row" }, [
       el("span", { class: "form-label", text: "Date Received" }),
       paymentDateInput
     ]));
 
-    var checkNumInput = el("input", { type: "text", placeholder: "Check #" });
+    var checkNumInput = el("input", { type: "text", placeholder: "Check #", value: existingPayment ? (existingPayment.checkNum || "") : "" });
     var checkNumRow = el("div", { class: "form-row", style: "display:" + (paymentTypeSelect.value === "Check" ? "" : "none") }, [
       el("span", { class: "form-label", text: "Check #" }),
       checkNumInput
@@ -2410,6 +2420,16 @@
     function p(n) { return (n < 10 ? "0" : "") + n; }
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
     return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear() + " " + h + ":" + p(d.getMinutes()) + " " + ap;
+  }
+
+  // Converts any parseable date string/Date (e.g. a raw CSV "Reg Date" like
+  // "7/8/2026 7:55:00 AM") into the "YYYY-MM-DD" shape <input type=date>
+  // requires — falls back to today if the value can't be parsed.
+  function dateInputValue(d) {
+    var parsed = d instanceof Date ? d : new Date(d);
+    if (isNaN(parsed.getTime())) parsed = new Date();
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return parsed.getFullYear() + "-" + p(parsed.getMonth() + 1) + "-" + p(parsed.getDate());
   }
 
   // ---------- header menu (hamburger) / settings ----------

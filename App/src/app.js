@@ -97,7 +97,7 @@
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Reg #": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
+  var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }

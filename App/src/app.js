@@ -1281,8 +1281,10 @@
   var SPONSOR_COLS = [
     { key: "name", label: "Sponsor Name" },
     { key: "regDate", label: "Reg Date" },
-    { key: "lastPaymentDate", label: "Last Payment" },
-    { key: "lastPaymentType", label: "Payment Type" },
+    { key: "lastPaymentDate", label: "Payment Date" },
+    { key: "lastPaymentType", label: "Type" },
+    { key: "lastPaymentCheckNum", label: "Check #" },
+    { key: "lastPaymentAmount", label: "Amount" },
     { key: "contactPerson", label: "Contact Person" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
@@ -1359,6 +1361,14 @@
     if (colKey === "lastPaymentType") {
       var payment = getLastPaymentForSponsor(s.id);
       return payment ? payment.paymentType : "";
+    }
+    if (colKey === "lastPaymentCheckNum") {
+      var payment = getLastPaymentForSponsor(s.id);
+      return payment ? (payment.checkNum || "—") : "";
+    }
+    if (colKey === "lastPaymentAmount") {
+      var payment = getLastPaymentForSponsor(s.id);
+      return payment ? fmtMoney(payment.amount) : "";
     }
     // regDate isn't a single stored field — it depends on where the sponsor
     // came from: the CSV auto-sync stores the registration's own "Reg Date"
@@ -1825,6 +1835,9 @@
     var dateInput = el("input", { type: "date", value: new Date().toISOString().split("T")[0] });
     row("Date Received", dateInput, true);
 
+    var amountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0" });
+    row("Payment Amount", amountInput, true);
+
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 
@@ -1834,8 +1847,9 @@
       var paymentType = typeSel.value.trim();
       var checkNum = checkNumInput.value.trim();
       var date = dateInput.value.trim();
+      var amount = amountInput.value.trim();
 
-      if (!sponsorId || !paymentType || !date) {
+      if (!sponsorId || !paymentType || !date || !amount) {
         errorMsg.textContent = "Please fill in all required fields.";
         return;
       }
@@ -1852,6 +1866,7 @@
         paymentType: paymentType,
         checkNum: paymentType === "Check" ? checkNum : "",
         date: date,
+        amount: Number(amount),
         recordedAt: new Date().toISOString()
       };
       recordPayment(payment);

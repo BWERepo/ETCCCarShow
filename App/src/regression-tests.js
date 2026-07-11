@@ -7,6 +7,11 @@
  * non-member (Bob) with no year/club, and a cancelled sponsor (Sponsor)
  * whose Individual Sponsorship activity grants a bonus free shirt from a
  * different column. Fabricated data, not real member info.
+ *
+ * NOTE: UI-only features (payment modal, payment columns, zoom controls,
+ * autosave, detail modal always-editable pattern) are tested manually in the
+ * app's Developer > Run Regression Tests UI. This file covers logic layer
+ * and Excel export round-trip only.
  */
 (function (root) {
   "use strict";

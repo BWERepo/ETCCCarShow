@@ -54,7 +54,7 @@ if ($bundle === false) {
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
 // this one, has already run) sees window.__carshowSite already set.
-$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\", windowCardPdfApiUrl: \"window-card-pdf.php\" };</script>\n";
+$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\", windowCardPdfApiUrl: \"window-card-pdf.php\", sendTshirtOrderEmailApiUrl: \"send-tshirt-order-email.php\" };</script>\n";
 $bundle = str_replace('<head>', '<head>' . "\n" . $siteConfigScript, $bundle);
 
 $bootParts = [];

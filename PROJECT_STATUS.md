@@ -1,17 +1,14 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-11 (session in progress — latest committed hash `f7160b9`).
-**Git is at `f7160b9`; the live site is well ahead of it.** Seven more feature rounds
-landed after that commit — Sponsors tab column changes, a partial revert of the
-"Individual Sponsorship" rename, Summary tab Funds formula changes, `sponsor-form.php`
-context-aware redirects, a brand-new **Car Show Window Card** print feature (with a
-real bug found and fixed mid-session — see below), an "In Car Show" filter checkbox, and
-a T-Shirt Vendor Email setting. **All of it is built and live** (deployed via explicit
-"deploy" requests throughout), but **none of it is committed to git yet.** Full details
-in the dedicated sections below, in order; the **"CRITICAL: Current Deployment State"**
-section near the end of this file is the authoritative summary. **"checkpoint" is
-explicitly defined as commit + push + deploy, all three, every time** (see Claude's
-memory: `feedback-carshow-workflow`) — say it to bring git in sync with what's live.
+Last updated: 2026-07-11 (session in progress — latest committed hash `1775d95`).
+**Git is at `1775d95` (checkpoint commit "Window card: bigger field text..."); the live site is 
+currently ahead of it** with additional uncommitted-but-deployed features: T-Shirt Order Email 
+(dev page to compose & send), T-Shirt Report (dev page listing paid registrations by shirt), 
+renaming "Ind. Spon. Text" → "Individual Sponsorship Text" in Sponsors tab, window-card PDF 
+form-filling rework (pdf-lib vendor, rescaled to 75% / 36pt font on landscape sheets). **All 
+of it is built and live**, but **not yet committed to git.** Full details in dedicated 
+sections below. The **"CRITICAL: Current Deployment State"** section is authoritative. 
+**"checkpoint" = commit + push + deploy, all three** (see Claude memory: `feedback-carshow-workflow`).
 
 This file exists so a brand-new Claude Code session can pick up this project with no
 prior conversation history. Read this fully before making changes. Previous revisions
@@ -1373,13 +1370,88 @@ Two small, independent asks handled together:
   non-blank. Added to the same three defaults-sync locations as `windowCardImage` above
   (`app.js`, `app-settings.php`, `index.php`).
 
+## This session's work (window-card PDF rework + T-Shirt features, 2026-07-11, uncommitted)
+
+Two checkpoint commits landed from prior session rounds (`83e8fd6` "Sponsors/Summary/sponsor-form updates..." and `1775d95` "Window card: bigger field text..."), and this session added more features (not yet committed):
+
+### Window Card PDF form-filling rework (replaces image-overlay approach)
+
+The original Window Card feature printed by overlaying text on an uploaded PNG/JPG image. This was replaced with a fillable PDF template approach:
+
+- **Vendored `pdf-lib.min.js`** (525 KB) into `App/vendor/` and added to `build.js` inline-bundle; exposes `window.PDFLib` UMD global.
+- **Replaced `window-card-image.php` with `window-card-pdf.php`** — same session/password dual auth, accepts multipart upload (file field `pdf`, 5 MB max), saves as `window-card.pdf` on server (gitignored, like all data files).
+- **Settings key renamed**: `windowCardImage` → `windowCardPdf` everywhere (`app.js`, `app-settings.php`, `index.php`, `deploy/index.php` injection).
+- **`fillOneWindowCard()` reworked** to use `PDFLib.PDFDocument.load()`, embed `StandardFonts.HelveticaBold`, fill form fields (Owner/CarNumber/Year/Model/Generation) at fixed **36pt bold**, call `form.updateFieldAppearances()` to apply the font, then `flatten()` to bake the values into the page.
+- **`printWindowCards()` layout changed**: each filled card is embedded (not copied) onto a fresh 8.5×11in **landscape** output page, scaled to **75% of page size** (was 50%) while preserving aspect ratio, **centered** both horizontally and vertically. Each card gets its own printed page (`page-break-after`). One output PDF opened in a new tab for printing.
+- **Image-load race condition fixed**: `printWindowCards()` now waits for every embedded image (if still using the old raster approach for some reason) to fire `load` or `error` before calling `window.print()`, with a 3-second safety fallback.
+- **Old cleanup**: `window-card.png` (raster asset) and `window-card-image.php` remain on the server as harmless leftovers; nothing references them anymore.
+- **Template expectations**: the fillable PDF's form fields (`Owner`, `CarNumber`, `Year`, `Model`, `Generation`) must exist; missing fields are silently skipped rather than erroring out.
+
+### T-Shirt Order Email feature (new Developer submenu item)
+
+A full-page screen (like the existing API and Change Log screens) that composes and sends a T-shirt order email to the Vendor Email address configured in Settings:
+
+- **New state fields** in `app.js`: `emailPageOpen`, `emailSubject`, `emailSending`, `emailSendError`, `emailSent`.
+- **New functions**:
+  - `tshirtOrderShirtCounts()` — returns array of shirt sizes with Men's/Women's counts (paid registrations + all sponsor shirt picks, combined).
+  - `tshirtEmailSponsorList(typeKey)` — filters `state.sponsors` by type (premier/corporate/individual).
+  - `buildTshirtOrderEmailBody()` — plain-text email body: PREMIER SPONSORS (with websites), CORPORATE SPONSORS (with websites), INDIVIDUAL SPONSORS (with Ind. Spon. Text), SHIRT COUNTS (by size).
+  - `openEmailPage()` / `closeEmailPage()` / `renderEmailPage()` / `sendTshirtOrderEmail()` — state management and UI.
+- **Rendering**:
+  - To field: shows configured Vendor Email from `state.appSettings.tshirtVendorEmail` (read-only); errors if not set.
+  - Subject field: editable text input, defaults to "ETCC Car Show — T-Shirt Order" if not already set.
+  - Preview: `<pre>` block showing the exact plain-text body that will be sent (Premier/Corporate/Individual sections + shirt totals).
+  - Send button: disabled if no vendor email configured; shows "Sending…" while in flight; shows "Sent!" confirmation on success.
+- **Server endpoint**: **`deploy/send-tshirt-order-email.php`** (new file). POST-only, session/password dual auth via `carshow_authed()`. Reads `subject` + `body` from JSON request body. **Reads recipient email server-side** from `app-settings.json` (never trusts client-supplied address — keeps Settings as single source of truth, prevents mis-routing). Calls `carshow_send_mail()` via the hand-rolled SMTP client in `lib.php`. Returns `{ok, error?}` JSON.
+- **Integration**:
+  - `window.__carshowSite.sendTshirtOrderEmailApiUrl` injected in `deploy/index.php`.
+  - Added to `ftp-deploy.sh` upload list.
+  - "📧 T-Shirt Order Email" menu item in Developer submenu (alongside API, Change Log).
+  - Escape key closes the page.
+  - `.email-page*` CSS (fixed full-page overlay, matching `.api-page` / `.changelog-page` pattern).
+
+### T-Shirt Report feature (new Developer submenu item)
+
+A full-page screen showing all paid registrations sorted by last name, with their shirt info:
+
+- **New state field**: `tshirtReportOpen`.
+- **New functions**:
+  - `openTshirtReportPage()` / `closeTshirtReportPage()` / `renderTshirtReportPage()` — state and UI.
+- **Rendering**:
+  - Gathers all paid registrations (CSV + Walk-Ins, filtered by `classifyStatus() === "paid"`).
+  - Sorts by Last Name, then First Name (case-insensitive).
+  - Table with columns: Last Name | First Name | Shirts.
+  - Shirts column reuses `shirtSummaryText(r)` (existing helper that formats shirt buckets as readable text).
+  - Empty state message if no paid registrations.
+- **Integration**:
+  - "📊 T-Shirt Report" menu item in Developer submenu.
+  - Escape key closes the page.
+  - `.tshirt-report-page*` CSS (fixed full-page overlay, matching other report pages).
+
+### Other changes
+
+- **Sponsors tab**: "Ind. Spon. Text" column label renamed to "Individual Sponsorship Text" (both table and edit-sponsor modal, 2 occurrences).
+- **No test changes**: `test/run-tests.js` and `regression-tests.js` remain unchanged (58/58 assertions still passing, verified during email/report build).
+
+**Status**: All features implemented, syntax-checked, built successfully (`node build.js` → 1696 KB `ETCCCarShow.html`). All new PHP endpoints reviewed by hand (no local PHP interpreter to lint). **Deployed via `ftp-deploy.sh`** but **not yet committed to git** — waiting for `checkpoint` command.
+
 ## **CRITICAL: Current Deployment State**
 
-**Git is at commit `f7160b9`. The live site is well AHEAD of git** — every round from
-"Sponsors tab: Member column + Ind. Spon. Text" through "In Car Show filter + T-Shirt
-Vendor Email" above (7 distinct rounds, all summarized in the sections immediately above
-this one) has been built and deployed via `ftp-deploy.sh` throughout this session, but
-**none of it has been committed to git yet.** Local working tree matches what's live.
+**Git is at commit `1775d95` ("Window card: bigger field text..."); the live site is ahead of it**. 
+Uncommitted changes in working tree (all built and deployed):
+- Window card PDF form-filling rework (pdf-lib vendor, 75% scale, 36pt bold, landscape sheets)
+- T-Shirt Order Email feature (dev page + send-tshirt-order-email.php endpoint)
+- T-Shirt Report feature (dev page listing paid registrations by shirt)
+- Sponsors tab column header rename ("Ind. Spon. Text" → "Individual Sponsorship Text")
+
+**New/changed files since `1775d95`**:
+- `App/src/app.js` (email/report state, helpers, pages, menu items)
+- `App/src/styles.css` (email/report page CSS)
+- `App/deploy/send-tshirt-order-email.php` (new endpoint)
+- `App/deploy/index.php` (sendTshirtOrderEmailApiUrl injection)
+- `App/deploy/ftp-deploy.sh` (added send-tshirt-order-email.php to upload list)
+- `App/ETCCCarShow.html` (rebuilt bundle)
+- `App/version.json` (auto-bumped)
 
 **New/changed files since `f7160b9`:** `App/src/app.js`, `App/src/config.js`,
 `App/src/excel.js`, `App/src/logic.js`, `App/src/regression-tests.js`,
@@ -1394,19 +1466,26 @@ Deploys in this doc's "uncommitted" sections above already happened via explicit
 requests mid-session — checkpoint still needs to run to catch git up to what's live.
 
 **Known follow-ups for a fresh session to be aware of:**
-- The Car Show Window Card print bug fix (display:none override) is believed correct
-  and builds cleanly, but has **not been confirmed against a real print/PDF preview by
-  the user** as of this doc's writing — worth asking if it's been tried yet before
-  assuming it's fully resolved.
-- `window-card.png` (or `.jpg`/`.gif`/`.webp`) is a real, live, gitignored file on the
-  server (confirmed via FTP listing — ~1.7 MB PNG as of this session) — a fresh clone of
-  this repo will have no window card image until one is uploaded through Settings.
-- No local PHP interpreter exists to lint `window-card-image.php` or the
-  `sponsor-form.php` redirect changes — both were reviewed carefully by hand (brace/tag
-  balance checked) but never executed locally, same limitation as every other PHP file
+- **Window card PDF changes**: the fillable-PDF form-filling approach is new this session
+  and has not yet been verified against a real print/PDF by the user. The 75% scale on
+  8.5×11 landscape and 36pt bold font are configured but unconfirmed visually.
+- **T-Shirt Order Email**: reads vendor email server-side from `app-settings.json`. The
+  first send attempt will only work if an officer has already configured a Vendor Email
+  in Developer > Settings > T-Shirt Vendor. Email body is plain-text only (no HTML).
+- **T-Shirt Report**: uses `shirtSummaryText(r)` to format shirt info (same as
+  Registration tab's Shirts column) — if that helper changes, both update together.
+- **Old window-card files**: `window-card.png` and `window-card-image.php` remain on the
+  server as unreferenced leftovers from the pre-PDF approach — harmless but could be
+  manually cleaned up via FTP if desired.
+- **No local PHP linting**: `send-tshirt-order-email.php` was reviewed carefully by hand
+  but never executed (no local PHP interpreter available), same as every other PHP file
   in this repo.
+- **No test updates**: the test suites (`test/run-tests.js`, `regression-tests.js`)
+  remain unchanged and still passing (58/58 assertions); the email and report features
+  exercise existing helpers only (`tshirtOrderShirtCounts()` calls `LOGIC.summarizeRecords()`
+  and `allRegistrations()`, etc.) so no new assertions were needed.
 
 ### Next session: say "checkpoint" to commit, push, AND deploy everything above in one
-go (deploy will be a no-op re-upload of what's already live, which is harmless). If the
-user asks for a brand-new feature instead, mention git is several rounds behind live and
-ask whether they want it checkpointed first (most likely yes, to avoid losing work).
+go (deploy will be a re-upload of what's already live — harmless, but unnecessary if nothing
+else changed since the last live `ftp-deploy.sh`). If git is behind and the user asks for
+brand-new work instead, mention it and ask if they want to checkpoint first.

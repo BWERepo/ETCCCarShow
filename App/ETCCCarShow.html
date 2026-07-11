@@ -317,7 +317,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.56 &middot; Deployed 7/11/2026 4:25 PM</div>
+  <div>v2.57 &middot; Deployed 7/11/2026 4:30 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -1609,6 +1609,13 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     }
     state.sortCol = null; state.sortDir = 1;
     syncSponsorsFromRegistrations();
+    // A CSV (re)import can introduce brand-new Individual Sponsorship
+    // registrants — backfill their payment record (Credit Card/$100/regDate)
+    // immediately so the Sponsors tab's payment columns aren't blank until
+    // the next full page load re-runs ingestPayments(). See also
+    // upsertSponsor()'s own call, which covers the "+ Add Sponsor"/Edit
+    // Sponsor path (individual sponsor added directly, not via CSV).
+    backfillPaymentDefaults();
     syncPaidRegistrationsCache();
     renderViews();
   }
@@ -2798,6 +2805,11 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     state.sponsors.forEach(function (s, i) { if (s.id === record.id) idx = i; });
     if (idx === -1) state.sponsors.push(record); else state.sponsors[idx] = record;
     pushSponsorToServer("upsert", { sponsor: record });
+    // Covers a brand-new Individual Sponsorship added directly (Edit Sponsor
+    // modal's Save, or a sponsor-form.php submission ingested via
+    // ingestSponsors) — backfillPaymentDefaults() no-ops for sponsors that
+    // already have a payment record, so this is safe to call unconditionally.
+    backfillPaymentDefaults();
   }
   function removeSponsor(id) {
     state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });

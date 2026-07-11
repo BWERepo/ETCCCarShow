@@ -217,6 +217,13 @@
     }
     state.sortCol = null; state.sortDir = 1;
     syncSponsorsFromRegistrations();
+    // A CSV (re)import can introduce brand-new Individual Sponsorship
+    // registrants — backfill their payment record (Credit Card/$100/regDate)
+    // immediately so the Sponsors tab's payment columns aren't blank until
+    // the next full page load re-runs ingestPayments(). See also
+    // upsertSponsor()'s own call, which covers the "+ Add Sponsor"/Edit
+    // Sponsor path (individual sponsor added directly, not via CSV).
+    backfillPaymentDefaults();
     syncPaidRegistrationsCache();
     renderViews();
   }
@@ -1406,6 +1413,11 @@
     state.sponsors.forEach(function (s, i) { if (s.id === record.id) idx = i; });
     if (idx === -1) state.sponsors.push(record); else state.sponsors[idx] = record;
     pushSponsorToServer("upsert", { sponsor: record });
+    // Covers a brand-new Individual Sponsorship added directly (Edit Sponsor
+    // modal's Save, or a sponsor-form.php submission ingested via
+    // ingestSponsors) — backfillPaymentDefaults() no-ops for sponsors that
+    // already have a payment record, so this is safe to call unconditionally.
+    backfillPaymentDefaults();
   }
   function removeSponsor(id) {
     state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });

@@ -1,16 +1,14 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-11 (session in progress — latest committed hash `5925a28`).
-**Git is at `5925a28`; the live site is one round ahead of git.** `5925a28` (the
-`CSSponsorName` mapping + external Paid Registrations API) is committed, pushed, and
-live. Since then, the Registration table's "Member Number" column was **moved (before
-Reg Type) and renamed to "Reg Number"** — implemented, built, **and deployed via `ftp`**,
-but **not yet committed to git** (see "This session's work (Reg Number column
-rename/reorder...)" below, including a confirmed live-data caveat still unresolved).
-Most recently (a new day, 2026-07-11), a follow-up **Spouse First Name backfill from the
-member roster** was implemented and built but is **not yet deployed or committed** — see
-"This session's work (Spouse First Name from member roster...)" below. Say "checkpoint"
-to commit both rounds, "ftp" to deploy the second one (or both).
+Last updated: 2026-07-11 (session in progress — latest committed hash `2c613ab`).
+**Git and the live site are in sync as of `2c613ab`** — covers the "Member Number" →
+"Reg Number" column rename/reorder, the Spouse First Name roster backfill, and its
+self-match guard, all committed, pushed, and deployed this session. **"checkpoint" is
+now explicitly defined as commit + push + deploy, all three** (see Claude's memory:
+`feedback-carshow-workflow`). Most recently, "Reg Number" was further shortened to
+"Reg #" everywhere — implemented and built but **not yet committed or deployed** — see
+"This session's work ("Reg Number" → "Reg #"...)" below. Say "checkpoint" to commit,
+push, and deploy it.
 
 This file exists so a brand-new Claude Code session can pick up this project with no
 prior conversation history. Read this fully before making changes. Previous revisions
@@ -1145,32 +1143,45 @@ re-importing through the updated `members-import.php` to actually populate
 `spouseFirstName` into `members-data.json` before any Spouse First Name backfill can
 happen.
 
+## This session's work ("Reg Number" → "Reg #", 2026-07-11, uncommitted)
+
+Follow-up rename: every occurrence of the label "Reg Number" (itself renamed from
+"Member Number" earlier this session) shortened to "Reg #" — a plain literal
+find-and-replace across every file that had it (table/detail-modal/form labels, Excel
+header, `NUMERIC_BASE`/`NARROW_HEADER_COLS`/`EDITABLE_FIELDS`/`INT_EDIT_FIELDS` keys,
+`config.js`'s `baseColumnOrder`/`renameMap` target, `logic.js`'s read/writes,
+`regression-tests.js`'s assertions, `deploy/members-import.php`'s comment,
+`deploy/README.md`). **`renameMap`'s CSV-source-side key stayed `"Member Number"`**
+(unchanged — that's still ClubExpress's own literal column name; only the translation
+target changed). The Paid Registrations API's external `memberNumber` JSON field name
+was already stable through the prior rename and remains untouched here too.
+
+**Status:** implemented via a scripted literal replace across 7 files, syntax-checked,
+58/58 `run-tests.js` assertions passing (header A2 now "Reg #"), verified against
+today's real ClubExpress export (columns[0..2] = `["Reg #", "Reg Type", "Last Name"]`,
+Susan Crown's Reg # = 133, zero messages), built successfully (`node build.js` → 1157 KB
+`ETCCCarShow.html`, every inline `<script>` block parse-checked, zero remaining "Reg
+Number" hits anywhere in `src/`/`deploy/`). Not yet deployed or committed.
+
 ## **CRITICAL: Current Deployment State**
 
-**Git is at commit `5925a28`. The live site is AHEAD of git** — it also has the Reg
-Number column rename/reorder (deployed via `ftp-deploy.sh`, not yet committed). Local
-working tree is ahead of the live site too — it additionally has the not-yet-deployed
-Spouse First Name roster backfill.
+**Git and the live site are in sync at commit `2c613ab`** — covers everything through
+the Spouse First Name roster backfill and its self-match guard (all committed, pushed,
+and deployed via `ftp-deploy.sh` in prior turns this session). The earlier live-Walk-In-
+data caveat from the original "Member Number" → "Reg Number" rename appears resolved —
+a post-deploy FTP listing showed `walkin-registrations.json` freshly emptied/reset.
 
-**Three-way state, in order:**
-1. **Git (`5925a28`):** Paid Registrations API only.
-2. **Live site:** `5925a28` + Reg Number column rename/reorder (deployed but
-   uncommitted — see that section above for the confirmed live-Walk-In-data caveat,
-   still unresolved).
-3. **Local working tree (uncommitted, undeployed):** all of the above + the Spouse
-   First Name roster backfill (see that section immediately above this one).
+**Since `2c613ab`, one new round is implemented + built locally but NOT yet deployed or
+committed:** the **"Reg Number" → "Reg #"** relabel described immediately above.
+New/changed files: `App/src/app.js`, `App/src/config.js`, `App/src/excel.js`,
+`App/src/logic.js`, `App/src/regression-tests.js`, `App/deploy/members-import.php`,
+`App/deploy/README.md`, and the rebuilt `App/ETCCCarShow.html`.
 
-New/changed files since `5925a28`: `App/src/config.js`, `App/src/logic.js`,
-`App/src/app.js`, `App/src/excel.js`, `App/src/regression-tests.js`,
-`App/deploy/members-import.php`, `App/deploy/README.md`, and the rebuilt
-`App/ETCCCarShow.html`.
+**"checkpoint" is explicitly defined (user's own words, 2026-07-11) as commit + push +
+deploy, all three, every time** — see [[feedback-carshow-workflow]] in Claude's memory
+system. A bare "checkpoint" should attempt all three in one go, not stop after commit.
 
-### Next session: say "checkpoint" to commit everything (bringing git level with the
-live site's rename/reorder plus the new roster-backfill round), "ftp" to deploy the
-roster-backfill round (or both — deploying will bring the live site level with git too).
-Before or after either action, double-check with the user whether any live Walk-In
-registrations need re-saving (Reg Number rename's caveat) and whether they've re-run
-Import Members with a roster CSV that has a spouse-name column (roster-backfill round's
-prerequisite — see that section). If the user asks for a brand-new feature instead,
-mention the current three-way git/live/local state above and ask whether they want it
-checkpointed first (most likely yes, to avoid losing work).
+### Next session: say "checkpoint" to commit, push, AND deploy the "Reg #" relabel
+above. If the user asks for a brand-new feature instead, mention this one round is still
+uncommitted/undeployed and ask whether they want it checkpointed first (most likely yes,
+to avoid losing work).

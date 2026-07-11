@@ -87,7 +87,7 @@
         var cell = row.getCell(ci + 1), v = rec[c];
         if (isShirt(res, c)) { cell.value = Number(v) > 0 ? Number(v) : null; cell.alignment = { horizontal: "center" }; }
         else if (c === "Total Fee" || c === "Individual Sponsorship") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
-        else if (c === "Reg Number" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
+        else if (c === "Reg #" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
         else { cell.value = (v === "" || v == null) ? null : v; }
         cell.border = border();
       });

@@ -93,11 +93,11 @@
   // viewing the site sees the same live list.
   var SITE_CONFIG = {};
 
-  var NUMERIC_BASE = { "Reg Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Reg Number": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
+  var NARROW_HEADER_COLS = { "Reg #": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
@@ -202,8 +202,8 @@
   // never creates duplicates, and never overwrites a sponsor an officer has
   // since edited by hand (e.g. added a website).
   //
-  // The id is derived from Reg Date + name, NOT Reg Number: non-member
-  // registrants get a Reg Number auto-assigned fresh by generate() on
+  // The id is derived from Reg Date + name, NOT Reg #: non-member
+  // registrants get a Reg # auto-assigned fresh by generate() on
   // every load (see regenerate() -> LOGIC.generate()), and that assignment
   // depends on row order, so the same numeric value could mean a different
   // person on a re-export. Reg Date (the registration transaction's own
@@ -242,11 +242,11 @@
 
   // Backfills Spouse First Name from the member roster (members-data.json,
   // via Developer > Import Members) for a CSV-imported registration whose
-  // own Reg Number (the registrant's real ETCC member number) matches a
+  // own Reg # (the registrant's real ETCC member number) matches a
   // roster entry with a spouseFirstName on file — see members-import.php's
   // comment. Insert-only, same as applySponsorshipTextDefault: never
   // overwrites an officer's own detail-modal edit. Non-members (an
-  // auto-assigned placeholder Reg Number) never match any roster entry,
+  // auto-assigned placeholder Reg #) never match any roster entry,
   // which is correct — there's no roster record to backfill from. Skips the
   // fill (leaves it blank) if the roster's spouseFirstName is the same as
   // the registrant's own First Name (case-insensitive) — some roster rows
@@ -258,7 +258,7 @@
   // still blank.
   function fillSpouseFirstNameFromRoster(rec) {
     if (rec["Spouse First Name"]) return rec;
-    var num = Number(rec["Reg Number"]);
+    var num = Number(rec["Reg #"]);
     if (!num) return rec;
     var match = state.members.filter(function (m) { return Number(m.memberNumber) === num; })[0];
     if (!match || !match.spouseFirstName) return rec;
@@ -294,7 +294,7 @@
       }
       var cityStateZip = [rec["City"], rec["State"]].filter(Boolean).join(", ") + (rec["Zip"] ? " " + rec["Zip"] : "");
       var sponsorName = (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : "");
-      var isMember = Number(rec["Reg Number"]) < CONFIG.firstNonMember;
+      var isMember = Number(rec["Reg #"]) < CONFIG.firstNonMember;
       upsertSponsor({
         id: id,
         name: sponsorName,
@@ -490,7 +490,7 @@
   // Each pinned cell is `position: sticky`; every one after the first needs
   // its `left` set to the summed rendered width of the pinned cells before
   // it, or they'd all sit at left:0 and overlap/mangle each other.
-  var PINNED_COUNT = 5; // checkbox, Reg Number, Reg Type, Last Name, First Name
+  var PINNED_COUNT = 5; // checkbox, Reg #, Reg Type, Last Name, First Name
   function pinnedClass(idx) {
     return idx < PINNED_COUNT ? " pinned pin-" + (idx + 1) : "";
   }
@@ -555,10 +555,10 @@
     var registrations = allRegistrations()
       .filter(function (r) { return classifyStatus(r["Status"]) === "paid"; })
       .map(function (r) {
-        // Source field renamed to "Reg Number" internally — the external
+        // Source field renamed to "Reg #" internally — the external
         // API's own JSON field name (memberNumber) is a stable public
         // contract and stays as-is regardless of this internal rename.
-        var mn = r["Reg Number"];
+        var mn = r["Reg #"];
         return {
           memberNumber: mn === "" || mn == null ? null : Number(mn),
           firstName: r["First Name"] || "",
@@ -698,7 +698,7 @@
   function nextAvailableWalkinNumber() {
     var next = Number(state.appSettings.walkinFirstNonMember) || 2000;
     state.walkins.forEach(function (w) {
-      var n = Number(w["Reg Number"]);
+      var n = Number(w["Reg #"]);
       if (n >= next) next = n + 1;
     });
     return next;
@@ -805,12 +805,12 @@
   // config.js/applySponsorshipTextDefault) — editing here is the only way to
   // set the former, and to override the latter's auto-generated default.
   var EDITABLE_FIELDS = {
-    "Reg Number": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
     "Spouse First Name": 1, "Individual Sponsorship Text": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
   };
-  var INT_EDIT_FIELDS = { "Reg Number": 1, "#": 1, "Year": 1 };
+  var INT_EDIT_FIELDS = { "Reg #": 1, "#": 1, "Year": 1 };
   var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
 
   function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
@@ -932,7 +932,7 @@
 
     var body = el("div", { class: "modal-body" }, [
       el("ul", { class: "meta-list" }, [
-        detailFieldItem(r, "Reg Number", fieldEls),
+        detailFieldItem(r, "Reg #", fieldEls),
         detailFieldItem(r, "Club Name", fieldEls)
       ])
     ]);
@@ -1607,7 +1607,7 @@
 
     // Walk-In Member only: type a name and pick a match from the imported
     // roster (state.members, from Developer > Import Members) to auto-fill
-    // the whole form — Last/First Name, Reg Number, and whichever contact
+    // the whole form — Last/First Name, Reg #, and whichever contact
     // fields that roster entry has — same "Last, First" datalist pattern
     // sponsor-form.php's "ETCC Member Name" field uses. Manual entry still
     // works if the person isn't in the roster, or the last import didn't
@@ -1649,7 +1649,7 @@
     // nextAvailableWalkinNumber()) and locked, so two walk-ins added back to
     // back never collide.
     var regNumberInput = el("input", { type: "text" });
-    row("Reg Number", regNumberInput);
+    row("Reg #", regNumberInput);
     function syncRegNumberField() {
       lookupRow.style.display = regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER ? "" : "none";
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_NONMEMBER) {
@@ -1718,7 +1718,7 @@
       var lastName = lastNameInput.value.trim();
       if (!lastName) { errorMsg.textContent = "Last Name is required."; return; }
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !regNumberInput.value.trim()) {
-        errorMsg.textContent = "Reg Number is required for a Walk-In Member.";
+        errorMsg.textContent = "Reg # is required for a Walk-In Member.";
         return;
       }
       var record = LOGIC.buildManualRegistration({

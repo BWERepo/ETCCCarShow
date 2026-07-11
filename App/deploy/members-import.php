@@ -13,7 +13,7 @@
 // Registration tab's Add Registration form uses them to auto-fill a Walk-In
 // Member's whole form by looking up their name, and regenerate() (app.js)
 // uses spouseFirstName to backfill a CSV-imported registration's own blank
-// Spouse First Name column when its Reg Number matches a roster entry —
+// Spouse First Name column when its Reg # matches a roster entry —
 // ClubExpress's own export has no spouse column at all, so this roster
 // cross-reference is the only automatic source for that field.
 //

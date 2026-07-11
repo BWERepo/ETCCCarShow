@@ -249,8 +249,8 @@
     var nextNum = C.firstNonMember;
     if (nextNum > 0) {
       records.forEach(function (rec) {
-        if (toInt(rec["Reg Number"]) === 0) {
-          rec["Reg Number"] = nextNum;
+        if (toInt(rec["Reg #"]) === 0) {
+          rec["Reg #"] = nextNum;
           nextNum += 1;
         }
       });
@@ -314,7 +314,7 @@
     });
     // Numeric coercions for display/formatting.
     if (!isBlank(rec["Total Fee"])) rec["Total Fee"] = toNum(rec["Total Fee"]);
-    if (!isBlank(rec["Reg Number"])) rec["Reg Number"] = toInt(rec["Reg Number"]);
+    if (!isBlank(rec["Reg #"])) rec["Reg #"] = toInt(rec["Reg #"]);
     return rec;
   }
 
@@ -322,7 +322,7 @@
     var rec = {};
     columns.forEach(function (c) { rec[c] = ""; });
     shirtCols.forEach(function (c) { rec[c] = 0; });
-    rec["Reg Number"] = "";
+    rec["Reg #"] = "";
     return rec;
   }
 
@@ -345,7 +345,7 @@
     rec["Reg Type"] = fields.regType;
     rec["Last Name"] = fields.lastName || "";
     rec["First Name"] = fields.firstName || "";
-    rec["Reg Number"] = fields.memberNumber ? toInt(fields.memberNumber) : (toInt(fields.nextAvailableMemberNumber) || C.firstNonMember);
+    rec["Reg #"] = fields.memberNumber ? toInt(fields.memberNumber) : (toInt(fields.nextAvailableMemberNumber) || C.firstNonMember);
     rec["Reg Date"] = fields.regDate || "";
     rec["#"] = 1; // a walk-in is, by definition, physically at the event
     rec["Club Name"] = fields.clubName || "";

@@ -299,7 +299,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v1.63 &middot; Deployed 7/11/2026 5:24 AM</div>
+  <div>v1.64 &middot; Deployed 7/11/2026 5:37 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -463,7 +463,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     // --- Column Rename Table (Old -> New) ---
     renameMap: {
-      "Member Number": "Reg Number",
+      "Member Number": "Reg #",
       "CorvetteClubName": "Club Name",
       "Postal Code": "Zip",
       "CorvetteYear": "Year",
@@ -491,7 +491,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // applySponsorshipTextDefault() in logic.js) or by hand via the detail
     // modal's Edit mode. See PROJECT_STATUS.md for why.
     baseColumnOrder: [
-      "Reg Number", "Reg Type", "Last Name", "First Name", "Spouse First Name", "Reg Date",
+      "Reg #", "Reg Type", "Last Name", "First Name", "Spouse First Name", "Reg Date",
       "#", "Club Name", "Phone", "Email", "Address", "City", "State",
       "Zip", "Total Fee", "Individual Sponsorship", "Individual Sponsorship Text", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
@@ -833,8 +833,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var nextNum = C.firstNonMember;
     if (nextNum > 0) {
       records.forEach(function (rec) {
-        if (toInt(rec["Reg Number"]) === 0) {
-          rec["Reg Number"] = nextNum;
+        if (toInt(rec["Reg #"]) === 0) {
+          rec["Reg #"] = nextNum;
           nextNum += 1;
         }
       });
@@ -898,7 +898,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     // Numeric coercions for display/formatting.
     if (!isBlank(rec["Total Fee"])) rec["Total Fee"] = toNum(rec["Total Fee"]);
-    if (!isBlank(rec["Reg Number"])) rec["Reg Number"] = toInt(rec["Reg Number"]);
+    if (!isBlank(rec["Reg #"])) rec["Reg #"] = toInt(rec["Reg #"]);
     return rec;
   }
 
@@ -906,7 +906,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var rec = {};
     columns.forEach(function (c) { rec[c] = ""; });
     shirtCols.forEach(function (c) { rec[c] = 0; });
-    rec["Reg Number"] = "";
+    rec["Reg #"] = "";
     return rec;
   }
 
@@ -929,7 +929,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     rec["Reg Type"] = fields.regType;
     rec["Last Name"] = fields.lastName || "";
     rec["First Name"] = fields.firstName || "";
-    rec["Reg Number"] = fields.memberNumber ? toInt(fields.memberNumber) : (toInt(fields.nextAvailableMemberNumber) || C.firstNonMember);
+    rec["Reg #"] = fields.memberNumber ? toInt(fields.memberNumber) : (toInt(fields.nextAvailableMemberNumber) || C.firstNonMember);
     rec["Reg Date"] = fields.regDate || "";
     rec["#"] = 1; // a walk-in is, by definition, physically at the event
     rec["Club Name"] = fields.clubName || "";
@@ -1068,7 +1068,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         var cell = row.getCell(ci + 1), v = rec[c];
         if (isShirt(res, c)) { cell.value = Number(v) > 0 ? Number(v) : null; cell.alignment = { horizontal: "center" }; }
         else if (c === "Total Fee" || c === "Individual Sponsorship") { if (v !== "" && v != null) { cell.value = Number(v); cell.numFmt = "$#,##0.00"; } }
-        else if (c === "Reg Number" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
+        else if (c === "Reg #" || c === "Year" || c === "#") { cell.value = (v === "" || v == null) ? null : Number(v); }
         else { cell.value = (v === "" || v == null) ? null : v; }
         cell.border = border();
       });
@@ -1214,12 +1214,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     var regTypes = out.registrations.map(function (r) { return r["Reg Type"]; });
     eq(results, regTypes, ["Pre-Registered", "Pre-Registered", "Pre-Registered"], "all 3 rows are Pre-Registered");
     var alice = out.registrations.filter(function (r) { return r["First Name"] === "Alice"; })[0];
-    eq(results, alice["Reg Number"], 100, "Alice keeps her own member #");
+    eq(results, alice["Reg #"], 100, "Alice keeps her own member #");
     eq(results, alice["Phone"], "(555) 555-0100", "Alice phone formatted");
     eq(results, alice["Gen"], "C6", "Alice gen C6");
     eq(results, alice["In Car Show?"], "Yes", "Alice In Car Show? = Yes");
     var bob = out.registrations.filter(function (r) { return r["First Name"] === "Bob"; })[0];
-    eq(results, bob["Reg Number"], 8001, "Bob (non-member) assigned 8001");
+    eq(results, bob["Reg #"], 8001, "Bob (non-member) assigned 8001");
     var sponsor = out.registrations.filter(function (r) { return r["First Name"] === "Sponsor"; })[0];
     eq(results, sponsor["Status"], "Cancelled", "Sponsor row kept (showCancelled=true)");
     eq(results, Number(sponsor["Total Fee"]), 140, "Sponsor fee = 140");
@@ -1257,7 +1257,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       totalFee: "50", status: "Paid", regDate: "7/10/2026 6:00 PM"
     });
     eq(results, member["Reg Type"], "Walk-In Member", "manual: Reg Type preserved");
-    eq(results, member["Reg Number"], 42, "manual: typed Reg Number kept, coerced to a number");
+    eq(results, member["Reg #"], 42, "manual: typed Reg # kept, coerced to a number");
     eq(results, member["#"], 1, "manual: attendee count always 1");
     eq(results, member["Gen"], "C2", "manual: Gen derived from Year (1965 -> C2)");
     eq(results, member["Men's Free LG"], 1, "manual: free shirt bucket bumped from FreeTShirtSize");
@@ -1270,7 +1270,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       memberNumber: "", nextAvailableMemberNumber: 2005,
       freeTShirtSize: "", inCarShow: "No", status: "Not Paid"
     });
-    eq(results, nonmember["Reg Number"], 2005, "manual: blank Reg Number falls back to nextAvailableMemberNumber");
+    eq(results, nonmember["Reg #"], 2005, "manual: blank Reg # falls back to nextAvailableMemberNumber");
     eq(results, nonmember["FreeTShirtSize"], "", "manual: no shirt picked -> no bucket bumped");
     var shirtSum = CONFIG.SHIRT_BUCKETS.reduce(function (sum, b) { return sum + (nonmember[b.col] || 0); }, 0);
     eq(results, shirtSum, 0, "manual: all 24 shirt buckets zero when no size picked");
@@ -1308,7 +1308,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       eq(results, !!reg, true, "RegistrationSheet exists");
       eq(results, !!sum, true, "SummarySheet exists");
       eq(results, reg.getCell(1, 1).value, out.meta.title, "title row A1");
-      eq(results, reg.getCell(2, 1).value, "Reg Number", "header A2 = Reg Number");
+      eq(results, reg.getCell(2, 1).value, "Reg #", "header A2 = Reg #");
       eq(results, reg.actualRowCount, 5, "reg sheet has 5 rows (title + header + 3 fixture rows)");
       eq(results, !!reg.autoFilter, true, "autofilter set");
       eq(results, reg.views[0].state, "frozen", "frozen panes");
@@ -1427,11 +1427,11 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // viewing the site sees the same live list.
   var SITE_CONFIG = {};
 
-  var NUMERIC_BASE = { "Reg Number": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
+  var NUMERIC_BASE = { "Reg #": 1, "Total Fee": 1, "Individual Sponsorship": 1, "Year": 1, "#": 1 };
   // These headers are far wider than their data (a few digits, "Yes"/"No") —
   // force-wrapping them onto two lines shrinks the column to fit the data
   // instead of the label, narrowing the overall row width.
-  var NARROW_HEADER_COLS = { "Reg Number": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
+  var NARROW_HEADER_COLS = { "Reg #": 1, "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
@@ -1536,8 +1536,8 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // never creates duplicates, and never overwrites a sponsor an officer has
   // since edited by hand (e.g. added a website).
   //
-  // The id is derived from Reg Date + name, NOT Reg Number: non-member
-  // registrants get a Reg Number auto-assigned fresh by generate() on
+  // The id is derived from Reg Date + name, NOT Reg #: non-member
+  // registrants get a Reg # auto-assigned fresh by generate() on
   // every load (see regenerate() -> LOGIC.generate()), and that assignment
   // depends on row order, so the same numeric value could mean a different
   // person on a re-export. Reg Date (the registration transaction's own
@@ -1576,11 +1576,11 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
 
   // Backfills Spouse First Name from the member roster (members-data.json,
   // via Developer > Import Members) for a CSV-imported registration whose
-  // own Reg Number (the registrant's real ETCC member number) matches a
+  // own Reg # (the registrant's real ETCC member number) matches a
   // roster entry with a spouseFirstName on file — see members-import.php's
   // comment. Insert-only, same as applySponsorshipTextDefault: never
   // overwrites an officer's own detail-modal edit. Non-members (an
-  // auto-assigned placeholder Reg Number) never match any roster entry,
+  // auto-assigned placeholder Reg #) never match any roster entry,
   // which is correct — there's no roster record to backfill from. Skips the
   // fill (leaves it blank) if the roster's spouseFirstName is the same as
   // the registrant's own First Name (case-insensitive) — some roster rows
@@ -1592,7 +1592,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // still blank.
   function fillSpouseFirstNameFromRoster(rec) {
     if (rec["Spouse First Name"]) return rec;
-    var num = Number(rec["Reg Number"]);
+    var num = Number(rec["Reg #"]);
     if (!num) return rec;
     var match = state.members.filter(function (m) { return Number(m.memberNumber) === num; })[0];
     if (!match || !match.spouseFirstName) return rec;
@@ -1628,7 +1628,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       }
       var cityStateZip = [rec["City"], rec["State"]].filter(Boolean).join(", ") + (rec["Zip"] ? " " + rec["Zip"] : "");
       var sponsorName = (rec["Last Name"] || "") + (rec["First Name"] ? ", " + rec["First Name"] : "");
-      var isMember = Number(rec["Reg Number"]) < CONFIG.firstNonMember;
+      var isMember = Number(rec["Reg #"]) < CONFIG.firstNonMember;
       upsertSponsor({
         id: id,
         name: sponsorName,
@@ -1824,7 +1824,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // Each pinned cell is `position: sticky`; every one after the first needs
   // its `left` set to the summed rendered width of the pinned cells before
   // it, or they'd all sit at left:0 and overlap/mangle each other.
-  var PINNED_COUNT = 5; // checkbox, Reg Number, Reg Type, Last Name, First Name
+  var PINNED_COUNT = 5; // checkbox, Reg #, Reg Type, Last Name, First Name
   function pinnedClass(idx) {
     return idx < PINNED_COUNT ? " pinned pin-" + (idx + 1) : "";
   }
@@ -1889,10 +1889,10 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var registrations = allRegistrations()
       .filter(function (r) { return classifyStatus(r["Status"]) === "paid"; })
       .map(function (r) {
-        // Source field renamed to "Reg Number" internally — the external
+        // Source field renamed to "Reg #" internally — the external
         // API's own JSON field name (memberNumber) is a stable public
         // contract and stays as-is regardless of this internal rename.
-        var mn = r["Reg Number"];
+        var mn = r["Reg #"];
         return {
           memberNumber: mn === "" || mn == null ? null : Number(mn),
           firstName: r["First Name"] || "",
@@ -2032,7 +2032,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   function nextAvailableWalkinNumber() {
     var next = Number(state.appSettings.walkinFirstNonMember) || 2000;
     state.walkins.forEach(function (w) {
-      var n = Number(w["Reg Number"]);
+      var n = Number(w["Reg #"]);
       if (n >= next) next = n + 1;
     });
     return next;
@@ -2139,12 +2139,12 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // config.js/applySponsorshipTextDefault) — editing here is the only way to
   // set the former, and to override the latter's auto-generated default.
   var EDITABLE_FIELDS = {
-    "Reg Number": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Reg #": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
     "Spouse First Name": 1, "Individual Sponsorship Text": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "In Car Show?": 1
   };
-  var INT_EDIT_FIELDS = { "Reg Number": 1, "#": 1, "Year": 1 };
+  var INT_EDIT_FIELDS = { "Reg #": 1, "#": 1, "Year": 1 };
   var NUM_EDIT_FIELDS = { "Total Fee": 1, "Individual Sponsorship": 1 };
 
   function openDetail(row) { state.detailRow = row; state.detailEditing = false; state.detailEditError = null; renderDetailModal(); }
@@ -2266,7 +2266,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
 
     var body = el("div", { class: "modal-body" }, [
       el("ul", { class: "meta-list" }, [
-        detailFieldItem(r, "Reg Number", fieldEls),
+        detailFieldItem(r, "Reg #", fieldEls),
         detailFieldItem(r, "Club Name", fieldEls)
       ])
     ]);
@@ -2941,7 +2941,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
 
     // Walk-In Member only: type a name and pick a match from the imported
     // roster (state.members, from Developer > Import Members) to auto-fill
-    // the whole form — Last/First Name, Reg Number, and whichever contact
+    // the whole form — Last/First Name, Reg #, and whichever contact
     // fields that roster entry has — same "Last, First" datalist pattern
     // sponsor-form.php's "ETCC Member Name" field uses. Manual entry still
     // works if the person isn't in the roster, or the last import didn't
@@ -2983,7 +2983,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     // nextAvailableWalkinNumber()) and locked, so two walk-ins added back to
     // back never collide.
     var regNumberInput = el("input", { type: "text" });
-    row("Reg Number", regNumberInput);
+    row("Reg #", regNumberInput);
     function syncRegNumberField() {
       lookupRow.style.display = regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER ? "" : "none";
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_NONMEMBER) {
@@ -3052,7 +3052,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       var lastName = lastNameInput.value.trim();
       if (!lastName) { errorMsg.textContent = "Last Name is required."; return; }
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !regNumberInput.value.trim()) {
-        errorMsg.textContent = "Reg Number is required for a Walk-In Member.";
+        errorMsg.textContent = "Reg # is required for a Walk-In Member.";
         return;
       }
       var record = LOGIC.buildManualRegistration({

@@ -208,7 +208,7 @@ can't be silently discarded by an accidental click or arrow key. Applies to **ev
 row, CSV-imported or Walk-In, per the user's explicit choice (matching the bulk-delete
 scope decision):
 
-- **Editable:** Reg Number, Club Name, Status, Total Fee, Individual Sponsorship,
+- **Editable:** Reg #, Club Name, Status, Total Fee, Individual Sponsorship,
   Spouse First Name, Individual Sponsorship Text, #, Phone, Email, Address, City, State,
   Zip, Year, Model, Color, In Car Show?.
 - **Not editable:** Reg Date, Reg Type, Gen (system/derived — Gen auto-recomputes from
@@ -284,7 +284,7 @@ server, so re-import after any code change that touches this file's column detec
   today — a Walk-In's spouse name, if needed, is still only settable via the detail
   modal afterward.)
 - **CSV-imported registrations** — `regenerate()` (`app.js`) backfills a blank Spouse
-  First Name from the roster too, matching by Reg Number against the roster's own
+  First Name from the roster too, matching by Reg # against the roster's own
   `memberNumber`. ClubExpress's own registration/activity export has **no** spouse
   column at all (confirmed — neither file's header has anything resembling one), so this
   roster cross-reference is the only automatic source for that field on a CSV row; it's
@@ -363,7 +363,7 @@ session is never involved) and shows the raw HTTP status + response body.
 
 ## Registration tab: row checkboxes + bulk delete
 
-A select-all/per-row checkbox column (leftmost, pinned alongside Reg Number/Reg
+A select-all/per-row checkbox column (leftmost, pinned alongside Reg #/Reg
 Type/Last Name/First Name while scrolling — `PINNED_COUNT` in app.js is now 5) plus a
 "🗑 Delete" toolbar button, same UX as the Sponsors tab's row selection. Deletion is
 routed differently depending on the row's origin, since only Walk-Ins have a real

@@ -1996,6 +1996,46 @@
     }
   }
 
+  function backfillIndividualSponsorPayments() {
+    var newPayments = [];
+    var count = 0;
+    state.sponsors.forEach(function (sponsor) {
+      if (sponsor.sponsorType === "individual") {
+        var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
+        if (!hasPayment && sponsor.regDate) {
+          var defaultPayment = {
+            id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+            sponsorId: sponsor.id,
+            sponsorName: sponsor.name,
+            paymentType: "Credit Card",
+            checkNum: "",
+            date: sponsor.regDate,
+            amount: 100,
+            recordedAt: new Date().toISOString()
+          };
+          state.payments.push(defaultPayment);
+          newPayments.push(defaultPayment);
+          count++;
+        }
+      }
+    });
+
+    if (newPayments.length && SITE_CONFIG.sponsorPaymentsApiUrl) {
+      newPayments.forEach(function (payment) {
+        fetch(SITE_CONFIG.sponsorPaymentsApiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", payment: payment })
+        }).catch(function () {
+          // Silently fail — backfilled data is already in memory
+        });
+      });
+    }
+
+    renderSponsorsBody();
+    return "Backfilled " + count + " individual sponsor payment records.";
+  }
+
   function recordPayment(payment) {
     state.payments.push(payment);
     renderViews();
@@ -3324,6 +3364,7 @@
     toggleSelectAllSponsors: toggleSelectAllSponsors,
     openDeleteSelectedConfirm: openDeleteSelectedConfirm,
     closeDeleteSelectedConfirm: closeDeleteSelectedConfirm,
-    deleteSelectedSponsors: deleteSelectedSponsors
+    deleteSelectedSponsors: deleteSelectedSponsors,
+    backfillIndividualSponsorPayments: backfillIndividualSponsorPayments
   };
 })();

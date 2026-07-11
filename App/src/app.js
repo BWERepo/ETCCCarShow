@@ -18,6 +18,8 @@
     tab: "sum",
     detailRow: null,  // registration row currently shown in the detail modal, or null
     zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
+    sponsorZoom: 1,   // sponsor table zoom level
+    payments: [],     // sponsor payment records
     menuOpen: false,      // hamburger dropdown
     settingsOpen: false,  // settings modal
     testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
@@ -27,6 +29,8 @@
     sponsorSearch: "",
     sponsorTypeFilter: { premier: true, corporate: true, individual: true },
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
+    sponsorPaymentOpen: false, // sponsor payment recording modal
+    sponsorPaymentError: null, // error message in payment modal
     sponsorSyncError: null, // set when a push to the server fails; shown in the Sponsors tab
     clearSponsorsOpen: false, // "Remove All Sponsors" confirmation modal
     sponsorSelected: {},    // id -> true, for the Sponsors tab's row checkboxes
@@ -172,6 +176,16 @@
     });
     (kids || []).forEach(function (c) { e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return e;
+  }
+
+  function debounce(fn, delay) {
+    var timeoutId = null;
+    return function () {
+      var args = arguments;
+      var context = this;
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(function () { fn.apply(context, args); }, delay);
+    };
   }
 
   // generatedAt defaults to "now", but callers with a real known ingestion
@@ -550,6 +564,10 @@
     state.zoom = Math.max(0.3, Math.min(1.5, z));
     renderViews();
   }
+  function setSponsorZoom(z) {
+    state.sponsorZoom = Math.max(0.3, Math.min(1.5, z));
+    renderViews();
+  }
   // Measure how wide the table naturally wants to be vs. how much room is
   // actually available, and pick a zoom level that makes every column fit —
   // instead of making the user guess a percentage via the +/- buttons.
@@ -564,6 +582,18 @@
     wrap.style.zoom = priorZoom;
     if (!naturalWidth) return;
     setZoom(availableWidth / naturalWidth);
+  }
+  function fitSponsorZoom() {
+    var wrap = $(".tablewrap");
+    var table = wrap && wrap.querySelector("table.grid");
+    if (!wrap || !table) return;
+    var availableWidth = wrap.parentElement.clientWidth;
+    var priorZoom = wrap.style.zoom;
+    wrap.style.zoom = "1";
+    var naturalWidth = table.scrollWidth;
+    wrap.style.zoom = priorZoom;
+    if (!naturalWidth) return;
+    setSponsorZoom(availableWidth / naturalWidth);
   }
 
   // CSV-derived registrations plus manually-added Walk-In Member/Nonmember
@@ -1005,6 +1035,12 @@
       : [el("li", { class: "hint", text: "No shirts on this registration." })];
     body.appendChild(el("div", { class: "modal-section" }, [el("h4", { text: "Shirts" }), el("ul", { class: "meta-list" }, shirtItems)]));
 
+    var autoSaveDetail = debounce(function () { saveDetailEdit(fieldEls); }, 1500);
+    Object.keys(fieldEls).forEach(function (key) {
+      fieldEls[key].addEventListener("input", autoSaveDetail);
+      fieldEls[key].addEventListener("change", autoSaveDetail);
+    });
+
     var saveBtn = el("button", { class: "btn primary" }, ["Save"]);
     saveBtn.addEventListener("click", function () { saveDetailEdit(fieldEls); });
     var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
@@ -1245,6 +1281,8 @@
   var SPONSOR_COLS = [
     { key: "name", label: "Sponsor Name" },
     { key: "regDate", label: "Reg Date" },
+    { key: "lastPaymentDate", label: "Last Payment" },
+    { key: "lastPaymentType", label: "Payment Type" },
     { key: "contactPerson", label: "Contact Person" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
@@ -1305,8 +1343,23 @@
       table
     ]);
   }
+  function getLastPaymentForSponsor(sponsorId) {
+    var sponsorPayments = state.payments.filter(function (p) { return p.sponsorId === sponsorId; });
+    if (!sponsorPayments.length) return null;
+    sponsorPayments.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+    return sponsorPayments[0];
+  }
+
   function sponsorFieldText(s, colKey) {
     if (colKey === "sponsorType") return sponsorTypeLabel(s.sponsorType);
+    if (colKey === "lastPaymentDate") {
+      var payment = getLastPaymentForSponsor(s.id);
+      return payment ? fmtDate(payment.date) : "";
+    }
+    if (colKey === "lastPaymentType") {
+      var payment = getLastPaymentForSponsor(s.id);
+      return payment ? payment.paymentType : "";
+    }
     // regDate isn't a single stored field — it depends on where the sponsor
     // came from: the CSV auto-sync stores the registration's own "Reg Date"
     // (already a formatted string, see syncSponsorsFromRegistrations), while
@@ -1516,12 +1569,22 @@
     // ClubExpress/the club's main site) — see its post-submit redirect.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
     addBtn.addEventListener("click", function () { window.open("sponsor-form.php?from=app", "_blank", "noopener"); });
+    var paymentBtn = el("button", { class: "btn" }, ["💳 Record Payment"]);
+    paymentBtn.addEventListener("click", function () { state.sponsorPaymentOpen = true; renderPaymentModal(); });
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
     delBtn.addEventListener("click", openDeleteSelectedConfirm);
-    var kids = [search, typeGroup, count, el("span", { class: "spacer" })];
-    kids.push(prn, delBtn, addBtn);
+    var zoomOut = el("button", { class: "btn", title: "Zoom out" }, ["−"]);
+    zoomOut.addEventListener("click", function () { setSponsorZoom(state.sponsorZoom - 0.1); });
+    var zoomIn = el("button", { class: "btn", title: "Zoom in" }, ["+"]);
+    zoomIn.addEventListener("click", function () { setSponsorZoom(state.sponsorZoom + 0.1); });
+    var zoomFit = el("button", { class: "btn", title: "Shrink just enough to fit every column on screen" }, ["Fit"]);
+    zoomFit.addEventListener("click", fitSponsorZoom);
+    var zoomLabel = el("span", { class: "count", text: Math.round(state.sponsorZoom * 100) + "%" });
+    var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
+    var kids = [search, typeGroup, count, el("span", { class: "spacer" }), zoomGroup];
+    kids.push(paymentBtn, prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
 
@@ -1536,7 +1599,7 @@
       .concat(SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); }))
       .concat([el("th", { class: "no-print", text: "" })]))]);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
-    container.appendChild(el("div", { class: "tablewrap" }, [table]));
+    container.appendChild(el("div", { class: "tablewrap", style: "zoom:" + state.sponsorZoom }, [table]));
     setTimeout(renderSponsorsBody, 0);
     return container;
   }
@@ -1608,6 +1671,26 @@
   }
   function closeSponsorForm() { state.sponsorEditing = null; renderSponsorFormModal(); }
 
+  function buildSponsorRecord(editing, fieldEls, typeSel, shirtSel) {
+    var name = fieldEls.name.value.trim();
+    if (!name) return null;
+    return {
+      id: editing.id || ("sp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
+      name: name,
+      regDate: editing.regDate || "",
+      submittedAt: editing.submittedAt,
+      contactPerson: fieldEls.contactPerson.value.trim(),
+      phone: fieldEls.phone.value.trim(),
+      email: fieldEls.email.value.trim(),
+      address: fieldEls.address.value.trim(),
+      website: fieldEls.website.value.trim(),
+      etccMemberName: fieldEls.etccMemberName.value.trim(),
+      individualSponsorshipText: fieldEls.individualSponsorshipText.value.trim(),
+      sponsorType: typeSel.value,
+      shirtSize: shirtSel.value
+    };
+  }
+
   function renderSponsorFormModal() {
     var host = $("#sponsorFormHost");
     if (!host) return;
@@ -1653,27 +1736,20 @@
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 
+    var autoSaveSponsor = debounce(function () {
+      var record = buildSponsorRecord(editing, fieldEls, typeSel, shirtSel);
+      if (record) { upsertSponsor(record); renderSponsorsBody(); }
+    }, 1500);
+    var fieldsToWatch = [fieldEls.name, fieldEls.contactPerson, fieldEls.phone, fieldEls.email, fieldEls.address, fieldEls.website, fieldEls.etccMemberName, fieldEls.individualSponsorshipText, typeSel, shirtSel];
+    fieldsToWatch.forEach(function (field) {
+      field.addEventListener("input", autoSaveSponsor);
+      field.addEventListener("change", autoSaveSponsor);
+    });
+
     var saveBtn = el("button", { class: "btn primary" }, ["Save"]);
     saveBtn.addEventListener("click", function () {
-      var name = fieldEls.name.value.trim();
-      if (!name) { errorMsg.textContent = "Sponsor Name is required."; return; }
-      var record = {
-        id: editing.id || ("sp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)),
-        name: name,
-        // Not editable here — carried through so editing a sponsor's contact
-        // info doesn't blank out its Reg Date column (see sponsorFieldText).
-        regDate: editing.regDate || "",
-        submittedAt: editing.submittedAt,
-        contactPerson: fieldEls.contactPerson.value.trim(),
-        phone: fieldEls.phone.value.trim(),
-        email: fieldEls.email.value.trim(),
-        address: fieldEls.address.value.trim(),
-        website: fieldEls.website.value.trim(),
-        etccMemberName: fieldEls.etccMemberName.value.trim(),
-        individualSponsorshipText: fieldEls.individualSponsorshipText.value.trim(),
-        sponsorType: typeSel.value,
-        shirtSize: shirtSel.value
-      };
+      var record = buildSponsorRecord(editing, fieldEls, typeSel, shirtSel);
+      if (!record) { errorMsg.textContent = "Sponsor Name is required."; return; }
       upsertSponsor(record);
       closeSponsorForm();
       renderSponsorsBody();
@@ -1697,6 +1773,116 @@
     var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
     backdrop.addEventListener("click", closeSponsorForm);
     host.appendChild(backdrop);
+  }
+
+  // ---------- sponsor payment recording modal ----------
+  function closePaymentModal() { state.sponsorPaymentOpen = false; renderPaymentModal(); }
+
+  function renderPaymentModal() {
+    var host = $("#paymentHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.sponsorPaymentOpen) return;
+
+    var closeBtn = el("button", { class: "btn" }, ["✕"]);
+    closeBtn.addEventListener("click", closePaymentModal);
+    var head = el("div", { class: "modal-head" }, [
+      el("h3", { text: "Record Sponsor Payment" }),
+      el("span", { class: "spacer" }), closeBtn
+    ]);
+
+    var body = el("div", { class: "modal-body" });
+    function row(label, input, required) {
+      body.appendChild(el("div", { class: "form-row" }, [
+        el("span", { class: "form-label", text: label + (required ? " *" : "") }),
+        input
+      ]));
+    }
+
+    var sponsorSel = el("select", {});
+    sponsorSel.appendChild(el("option", { value: "", text: "— Select Sponsor —" }));
+    state.sponsors.forEach(function (s) {
+      sponsorSel.appendChild(el("option", { value: s.id, text: s.name }));
+    });
+    row("Sponsor", sponsorSel, true);
+
+    var typeSel = el("select", {});
+    ["Cash", "Check", "Credit Card"].forEach(function (t) {
+      typeSel.appendChild(el("option", { value: t, text: t }));
+    });
+    row("Payment Type", typeSel, true);
+
+    var checkNumInput = el("input", { type: "text", placeholder: "Check #" });
+    var checkNumRow = el("div", { class: "form-row", style: "display:none" }, [
+      el("span", { class: "form-label", text: "Check #" }),
+      checkNumInput
+    ]);
+    typeSel.addEventListener("change", function () {
+      checkNumRow.style.display = typeSel.value === "Check" ? "" : "none";
+    });
+    body.appendChild(checkNumRow);
+
+    var dateInput = el("input", { type: "date", value: new Date().toISOString().split("T")[0] });
+    row("Date Received", dateInput, true);
+
+    var errorMsg = el("div", { class: "form-error" });
+    body.appendChild(errorMsg);
+
+    var recordBtn = el("button", { class: "btn primary" }, ["Record Payment"]);
+    recordBtn.addEventListener("click", function () {
+      var sponsorId = sponsorSel.value.trim();
+      var paymentType = typeSel.value.trim();
+      var checkNum = checkNumInput.value.trim();
+      var date = dateInput.value.trim();
+
+      if (!sponsorId || !paymentType || !date) {
+        errorMsg.textContent = "Please fill in all required fields.";
+        return;
+      }
+      if (paymentType === "Check" && !checkNum) {
+        errorMsg.textContent = "Check number is required for check payments.";
+        return;
+      }
+
+      var sponsor = state.sponsors.find(function (s) { return s.id === sponsorId; });
+      var payment = {
+        id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        sponsorId: sponsorId,
+        sponsorName: sponsor ? sponsor.name : "",
+        paymentType: paymentType,
+        checkNum: paymentType === "Check" ? checkNum : "",
+        date: date,
+        recordedAt: new Date().toISOString()
+      };
+      recordPayment(payment);
+      closePaymentModal();
+    });
+    var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
+    cancelBtn.addEventListener("click", closePaymentModal);
+    body.appendChild(el("div", { class: "settings-actions" }, [recordBtn, cancelBtn]));
+
+    var modal = el("div", { class: "modal" }, [head, body]);
+    modal.addEventListener("click", function (e) { e.stopPropagation(); });
+    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
+    backdrop.addEventListener("click", closePaymentModal);
+    host.appendChild(backdrop);
+  }
+
+  function recordPayment(payment) {
+    state.payments.push(payment);
+    renderViews();
+    if (!SITE_CONFIG.sponsorPaymentsApiUrl) return;
+    fetch(SITE_CONFIG.sponsorPaymentsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add", payment: payment })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.sponsorPaymentError = null;
+    }).catch(function () {
+      state.sponsorPaymentError = "Could not record payment — check your connection and try again.";
+      renderPaymentModal();
+    });
   }
 
   // ---------- "+ Add Registration" form modal (Registration tab) ----------
@@ -2904,6 +3090,7 @@
     document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "apiHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
+    document.body.appendChild(el("div", { id: "paymentHost" }));
     document.body.appendChild(el("div", { id: "addRegHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
     // window.__carshowSite is set (by index.php, before this script runs) —
@@ -2962,6 +3149,12 @@
     // form's member lookup.
     ingestMembers: function (list) {
       state.members = Array.isArray(list) ? list : [];
+    },
+    // Called by index.php's boot script with sponsor payment records read
+    // fresh from the server on this page load.
+    ingestPayments: function (list) {
+      state.payments = Array.isArray(list) ? list : [];
+      renderViews();
     },
     // Called by index.php's boot script with app-wide settings read fresh
     // from the server on this page load.

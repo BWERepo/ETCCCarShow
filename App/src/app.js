@@ -3365,4 +3365,6 @@
     deleteSelectedSponsors: deleteSelectedSponsors,
     backfillIndividualSponsorPayments: backfillIndividualSponsorPayments
   };
+  window.CarShow = API;
+  return API;
 })();

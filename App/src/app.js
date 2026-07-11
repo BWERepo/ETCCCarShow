@@ -3340,7 +3340,7 @@
   else init();
 
   // Debug/test hook (harmless in production): drive the app without file I/O.
-  window.__carshow = {
+  var API = window.__carshow = {
     get state() { return state; },
     ingestRows: function (regRows, actRows, generatedAt) {
       state.reg = { name: "registration.csv", rows: regRows };

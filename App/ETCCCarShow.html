@@ -317,7 +317,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.58 &middot; Deployed 7/11/2026 4:35 PM</div>
+  <div>v2.59 &middot; Deployed 7/11/2026 4:38 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -4732,7 +4732,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   else init();
 
   // Debug/test hook (harmless in production): drive the app without file I/O.
-  window.__carshow = {
+  var API = window.__carshow = {
     get state() { return state; },
     ingestRows: function (regRows, actRows, generatedAt) {
       state.reg = { name: "registration.csv", rows: regRows };

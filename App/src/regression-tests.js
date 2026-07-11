@@ -8,10 +8,16 @@
  * whose Individual Sponsorship activity grants a bonus free shirt from a
  * different column. Fabricated data, not real member info.
  *
- * NOTE: UI-only features (payment modal, payment columns, zoom controls,
- * autosave, detail modal always-editable pattern) are tested manually in the
- * app's Developer > Run Regression Tests UI. This file covers logic layer
- * and Excel export round-trip only.
+ * NOTE: UI-only features and payment tracking are tested manually in the
+ * app's Developer > Run Regression Tests UI:
+ * - Payment modal with amount, date, type, check # fields
+ * - Payment columns in sponsor table (Date, Type, Check #, Amount)
+ * - Zoom controls on Sponsors tab
+ * - Autosave on registration detail and sponsor edit modals
+ * - Detail modal always-editable pattern
+ * - Backfill default payments for individual sponsors ($100 Credit Card, regDate)
+ * - Payment recording in Edit Sponsor modal
+ * This file covers logic layer and Excel export round-trip only.
  */
 (function (root) {
   "use strict";

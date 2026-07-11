@@ -1838,6 +1838,19 @@
     var amountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0" });
     row("Payment Amount", amountInput, true);
 
+    sponsorSel.addEventListener("change", function () {
+      var selectedId = sponsorSel.value;
+      if (!selectedId) { typeSel.value = "Cash"; amountInput.value = ""; return; }
+      var sponsor = state.sponsors.find(function (s) { return s.id === selectedId; });
+      if (sponsor && sponsor.sponsorType === "individual") {
+        typeSel.value = "Credit Card";
+        amountInput.value = "100";
+      } else {
+        typeSel.value = "Cash";
+        amountInput.value = "";
+      }
+    });
+
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 
@@ -1881,6 +1894,17 @@
     var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
     backdrop.addEventListener("click", closePaymentModal);
     host.appendChild(backdrop);
+  }
+
+  function backfillPaymentDefaults() {
+    state.payments.forEach(function (payment) {
+      if (payment.amount === null || payment.amount === undefined || payment.amount === "") {
+        var sponsor = state.sponsors.find(function (s) { return s.id === payment.sponsorId; });
+        if (sponsor && sponsor.sponsorType === "individual") {
+          payment.amount = 100;
+        }
+      }
+    });
   }
 
   function recordPayment(payment) {
@@ -3169,6 +3193,7 @@
     // fresh from the server on this page load.
     ingestPayments: function (list) {
       state.payments = Array.isArray(list) ? list : [];
+      backfillPaymentDefaults();
       renderViews();
     },
     // Called by index.php's boot script with app-wide settings read fresh

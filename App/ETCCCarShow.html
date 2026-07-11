@@ -317,7 +317,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.55 &middot; Deployed 7/11/2026 4:24 PM</div>
+  <div>v2.56 &middot; Deployed 7/11/2026 4:25 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -3174,6 +3174,17 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       checkNumRow.style.display = paymentTypeSelect.value === "Check" ? "" : "none";
     });
     body.appendChild(checkNumRow);
+
+    // Individual Sponsorships default to a $100 Credit Card payment — re-apply
+    // whenever Sponsor Type changes (not just on initial render), so picking
+    // "Individual" while adding a new sponsor also defaults these fields.
+    typeSel.addEventListener("change", function () {
+      if (typeSel.value === "individual") {
+        paymentTypeSelect.value = "Credit Card";
+        paymentAmountInput.value = "100";
+        checkNumRow.style.display = "none";
+      }
+    });
 
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);

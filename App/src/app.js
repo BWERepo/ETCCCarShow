@@ -1783,6 +1783,17 @@
     });
     body.appendChild(checkNumRow);
 
+    // Individual Sponsorships default to a $100 Credit Card payment — re-apply
+    // whenever Sponsor Type changes (not just on initial render), so picking
+    // "Individual" while adding a new sponsor also defaults these fields.
+    typeSel.addEventListener("change", function () {
+      if (typeSel.value === "individual") {
+        paymentTypeSelect.value = "Credit Card";
+        paymentAmountInput.value = "100";
+        checkNumRow.style.display = "none";
+      }
+    });
+
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 

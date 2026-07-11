@@ -1985,6 +1985,17 @@
     host.appendChild(backdrop);
   }
 
+  // Same fallback sponsorFieldText() uses for the "Reg Date" column: sponsors
+  // synced from a CSV registration have a real regDate string; sponsors added
+  // via the external sponsor-form.php (or the in-app Add flow) only ever get
+  // submittedAt, so fall back to that (formatted to match) rather than
+  // silently skipping the backfill for them.
+  function sponsorRegDateForPayment(sponsor) {
+    if (sponsor.regDate) return String(sponsor.regDate);
+    if (sponsor.submittedAt) return fmtDate(sponsor.submittedAt);
+    return "";
+  }
+
   function backfillPaymentDefaults() {
     var newPayments = [];
 
@@ -2002,14 +2013,15 @@
     state.sponsors.forEach(function (sponsor) {
       if (sponsor.sponsorType === "individual") {
         var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
-        if (!hasPayment && sponsor.regDate) {
+        var regDate = sponsorRegDateForPayment(sponsor);
+        if (!hasPayment && regDate) {
           var defaultPayment = {
             id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             sponsorId: sponsor.id,
             sponsorName: sponsor.name,
             paymentType: "Credit Card",
             checkNum: "",
-            date: sponsor.regDate,
+            date: regDate,
             amount: 100,
             recordedAt: new Date().toISOString()
           };
@@ -2039,14 +2051,15 @@
     state.sponsors.forEach(function (sponsor) {
       if (sponsor.sponsorType === "individual") {
         var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
-        if (!hasPayment && sponsor.regDate) {
+        var regDate = sponsorRegDateForPayment(sponsor);
+        if (!hasPayment && regDate) {
           var defaultPayment = {
             id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             sponsorId: sponsor.id,
             sponsorName: sponsor.name,
             paymentType: "Credit Card",
             checkNum: "",
-            date: sponsor.regDate,
+            date: regDate,
             amount: 100,
             recordedAt: new Date().toISOString()
           };

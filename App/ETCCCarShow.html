@@ -317,7 +317,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.59 &middot; Deployed 7/11/2026 4:38 PM</div>
+  <div>v2.60 &middot; Deployed 7/11/2026 4:40 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -3377,6 +3377,17 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     host.appendChild(backdrop);
   }
 
+  // Same fallback sponsorFieldText() uses for the "Reg Date" column: sponsors
+  // synced from a CSV registration have a real regDate string; sponsors added
+  // via the external sponsor-form.php (or the in-app Add flow) only ever get
+  // submittedAt, so fall back to that (formatted to match) rather than
+  // silently skipping the backfill for them.
+  function sponsorRegDateForPayment(sponsor) {
+    if (sponsor.regDate) return String(sponsor.regDate);
+    if (sponsor.submittedAt) return fmtDate(sponsor.submittedAt);
+    return "";
+  }
+
   function backfillPaymentDefaults() {
     var newPayments = [];
 
@@ -3394,14 +3405,15 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     state.sponsors.forEach(function (sponsor) {
       if (sponsor.sponsorType === "individual") {
         var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
-        if (!hasPayment && sponsor.regDate) {
+        var regDate = sponsorRegDateForPayment(sponsor);
+        if (!hasPayment && regDate) {
           var defaultPayment = {
             id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             sponsorId: sponsor.id,
             sponsorName: sponsor.name,
             paymentType: "Credit Card",
             checkNum: "",
-            date: sponsor.regDate,
+            date: regDate,
             amount: 100,
             recordedAt: new Date().toISOString()
           };
@@ -3431,14 +3443,15 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     state.sponsors.forEach(function (sponsor) {
       if (sponsor.sponsorType === "individual") {
         var hasPayment = state.payments.some(function (p) { return p.sponsorId === sponsor.id; });
-        if (!hasPayment && sponsor.regDate) {
+        var regDate = sponsorRegDateForPayment(sponsor);
+        if (!hasPayment && regDate) {
           var defaultPayment = {
             id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             sponsorId: sponsor.id,
             sponsorName: sponsor.name,
             paymentType: "Credit Card",
             checkNum: "",
-            date: sponsor.regDate,
+            date: regDate,
             amount: 100,
             recordedAt: new Date().toISOString()
           };

@@ -247,17 +247,25 @@
   // comment. Insert-only, same as applySponsorshipTextDefault: never
   // overwrites an officer's own detail-modal edit. Non-members (an
   // auto-assigned placeholder Reg Number) never match any roster entry,
-  // which is correct — there's no roster record to backfill from. Routed
-  // through applyRecordPatch so Individual Sponsorship Text's own default
-  // recomputes too, in case a spouse name showing up is what makes "First
-  // and Spouse Last" possible for a sponsor whose text is still blank.
+  // which is correct — there's no roster record to backfill from. Skips the
+  // fill (leaves it blank) if the roster's spouseFirstName is the same as
+  // the registrant's own First Name (case-insensitive) — some roster rows
+  // for a single member carry their own name in that column rather than
+  // leaving it blank, which would otherwise read as a self-referential
+  // "spouse". Routed through applyRecordPatch so Individual Sponsorship
+  // Text's own default recomputes too, in case a spouse name showing up is
+  // what makes "First and Spouse Last" possible for a sponsor whose text is
+  // still blank.
   function fillSpouseFirstNameFromRoster(rec) {
     if (rec["Spouse First Name"]) return rec;
     var num = Number(rec["Reg Number"]);
     if (!num) return rec;
     var match = state.members.filter(function (m) { return Number(m.memberNumber) === num; })[0];
     if (!match || !match.spouseFirstName) return rec;
-    return applyRecordPatch(rec, { "Spouse First Name": match.spouseFirstName });
+    var spouse = String(match.spouseFirstName).trim();
+    var own = String(rec["First Name"] || "").trim();
+    if (spouse.toLowerCase() === own.toLowerCase()) return rec;
+    return applyRecordPatch(rec, { "Spouse First Name": spouse });
   }
 
   function syncSponsorsFromRegistrations() {

@@ -1724,6 +1724,12 @@
       ]));
     });
 
+    var regDateText = editing.regDate || (editing.submittedAt ? fmtDate(editing.submittedAt) : "") || "—";
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Reg Date" }),
+      el("div", { class: "form-value", text: regDateText })
+    ]));
+
     var typeSel = el("select", {});
     CONFIG.SPONSOR_TYPES.forEach(function (t) {
       var o = el("option", { value: t.key, text: t.label });

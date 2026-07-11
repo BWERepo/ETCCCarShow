@@ -169,6 +169,7 @@ th.pinned { z-index: 3; }
   flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit;
 }
 .form-row label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+.form-row .form-value { flex: 1; padding: 7px 9px; font-size: 13px; color: var(--muted); }
 .form-error { color: var(--warn); font-size: 12px; min-height: 16px; margin-top: 4px; }
 
 /* settings modal */

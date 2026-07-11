@@ -1949,6 +1949,8 @@
   }
 
   function backfillPaymentDefaults() {
+    var newPayments = [];
+
     // Fill missing amounts in existing payments
     state.payments.forEach(function (payment) {
       if (payment.amount === null || payment.amount === undefined || payment.amount === "") {
@@ -1975,9 +1977,23 @@
             recordedAt: new Date().toISOString()
           };
           state.payments.push(defaultPayment);
+          newPayments.push(defaultPayment);
         }
       }
     });
+
+    // Persist backfilled payments to server
+    if (newPayments.length && SITE_CONFIG.sponsorPaymentsApiUrl) {
+      newPayments.forEach(function (payment) {
+        fetch(SITE_CONFIG.sponsorPaymentsApiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", payment: payment })
+        }).catch(function () {
+          // Silently fail — backfilled data is already in memory
+        });
+      });
+    }
   }
 
   function recordPayment(payment) {

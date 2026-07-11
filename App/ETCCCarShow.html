@@ -316,7 +316,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.49 &middot; Deployed 7/11/2026 4:06 PM</div>
+  <div>v2.50 &middot; Deployed 7/11/2026 4:08 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
 </footer>
@@ -3340,6 +3340,8 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   }
 
   function backfillPaymentDefaults() {
+    var newPayments = [];
+
     // Fill missing amounts in existing payments
     state.payments.forEach(function (payment) {
       if (payment.amount === null || payment.amount === undefined || payment.amount === "") {
@@ -3366,9 +3368,23 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
             recordedAt: new Date().toISOString()
           };
           state.payments.push(defaultPayment);
+          newPayments.push(defaultPayment);
         }
       }
     });
+
+    // Persist backfilled payments to server
+    if (newPayments.length && SITE_CONFIG.sponsorPaymentsApiUrl) {
+      newPayments.forEach(function (payment) {
+        fetch(SITE_CONFIG.sponsorPaymentsApiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", payment: payment })
+        }).catch(function () {
+          // Silently fail — backfilled data is already in memory
+        });
+      });
+    }
   }
 
   function recordPayment(payment) {

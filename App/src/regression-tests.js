@@ -102,6 +102,7 @@
     eq(results, out.registrations[0]["Last Name"], "Sample", "first row sorts to Sample");
 
     manualRegistrationAssertions(results);
+    pickLatestPaymentAssertions(results);
 
     return { out: out, results: results };
   }
@@ -157,6 +158,24 @@
       "", "sponsorship text: stays blank when Individual Sponsorship is 0");
     eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Ind. Spon. Text": "Custom Text" }),
       "Custom Text", "sponsorship text: never overwrites an already-set value");
+  }
+
+  // LOGIC.pickLatestPayment() — regression test for a real bug this session:
+  // editing a sponsor's payment (e.g. Cash -> Credit Card) and saving
+  // same-day silently appeared to do nothing, because the Sponsors tab
+  // picked the "latest" payment by comparing `date` (a plain calendar day
+  // both the old and new payment share) instead of `recordedAt` (a real
+  // timestamp). A stable sort on a `date`-only comparator would keep
+  // whichever payment was recorded first — the stale one — even though the
+  // second, newer payment is what should actually be shown.
+  function pickLatestPaymentAssertions(results) {
+    var sameDayPayments = [
+      { id: "pay1", date: "2026-07-12", amount: 100, paymentType: "Cash", recordedAt: "2026-07-12T12:00:00.000Z" },
+      { id: "pay2", date: "2026-07-12", amount: 100, paymentType: "Credit Card", recordedAt: "2026-07-12T15:43:44.011Z" }
+    ];
+    eq(results, LOGIC.pickLatestPayment(sameDayPayments).id, "pay2",
+      "pickLatestPayment: same-day payments resolved by recordedAt, not date");
+    eq(results, LOGIC.pickLatestPayment([]), null, "pickLatestPayment: empty list returns null");
   }
 
   // Excel export round-trip (build a workbook, reload it, check shape).

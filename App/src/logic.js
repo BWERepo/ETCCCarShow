@@ -14,6 +14,19 @@
   function toInt(v) { var n = parseInt(String(v).replace(/[^0-9\-]/g, ""), 10); return isNaN(n) ? 0 : n; }
   function toNum(v) { if (isBlank(v)) return 0; var n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; }
 
+  // Picks the most-recently-*created* payment out of a list (e.g. every
+  // sponsor-payments.json record for one sponsor) — sorted by recordedAt (a
+  // real millisecond-precision timestamp), not date (a user-entered
+  // calendar day that two payments can share). Two payments recorded on the
+  // same day would otherwise tie on date, and picking the wrong one made an
+  // Edit Sponsor save look like it silently didn't take (see the "Business
+  // Web Express"/Tesla payment-editing bug this fixed).
+  function pickLatestPayment(payments) {
+    if (!payments || !payments.length) return null;
+    var sorted = payments.slice().sort(function (a, b) { return new Date(b.recordedAt) - new Date(a.recordedAt); });
+    return sorted[0];
+  }
+
   function formatPhone(phoneTxt) {
     if (isBlank(phoneTxt)) return "";
     var digits = String(phoneTxt).replace(/\D/g, "");
@@ -394,7 +407,7 @@
     };
   }
 
-  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey, buildManualRegistration: buildManualRegistration, toInt: toInt, toNum: toNum, applySponsorshipTextDefault: applySponsorshipTextDefault };
+  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, pickLatestPayment: pickLatestPayment, genFromYear: genFromYear, dtKey: dtKey, buildManualRegistration: buildManualRegistration, toInt: toInt, toNum: toNum, applySponsorshipTextDefault: applySponsorshipTextDefault };
   root.CarShowLogic = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

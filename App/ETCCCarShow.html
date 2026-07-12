@@ -325,7 +325,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.98 &middot; Deployed 07/12/2026 12:55 PM</div>
+  <div>v2.105 &middot; Deployed 07/12/2026 01:23 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </footer>
@@ -645,6 +645,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function isBlank(v) { return v === null || v === undefined || String(v).trim() === ""; }
   function toInt(v) { var n = parseInt(String(v).replace(/[^0-9\-]/g, ""), 10); return isNaN(n) ? 0 : n; }
   function toNum(v) { if (isBlank(v)) return 0; var n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; }
+
+  // Picks the most-recently-*created* payment out of a list (e.g. every
+  // sponsor-payments.json record for one sponsor) — sorted by recordedAt (a
+  // real millisecond-precision timestamp), not date (a user-entered
+  // calendar day that two payments can share). Two payments recorded on the
+  // same day would otherwise tie on date, and picking the wrong one made an
+  // Edit Sponsor save look like it silently didn't take (see the "Business
+  // Web Express"/Tesla payment-editing bug this fixed).
+  function pickLatestPayment(payments) {
+    if (!payments || !payments.length) return null;
+    var sorted = payments.slice().sort(function (a, b) { return new Date(b.recordedAt) - new Date(a.recordedAt); });
+    return sorted[0];
+  }
 
   function formatPhone(phoneTxt) {
     if (isBlank(phoneTxt)) return "";
@@ -1026,7 +1039,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
 
-  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, genFromYear: genFromYear, dtKey: dtKey, buildManualRegistration: buildManualRegistration, toInt: toInt, toNum: toNum, applySponsorshipTextDefault: applySponsorshipTextDefault };
+  var API = { generate: generate, summarizeRecords: summarizeRecords, formatPhone: formatPhone, pickLatestPayment: pickLatestPayment, genFromYear: genFromYear, dtKey: dtKey, buildManualRegistration: buildManualRegistration, toInt: toInt, toNum: toNum, applySponsorshipTextDefault: applySponsorshipTextDefault };
   root.CarShowLogic = API;
   if (typeof module !== "undefined" && module.exports) module.exports = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -1302,6 +1315,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     eq(results, out.registrations[0]["Last Name"], "Sample", "first row sorts to Sample");
 
     manualRegistrationAssertions(results);
+    pickLatestPaymentAssertions(results);
 
     return { out: out, results: results };
   }
@@ -1357,6 +1371,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       "", "sponsorship text: stays blank when Individual Sponsorship is 0");
     eq(results, applyText({ "First Name": "John", "Last Name": "Doe", "Individual Sponsorship": 100, "Ind. Spon. Text": "Custom Text" }),
       "Custom Text", "sponsorship text: never overwrites an already-set value");
+  }
+
+  // LOGIC.pickLatestPayment() — regression test for a real bug this session:
+  // editing a sponsor's payment (e.g. Cash -> Credit Card) and saving
+  // same-day silently appeared to do nothing, because the Sponsors tab
+  // picked the "latest" payment by comparing `date` (a plain calendar day
+  // both the old and new payment share) instead of `recordedAt` (a real
+  // timestamp). A stable sort on a `date`-only comparator would keep
+  // whichever payment was recorded first — the stale one — even though the
+  // second, newer payment is what should actually be shown.
+  function pickLatestPaymentAssertions(results) {
+    var sameDayPayments = [
+      { id: "pay1", date: "2026-07-12", amount: 100, paymentType: "Cash", recordedAt: "2026-07-12T12:00:00.000Z" },
+      { id: "pay2", date: "2026-07-12", amount: 100, paymentType: "Credit Card", recordedAt: "2026-07-12T15:43:44.011Z" }
+    ];
+    eq(results, LOGIC.pickLatestPayment(sameDayPayments).id, "pay2",
+      "pickLatestPayment: same-day payments resolved by recordedAt, not date");
+    eq(results, LOGIC.pickLatestPayment([]), null, "pickLatestPayment: empty list returns null");
   }
 
   // Excel export round-trip (build a workbook, reload it, check shape).
@@ -1419,6 +1451,8 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     detailRow: null,  // registration row currently shown in the detail modal, or null
     zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
     sponsorZoom: 1,   // sponsor table zoom level
+    zoomAutoFitDone: false,        // both tables default to "Fit" once per session (not
+    sponsorZoomAutoFitDone: false, // on every tab switch, so a manual zoom choice sticks)
     payments: [],     // sponsor payment records
     menuOpen: false,      // hamburger dropdown
     settingsOpen: false,  // settings modal
@@ -1536,19 +1570,15 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   // Summary's Total Income), so no field shows a bare "$845" next to
   // another showing "$845.00".
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  // Normalizes any 10-digit US phone number to "(123) 456-7890" for display,
-  // regardless of how it was originally stored (raw CSV export, a sponsor-
-  // form submission from before that form's live-formatting existed, hand
-  // typed some other way, ...). Anything that isn't a recognizable 10-digit
-  // number (or 11 digits with a leading 1) is left untouched rather than
-  // guessed at.
-  function fmtPhone(v) {
-    if (v == null || v === "") return v;
-    var digits = String(v).replace(/\D/g, "");
-    if (digits.length === 11 && digits.charAt(0) === "1") digits = digits.slice(1);
-    if (digits.length !== 10) return v;
-    return "(" + digits.slice(0, 3) + ") " + digits.slice(3, 6) + "-" + digits.slice(6);
-  }
+  // Phone display formatting reuses LOGIC.formatPhone (logic.js) — the same
+  // function generate() already runs CSV/manual registration phones
+  // through — instead of a separate app.js copy, so there's one
+  // implementation and one regression-tested set of rules for both.
+  // Sponsors' phones (CSV auto-sync, sponsor-form.php submissions) never
+  // flow through generate(), so this call is still needed for those; for
+  // Registration rows it's a harmless no-op re-format of an already-
+  // formatted value.
+  function fmtPhone(v) { return v == null || v === "" ? v : LOGIC.formatPhone(v); }
   // "Reg Date" comes straight from the ClubExpress CSV export as an unpadded,
   // seconds-included string (e.g. "7/8/2026 7:55:00 AM") — reformat it through
   // fmtDate() (defined below) so it lines up with every other date/time shown
@@ -2002,7 +2032,10 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     thead.appendChild(htr);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "regbody" })]);
     var wrap = el("div", { class: "tablewrap", style: "zoom:" + state.zoom }, [table]);
-    setTimeout(renderRegBody, 0);
+    setTimeout(function () {
+      renderRegBody();
+      if (!state.zoomAutoFitDone) { state.zoomAutoFitDone = true; fitZoom(); }
+    }, 0);
     return wrap;
   }
 
@@ -2607,36 +2640,37 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       ])
     ]));
 
-    // Walk-In T-Shirt purchases (day-of-event sales) — total cost card plus
-    // a per-size breakdown, same "cards sponsor-cards" / "sponsor-card"
-    // styling as the panels above.
-    container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Walk-In T-Shirt" }),
-      el("div", { class: "cards sponsor-cards" }, [
-        el("div", { class: "sponsor-card" }, [
-          el("div", { class: "sponsor-card-head", text: "Total Cost" }),
-          el("div", { class: "cards" }, [card("Purchases", state.tshirtPurchases.length), card("Total", fmtMoney(tshirtPurchaseTotal))])
-        ]),
-        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Sizes Purchased" }), tshirtPurchaseSizeMatrix()])
-      ])
-    ]));
-
-    // car show matrix
-    container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Car Show" }),
-      el("div", { style: "margin-bottom:8px" }, ["Judges: " + s.judges]),
-      genMatrix(s)
-    ]));
-
-    // clubs
+    // Walk-In T-Shirt purchases, Car Show generations, and Clubs — three
+    // unrelated-but-compact panels combined into one row (same "cards
+    // sponsor-cards" 3-column layout the Sponsors/Shirts rows above use),
+    // each still its own "sponsor-card" with its own head, since side by
+    // side by side reads better than three separate full-width panels for
+    // tables this short.
     var clubRows = s.clubs.map(function (c) {
       return el("tr", {}, [el("td", { class: "lbl", text: c.name }), el("td", { text: String(c.attendees) })]);
     });
     container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Clubs" }),
-      el("table", { class: "matrix" }, [
-        el("thead", {}, [el("tr", {}, [el("th", { class: "lbl", text: "Club" }), el("th", { text: "Attendees" })])]),
-        el("tbody", {}, clubRows)
+      el("div", { class: "cards sponsor-cards" }, [
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Walk-In T-Shirt Purchases" }),
+          el("div", { class: "sponsor-card-stats" }, [
+            el("div", {}, [el("div", { class: "stat-v", text: String(state.tshirtPurchases.length) }), el("div", { class: "stat-k", text: "Purchases" })]),
+            el("div", {}, [el("div", { class: "stat-v", text: fmtMoney(tshirtPurchaseTotal) }), el("div", { class: "stat-k", text: "Total" })])
+          ]),
+          tshirtPurchaseSizeMatrix()
+        ]),
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Car Show" }),
+          el("div", { style: "margin-bottom:8px" }, ["Judges: " + s.judges]),
+          genMatrix(s)
+        ]),
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Clubs" }),
+          el("table", { class: "matrix" }, [
+            el("thead", {}, [el("tr", {}, [el("th", { class: "lbl", text: "Club" }), el("th", { text: "Attendees" })])]),
+            el("tbody", {}, clubRows)
+          ])
+        ])
       ])
     ]));
 
@@ -2680,10 +2714,10 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       return el("tr", {}, row.cells);
     });
     var footerCells = [el("td", { class: "lbl", text: "Total" })];
-    colTotals.forEach(function (t) { footerCells.push(el("td", { class: "lbl", text: String(t) })); });
-    footerCells.push(el("td", { class: "lbl", text: String(mensTotal) }));
-    footerCells.push(el("td", { class: "lbl", text: String(womensTotal) }));
-    footerCells.push(el("td", { class: "lbl", text: String(mensTotal + womensTotal) }));
+    colTotals.forEach(function (t) { footerCells.push(el("td", { style: "font-weight:600", text: String(t) })); });
+    footerCells.push(el("td", { style: "font-weight:600", text: String(mensTotal) }));
+    footerCells.push(el("td", { style: "font-weight:600", text: String(womensTotal) }));
+    footerCells.push(el("td", { style: "font-weight:600", text: String(mensTotal + womensTotal) }));
     body.push(el("tr", {}, footerCells));
     return body;
   }
@@ -2746,9 +2780,9 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     });
     body.push(el("tr", {}, [
       el("td", { class: "lbl", text: "Total" }),
-      el("td", { class: "lbl", text: String(mensTotal) }),
-      el("td", { class: "lbl", text: String(womensTotal) }),
-      el("td", { class: "lbl", text: String(mensTotal + womensTotal) })
+      el("td", { style: "font-weight:600", text: String(mensTotal) }),
+      el("td", { style: "font-weight:600", text: String(womensTotal) }),
+      el("td", { style: "font-weight:600", text: String(mensTotal + womensTotal) })
     ]));
     return body;
   }
@@ -2949,16 +2983,11 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       table
     ]);
   }
-  // Sorted by recordedAt (a real millisecond-precision timestamp set when
-  // the payment was created), not date (the user-entered calendar day a
-  // payment was received on) — two payments for the same sponsor recorded
-  // on the same day would otherwise tie on date, and a stable sort would
-  // keep whichever was created first instead of the actually-latest one.
+  // See LOGIC.pickLatestPayment's comment (logic.js) for why this sorts by
+  // recordedAt rather than date.
   function getLastPaymentForSponsor(sponsorId) {
     var sponsorPayments = state.payments.filter(function (p) { return p.sponsorId === sponsorId; });
-    if (!sponsorPayments.length) return null;
-    sponsorPayments.sort(function (a, b) { return new Date(b.recordedAt) - new Date(a.recordedAt); });
-    return sponsorPayments[0];
+    return LOGIC.pickLatestPayment(sponsorPayments);
   }
   // True when there's no payment on file yet, or the last one's amount is 0 —
   // the Sponsors table shows a "Mark Paid…" button in the Amount column for
@@ -3305,7 +3334,10 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       .concat([el("th", { class: "no-print", text: "" })]))]);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
     container.appendChild(el("div", { class: "tablewrap", style: "zoom:" + state.sponsorZoom }, [table]));
-    setTimeout(renderSponsorsBody, 0);
+    setTimeout(function () {
+      renderSponsorsBody();
+      if (!state.sponsorZoomAutoFitDone) { state.sponsorZoomAutoFitDone = true; fitSponsorZoom(); }
+    }, 0);
     return container;
   }
 

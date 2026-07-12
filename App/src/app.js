@@ -19,6 +19,8 @@
     detailRow: null,  // registration row currently shown in the detail modal, or null
     zoom: 1,          // table zoom level (1 = 100%); lets all columns fit without scrolling
     sponsorZoom: 1,   // sponsor table zoom level
+    zoomAutoFitDone: false,        // both tables default to "Fit" once per session (not
+    sponsorZoomAutoFitDone: false, // on every tab switch, so a manual zoom choice sticks)
     payments: [],     // sponsor payment records
     menuOpen: false,      // hamburger dropdown
     settingsOpen: false,  // settings modal
@@ -136,19 +138,15 @@
   // Summary's Total Income), so no field shows a bare "$845" next to
   // another showing "$845.00".
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  // Normalizes any 10-digit US phone number to "(123) 456-7890" for display,
-  // regardless of how it was originally stored (raw CSV export, a sponsor-
-  // form submission from before that form's live-formatting existed, hand
-  // typed some other way, ...). Anything that isn't a recognizable 10-digit
-  // number (or 11 digits with a leading 1) is left untouched rather than
-  // guessed at.
-  function fmtPhone(v) {
-    if (v == null || v === "") return v;
-    var digits = String(v).replace(/\D/g, "");
-    if (digits.length === 11 && digits.charAt(0) === "1") digits = digits.slice(1);
-    if (digits.length !== 10) return v;
-    return "(" + digits.slice(0, 3) + ") " + digits.slice(3, 6) + "-" + digits.slice(6);
-  }
+  // Phone display formatting reuses LOGIC.formatPhone (logic.js) — the same
+  // function generate() already runs CSV/manual registration phones
+  // through — instead of a separate app.js copy, so there's one
+  // implementation and one regression-tested set of rules for both.
+  // Sponsors' phones (CSV auto-sync, sponsor-form.php submissions) never
+  // flow through generate(), so this call is still needed for those; for
+  // Registration rows it's a harmless no-op re-format of an already-
+  // formatted value.
+  function fmtPhone(v) { return v == null || v === "" ? v : LOGIC.formatPhone(v); }
   // "Reg Date" comes straight from the ClubExpress CSV export as an unpadded,
   // seconds-included string (e.g. "7/8/2026 7:55:00 AM") — reformat it through
   // fmtDate() (defined below) so it lines up with every other date/time shown
@@ -602,7 +600,10 @@
     thead.appendChild(htr);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "regbody" })]);
     var wrap = el("div", { class: "tablewrap", style: "zoom:" + state.zoom }, [table]);
-    setTimeout(renderRegBody, 0);
+    setTimeout(function () {
+      renderRegBody();
+      if (!state.zoomAutoFitDone) { state.zoomAutoFitDone = true; fitZoom(); }
+    }, 0);
     return wrap;
   }
 
@@ -1207,36 +1208,37 @@
       ])
     ]));
 
-    // Walk-In T-Shirt purchases (day-of-event sales) — total cost card plus
-    // a per-size breakdown, same "cards sponsor-cards" / "sponsor-card"
-    // styling as the panels above.
-    container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Walk-In T-Shirt" }),
-      el("div", { class: "cards sponsor-cards" }, [
-        el("div", { class: "sponsor-card" }, [
-          el("div", { class: "sponsor-card-head", text: "Total Cost" }),
-          el("div", { class: "cards" }, [card("Purchases", state.tshirtPurchases.length), card("Total", fmtMoney(tshirtPurchaseTotal))])
-        ]),
-        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Sizes Purchased" }), tshirtPurchaseSizeMatrix()])
-      ])
-    ]));
-
-    // car show matrix
-    container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Car Show" }),
-      el("div", { style: "margin-bottom:8px" }, ["Judges: " + s.judges]),
-      genMatrix(s)
-    ]));
-
-    // clubs
+    // Walk-In T-Shirt purchases, Car Show generations, and Clubs — three
+    // unrelated-but-compact panels combined into one row (same "cards
+    // sponsor-cards" 3-column layout the Sponsors/Shirts rows above use),
+    // each still its own "sponsor-card" with its own head, since side by
+    // side by side reads better than three separate full-width panels for
+    // tables this short.
     var clubRows = s.clubs.map(function (c) {
       return el("tr", {}, [el("td", { class: "lbl", text: c.name }), el("td", { text: String(c.attendees) })]);
     });
     container.appendChild(el("div", { class: "panel" }, [
-      el("h3", { text: "Clubs" }),
-      el("table", { class: "matrix" }, [
-        el("thead", {}, [el("tr", {}, [el("th", { class: "lbl", text: "Club" }), el("th", { text: "Attendees" })])]),
-        el("tbody", {}, clubRows)
+      el("div", { class: "cards sponsor-cards" }, [
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Walk-In T-Shirt Purchases" }),
+          el("div", { class: "sponsor-card-stats" }, [
+            el("div", {}, [el("div", { class: "stat-v", text: String(state.tshirtPurchases.length) }), el("div", { class: "stat-k", text: "Purchases" })]),
+            el("div", {}, [el("div", { class: "stat-v", text: fmtMoney(tshirtPurchaseTotal) }), el("div", { class: "stat-k", text: "Total" })])
+          ]),
+          tshirtPurchaseSizeMatrix()
+        ]),
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Car Show" }),
+          el("div", { style: "margin-bottom:8px" }, ["Judges: " + s.judges]),
+          genMatrix(s)
+        ]),
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Clubs" }),
+          el("table", { class: "matrix" }, [
+            el("thead", {}, [el("tr", {}, [el("th", { class: "lbl", text: "Club" }), el("th", { text: "Attendees" })])]),
+            el("tbody", {}, clubRows)
+          ])
+        ])
       ])
     ]));
 
@@ -1280,10 +1282,10 @@
       return el("tr", {}, row.cells);
     });
     var footerCells = [el("td", { class: "lbl", text: "Total" })];
-    colTotals.forEach(function (t) { footerCells.push(el("td", { class: "lbl", text: String(t) })); });
-    footerCells.push(el("td", { class: "lbl", text: String(mensTotal) }));
-    footerCells.push(el("td", { class: "lbl", text: String(womensTotal) }));
-    footerCells.push(el("td", { class: "lbl", text: String(mensTotal + womensTotal) }));
+    colTotals.forEach(function (t) { footerCells.push(el("td", { style: "font-weight:600", text: String(t) })); });
+    footerCells.push(el("td", { style: "font-weight:600", text: String(mensTotal) }));
+    footerCells.push(el("td", { style: "font-weight:600", text: String(womensTotal) }));
+    footerCells.push(el("td", { style: "font-weight:600", text: String(mensTotal + womensTotal) }));
     body.push(el("tr", {}, footerCells));
     return body;
   }
@@ -1346,9 +1348,9 @@
     });
     body.push(el("tr", {}, [
       el("td", { class: "lbl", text: "Total" }),
-      el("td", { class: "lbl", text: String(mensTotal) }),
-      el("td", { class: "lbl", text: String(womensTotal) }),
-      el("td", { class: "lbl", text: String(mensTotal + womensTotal) })
+      el("td", { style: "font-weight:600", text: String(mensTotal) }),
+      el("td", { style: "font-weight:600", text: String(womensTotal) }),
+      el("td", { style: "font-weight:600", text: String(mensTotal + womensTotal) })
     ]));
     return body;
   }
@@ -1549,16 +1551,11 @@
       table
     ]);
   }
-  // Sorted by recordedAt (a real millisecond-precision timestamp set when
-  // the payment was created), not date (the user-entered calendar day a
-  // payment was received on) — two payments for the same sponsor recorded
-  // on the same day would otherwise tie on date, and a stable sort would
-  // keep whichever was created first instead of the actually-latest one.
+  // See LOGIC.pickLatestPayment's comment (logic.js) for why this sorts by
+  // recordedAt rather than date.
   function getLastPaymentForSponsor(sponsorId) {
     var sponsorPayments = state.payments.filter(function (p) { return p.sponsorId === sponsorId; });
-    if (!sponsorPayments.length) return null;
-    sponsorPayments.sort(function (a, b) { return new Date(b.recordedAt) - new Date(a.recordedAt); });
-    return sponsorPayments[0];
+    return LOGIC.pickLatestPayment(sponsorPayments);
   }
   // True when there's no payment on file yet, or the last one's amount is 0 —
   // the Sponsors table shows a "Mark Paid…" button in the Amount column for
@@ -1905,7 +1902,10 @@
       .concat([el("th", { class: "no-print", text: "" })]))]);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
     container.appendChild(el("div", { class: "tablewrap", style: "zoom:" + state.sponsorZoom }, [table]));
-    setTimeout(renderSponsorsBody, 0);
+    setTimeout(function () {
+      renderSponsorsBody();
+      if (!state.sponsorZoomAutoFitDone) { state.sponsorZoomAutoFitDone = true; fitSponsorZoom(); }
+    }, 0);
     return container;
   }
 

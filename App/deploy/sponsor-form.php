@@ -83,6 +83,7 @@ foreach ($members as $m) {
 }
 
 $errors = [];
+$success = false;
 $values = [
     'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
     'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
@@ -160,26 +161,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ];
                 carshow_append_json_list(__DIR__ . '/sponsor-payments.json', $payment);
             }
-            // Where to send them after a successful submission depends on
-            // where they came from — read from the hidden "from" field
-            // (populated server-side from ?from=app, the marker app.js's
-            // "+ Add Sponsor" button adds to its window.open() URL). The
-            // Cancel button below branches the exact same way via $cancelUrl.
-            //   - from=app: an officer, inside the car show app itself — sent
-            //     straight back to the Sponsors tab (a fresh page load, so
-            //     the new submission is already in the list) instead of a
-            //     static "Thank you" page. See app.js's init() for the
-            //     #sponsors -> Sponsors-tab handoff.
-            //   - anything else: a sponsor/business who reached this form via
-            //     a link on ClubExpress/the club's main site, not from inside
-            //     the app — they have no reason to land in the internal app,
-            //     so they're sent back to the club's main site instead.
-            if (($_POST['from'] ?? '') === 'app') {
-                header('Location: index.php#sponsors');
-            } else {
-                header('Location: https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652');
-            }
-            exit;
+            // Stay on this same form after a successful submission (rather
+            // than redirecting away) so an officer can add several sponsors
+            // back to back without re-navigating here each time — show a
+            // confirmation banner and reset every field back to its default.
+            $success = true;
+            $values = [
+                'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
+                'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
+                'paymentType' => '', 'checkNum' => '', 'paymentAmount' => '', 'paymentDate' => gmdate('Y-m-d'),
+            ];
         } else {
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
         }
@@ -217,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   .btn-secondary:hover { background:#f4f6f8; }
   .errors { background:#fff5f5; border-left:4px solid var(--red); border-radius:6px; padding:10px 14px; margin-bottom:14px; color:var(--red-dark); font-size:13px; }
   .errors ul { margin:4px 0 0; padding-left:18px; }
+  .success { background:#f0faf3; border-left:4px solid var(--good); border-radius:6px; padding:10px 14px; margin-bottom:14px; color:var(--good); font-size:13px; font-weight:600; }
   .footer { text-align:center; color:var(--muted); font-size:11px; margin-top:22px; }
 </style>
 </head>
@@ -226,6 +218,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <h1>Become a Car Show Sponsor</h1>
   <div class="sub">East Tennessee Corvette Club</div>
   <div class="panel">
+    <?php if ($success): ?>
+      <div class="success">Thanks! The sponsorship was submitted successfully. You can add another below.</div>
+    <?php endif; ?>
     <?php if ($errors): ?>
       <div class="errors"><strong>Please fix the following:</strong><ul>
         <?php foreach ($errors as $e) echo '<li>' . htmlspecialchars($e) . '</li>'; ?>
@@ -243,8 +238,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
       <div class="form-row">
         <label for="f-phone">Phone</label>
-        <input type="tel" id="f-phone" name="phone" value="<?php echo htmlspecialchars($values['phone']); ?>">
+        <input type="tel" id="f-phone" name="phone" placeholder="(123) 456-7890" value="<?php echo htmlspecialchars($values['phone']); ?>">
       </div>
+      <script>
+        (function () {
+          var phoneInput = document.getElementById('f-phone');
+          function formatPhone(v) {
+            var digits = v.replace(/\D/g, '').slice(0, 10);
+            if (digits.length < 4) return digits;
+            if (digits.length < 7) return '(' + digits.slice(0, 3) + ') ' + digits.slice(3);
+            return '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
+          }
+          phoneInput.addEventListener('input', function () { phoneInput.value = formatPhone(phoneInput.value); });
+          phoneInput.value = formatPhone(phoneInput.value);
+        })();
+      </script>
       <div class="form-row">
         <label for="f-email">Email</label>
         <input type="email" id="f-email" name="email" value="<?php echo htmlspecialchars($values['email']); ?>">
@@ -338,12 +346,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php endif; ?>
       <?php $cancelUrl = $fromParam === 'app' ? 'index.php#sponsors' : 'https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652'; ?>
       <div class="btn-row">
-        <button type="button" class="btn btn-secondary" onclick="location.href='<?php echo htmlspecialchars($cancelUrl, ENT_QUOTES); ?>'">Cancel</button>
+        <button type="button" class="btn btn-secondary" onclick="location.href='<?php echo htmlspecialchars($cancelUrl, ENT_QUOTES); ?>'">Done</button>
         <button type="submit" class="btn">Submit Sponsorship</button>
       </div>
     </form>
   </div>
-  <div class="footer">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
+  <div class="footer">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </div>
 </body>
 </html>

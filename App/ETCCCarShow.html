@@ -242,7 +242,7 @@ th.pinned { z-index: 3; }
    cards/preview reuse .api-card/.api-response directly (a generic card/
    monospace-preview look, not actually API-specific). */
 /* T-Shirts tab — email composer + report */
-.tshirt-view { max-width: 100%; }
+.tshirt-view { max-width: 700px; margin: 0 auto; }
 .tshirt-view .panel { margin-bottom: 20px; }
 .tshirt-view .form-group { margin-bottom: 16px; }
 .tshirt-view .form-group label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
@@ -325,9 +325,9 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.79 &middot; Deployed  7/12/2026 11:19 AM</div>
-  <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>
-  <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>
+  <div>v2.87 &middot; Deployed 07/12/2026 12:02 PM</div>
+  <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>
+  <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </footer>
 <script>
 /* @license
@@ -1428,6 +1428,9 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     sponsors: [],          // filled by ingestSponsors(), called by index.php's boot script
     sponsorSearch: "",
     sponsorTypeFilter: { premier: true, corporate: true, individual: true },
+    sponsorPaidFilter: "all", // "all" | "paid" | "unpaid"
+    sponsorSortCol: null, // one of SPONSOR_COLS[].key, or null for the default (by name)
+    sponsorSortDir: 1,
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
     sponsorPaymentOpen: false, // sponsor payment recording modal
     sponsorPaymentError: null, // error message in payment modal
@@ -1528,6 +1531,19 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
+  // Normalizes any 10-digit US phone number to "(123) 456-7890" for display,
+  // regardless of how it was originally stored (raw CSV export, a sponsor-
+  // form submission from before that form's live-formatting existed, hand
+  // typed some other way, ...). Anything that isn't a recognizable 10-digit
+  // number (or 11 digits with a leading 1) is left untouched rather than
+  // guessed at.
+  function fmtPhone(v) {
+    if (v == null || v === "") return v;
+    var digits = String(v).replace(/\D/g, "");
+    if (digits.length === 11 && digits.charAt(0) === "1") digits = digits.slice(1);
+    if (digits.length !== 10) return v;
+    return "(" + digits.slice(0, 3) + ") " + digits.slice(3, 6) + "-" + digits.slice(6);
+  }
   // "Reg Date" comes straight from the ClubExpress CSV export as an unpadded,
   // seconds-included string (e.g. "7/8/2026 7:55:00 AM") — reformat it through
   // fmtDate() (defined below) so it lines up with every other date/time shown
@@ -2254,9 +2270,16 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
 
       cols.forEach(function (c, idx) {
         var v, cls = "";
+        if (c === "Email" && r[c]) {
+          var mailLink = el("a", { href: "mailto:" + r[c], text: r[c] });
+          mailLink.addEventListener("click", function (e) { e.stopPropagation(); });
+          tr.appendChild(el("td", { class: cls.trim() + pinnedClass(idx + 1) }, [mailLink]));
+          return;
+        }
         if (c === SHIRTS_COL) { cls = "shirtsum"; v = shirtSummaryText(r); }
         else if (CURRENCY_COLS[c]) { cls = "num"; v = fmtMoney(r[c]); }
         else if (DATE_COLS[c]) { v = fmtCsvDate(r[c]); }
+        else if (c === "Phone") { v = fmtPhone(r[c]); }
         else if (isNumericCol(c)) { cls = "num"; v = r[c]; v = v == null ? "" : v; }
         else { v = r[c]; }
         cls += pinnedClass(idx + 1);
@@ -2886,11 +2909,36 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       if (s.submittedAt) return fmtDate(s.submittedAt);
       return "";
     }
+    if (colKey === "phone") return fmtPhone(s.phone) || "";
     var v = s[colKey];
     return v == null ? "" : String(v);
   }
+  // Column-specific sort values: dates/amounts compare numerically (via their
+  // underlying Date/Number, not their formatted display string — sorting
+  // "$100.00" vs "$20.00" as text would put $100 first), everything else
+  // falls back to sponsorFieldText()'s lowercased display string.
+  function sponsorSortValue(s, colKey) {
+    if (colKey === "regDate") {
+      var raw = s.regDate || s.submittedAt;
+      var d = raw ? new Date(raw) : null;
+      return d && !isNaN(d.getTime()) ? d.getTime() : -Infinity;
+    }
+    if (colKey === "lastPaymentDate" || colKey === "lastPaymentAmount") {
+      var payment = getLastPaymentForSponsor(s.id);
+      if (colKey === "lastPaymentAmount") return payment ? Number(payment.amount) || 0 : 0;
+      return payment && payment.date ? new Date(payment.date).getTime() : -Infinity;
+    }
+    return sponsorFieldText(s, colKey).toLowerCase();
+  }
   function sortedSponsors() {
+    var col = state.sponsorSortCol, dir = state.sponsorSortDir;
     return state.sponsors.slice().sort(function (a, b) {
+      if (col) {
+        var av = sponsorSortValue(a, col), bv = sponsorSortValue(b, col);
+        if (av < bv) return -dir;
+        if (av > bv) return dir;
+        return 0;
+      }
       var an = (a.name || "").toLowerCase(), bn = (b.name || "").toLowerCase();
       return an < bn ? -1 : an > bn ? 1 : 0;
     });
@@ -2898,6 +2946,8 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   function visibleSponsors() {
     var q = state.sponsorSearch.trim().toLowerCase();
     var list = sortedSponsors().filter(function (s) { return state.sponsorTypeFilter[s.sponsorType] !== false; });
+    if (state.sponsorPaidFilter === "unpaid") list = list.filter(sponsorAmountIsZero);
+    else if (state.sponsorPaidFilter === "paid") list = list.filter(function (s) { return !sponsorAmountIsZero(s); });
     if (!q) return list;
     return list.filter(function (s) {
       return SPONSOR_COLS.some(function (c) { return sponsorFieldText(s, c.key).toLowerCase().indexOf(q) !== -1; });
@@ -3111,6 +3161,14 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
       var label = t.label.replace(/\s*\(\$[\d,]+\)\s*$/, "");
       return el("label", {}, [cb, document.createTextNode(" " + label)]);
     }));
+    var paidSelect = el("select", {}, [
+      el("option", { value: "all", text: "All" }),
+      el("option", { value: "paid", text: "Paid" }),
+      el("option", { value: "unpaid", text: "Unpaid" })
+    ]);
+    paidSelect.value = state.sponsorPaidFilter;
+    paidSelect.addEventListener("change", function () { state.sponsorPaidFilter = paidSelect.value; renderSponsorsBody(); });
+    var paidGroup = el("label", { class: "statusgroup" }, [document.createTextNode("Paid: "), paidSelect]);
     var count = el("span", { class: "count", id: "sponsorcount" });
     // Adding a sponsor goes through the same public "Become a Car Show
     // Sponsor" form (sponsor-form.php) anyone else uses, instead of the
@@ -3132,7 +3190,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     zoomFit.addEventListener("click", fitSponsorZoom);
     var zoomLabel = el("span", { class: "count", text: Math.round(state.sponsorZoom * 100) + "%" });
     var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
-    var kids = [search, typeGroup, count, el("span", { class: "spacer" }), zoomGroup];
+    var kids = [search, typeGroup, paidGroup, count, el("span", { class: "spacer" }), zoomGroup];
     kids.push(prn, delBtn, addBtn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
@@ -3145,7 +3203,16 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var selectAllCb = el("input", { type: "checkbox", id: "sponsorSelectAll", title: "Select all" });
     selectAllCb.addEventListener("change", function () { toggleSelectAllSponsors(selectAllCb.checked); });
     var thead = el("thead", {}, [el("tr", {}, [el("th", { class: "no-print" }, [selectAllCb])]
-      .concat(SPONSOR_COLS.map(function (c) { return el("th", { text: c.label }); }))
+      .concat(SPONSOR_COLS.map(function (c) {
+        var arrow = state.sponsorSortCol === c.key ? (state.sponsorSortDir === 1 ? " ▲" : " ▼") : "";
+        var th = el("th", {}, [c.label, el("span", { class: "arrow", text: arrow })]);
+        th.addEventListener("click", function () {
+          if (state.sponsorSortCol === c.key) state.sponsorSortDir = -state.sponsorSortDir;
+          else { state.sponsorSortCol = c.key; state.sponsorSortDir = 1; }
+          renderViews();
+        });
+        return th;
+      }))
       .concat([el("th", { class: "no-print", text: "" })]))]);
     var table = el("table", { class: "grid" }, [thead, el("tbody", { id: "sponsorbody" })]);
     container.appendChild(el("div", { class: "tablewrap", style: "zoom:" + state.sponsorZoom }, [table]));
@@ -3175,6 +3242,15 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
             if (paidCb.checked) markSponsorPaid(s); else paidCb.checked = false;
           });
           tr.appendChild(el("td", {}, [paidCb, document.createTextNode(" Paid")]));
+        } else if (c.key === "email" && s.email) {
+          var mailLink = el("a", { href: "mailto:" + s.email, text: s.email });
+          mailLink.addEventListener("click", function (e) { e.stopPropagation(); });
+          tr.appendChild(el("td", {}, [mailLink]));
+        } else if (c.key === "website" && s.website) {
+          var websiteHref = /^https?:\/\//i.test(s.website) ? s.website : "https://" + s.website;
+          var siteLink = el("a", { href: websiteHref, target: "_blank", rel: "noopener", text: s.website });
+          siteLink.addEventListener("click", function (e) { e.stopPropagation(); });
+          tr.appendChild(el("td", {}, [siteLink]));
         } else {
           tr.appendChild(el("td", { text: sponsorFieldText(s, c.key) }));
         }
@@ -3998,9 +4074,8 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
   function fmtDate(d) {
     d = d instanceof Date ? d : new Date(d);
     function p(n) { return (n < 10 ? "0" : "") + n; }
-    function sp(n) { return (n < 10 ? " " : "") + n; }
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-    return sp(d.getMonth() + 1) + "/" + sp(d.getDate()) + "/" + d.getFullYear() + " " + sp(h) + ":" + p(d.getMinutes()) + " " + ap;
+    return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
   }
 
   // Converts any parseable date string/Date (e.g. a raw CSV "Reg Date" like
@@ -4477,8 +4552,7 @@ window.CarShowFixtures = { regCsv: "\"Title\",\"Date/Time\",\"Total Fee\",\"Stat
     var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
     function p(n) { return (n < 10 ? "0" : "") + n; }
-    function sp(n) { return (n < 10 ? " " : "") + n; }
-    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + sp(h) + ":" + p(d.getMinutes()) + " " + ap;
+    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
   }
 
   // Full page, not a centered modal — matches SilentAuctionManager, where

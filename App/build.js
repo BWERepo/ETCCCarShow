@@ -59,9 +59,8 @@ fs.writeFileSync(VERSION_PATH, JSON.stringify({
 
 function fmtDateTime(d) {
   function p(n) { return (n < 10 ? "0" : "") + n; }
-  function sp(n) { return (n < 10 ? " " : "") + n; }
   var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-  return sp(d.getMonth() + 1) + "/" + sp(d.getDate()) + "/" + d.getFullYear() + " " + sp(h) + ":" + p(d.getMinutes()) + " " + ap;
+  return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
 }
 
 var html =
@@ -80,8 +79,8 @@ var html =
 '</div>\n' +
 '<footer class="app-footer">\n' +
 '  <div>v' + versionString + ' &middot; Deployed ' + fmtDateTime(deployedAt) + '</div>\n' +
-'  <div class="footer-credit">Website by Business Web Express &middot; info@businesswebexpress.com</div>\n' +
-'  <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; etccwebsite.webmanager@gmail.com</div>\n' +
+'  <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>\n' +
+'  <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>\n' +
 '</footer>\n' +
 scripts.map(function (s) { return '<script>\n' + s + '\n</script>'; }).join("\n") +
 '\n</body>\n</html>\n';

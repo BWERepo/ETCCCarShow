@@ -235,7 +235,7 @@ th.pinned { z-index: 3; }
    cards/preview reuse .api-card/.api-response directly (a generic card/
    monospace-preview look, not actually API-specific). */
 /* T-Shirts tab — email composer + report */
-.tshirt-view { max-width: 100%; }
+.tshirt-view { max-width: 700px; margin: 0 auto; }
 .tshirt-view .panel { margin-bottom: 20px; }
 .tshirt-view .form-group { margin-bottom: 16px; }
 .tshirt-view .form-group label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }

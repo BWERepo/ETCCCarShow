@@ -22,6 +22,9 @@
 //    client-side via pdf-lib.
 //  - tshirtVendorEmail: reference contact only (Developer > Settings > T-Shirt
 //    Vendor) — not used to send anything automatically anywhere in the app.
+//  - tshirtEventPurchaseCost: reference figure for officers selling shirts at
+//    the event (Developer > Settings > T-Shirt Vendor) — not applied
+//    anywhere automatically.
 //  - externalApiKey: credential for the EXTERNAL Paid Registrations API
 //    (paid-registrations-api.php) — a separate, narrower credential than
 //    this app's own site password, meant to be handed to another website's
@@ -69,7 +72,8 @@ $defaults = [
     'walkInNonCarShowFee' => 0,
     'preregistrationFee' => 40,
     'windowCardPdf' => '',
-    'tshirtVendorEmail' => ''
+    'tshirtVendorEmail' => '',
+    'tshirtEventPurchaseCost' => 0
 ];
 
 if ($action === 'get') {

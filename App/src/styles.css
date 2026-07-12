@@ -19,12 +19,19 @@ body {
   color: var(--ink);
   background: var(--bg);
 }
+/* Grid (not flex) so the center title stays visually centered on the page
+   regardless of how wide the left (hamburger+logo) content is — the right
+   column is an empty spacer of equal width. */
 header.app {
-  color: #000; padding: 14px 20px; display: flex; align-items: center;
-  gap: 14px; position: relative; border-bottom: 1px solid var(--line);
+  color: #000; padding: 14px 20px; display: grid;
+  grid-template-columns: 1fr auto 1fr; align-items: center;
+  position: relative; border-bottom: 1px solid var(--line);
 }
+header.app .hdr-left { display: flex; align-items: center; gap: 14px; justify-self: start; }
+header.app .hdr-center { justify-self: center; }
+header.app .hdr-right { justify-self: end; }
 header.app .hdr-logo { height: 72px; width: 72px; object-fit: contain; border-radius: 6px; }
-header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; color: #000; }
+header.app h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; color: #000; white-space: nowrap; }
 
 /* ── Hamburger — SilentAuctionManager style: 3-bar icon at the far left of
    the header, animating into an X while the drawer is open ── */

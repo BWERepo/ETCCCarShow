@@ -54,7 +54,7 @@ if ($bundle === false) {
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
 // this one, has already run) sees window.__carshowSite already set.
-$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\", windowCardPdfApiUrl: \"window-card-pdf.php\", sendTshirtOrderEmailApiUrl: \"send-tshirt-order-email.php\", sponsorPaymentsApiUrl: \"sponsor-payments.php\" };</script>\n";
+$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\", windowCardPdfApiUrl: \"window-card-pdf.php\", sendTshirtOrderEmailApiUrl: \"send-tshirt-order-email.php\", sponsorPaymentsApiUrl: \"sponsor-payments.php\", tshirtPurchasesApiUrl: \"tshirt-purchases.php\" };</script>\n";
 $bundle = str_replace('<head>', '<head>' . "\n" . $siteConfigScript, $bundle);
 
 $bootParts = [];
@@ -80,6 +80,11 @@ $bootParts[] = "    window.__carshow.ingestPayments(" . carshow_safe_inline_json
 $walkins = carshow_read_json_list(__DIR__ . '/walkin-registrations.json');
 $bootParts[] = "    window.__carshow.ingestWalkins(" . carshow_safe_inline_json($walkins) . ");\n";
 
+// Day-of-event t-shirt purchases (T-Shirts tab > 🛒 Buy T-Shirt) — independent
+// of everything else, just read fresh on every page load.
+$tshirtPurchases = carshow_read_json_list(__DIR__ . '/tshirt-purchases.json');
+$bootParts[] = "    window.__carshow.ingestTshirtPurchases(" . carshow_safe_inline_json($tshirtPurchases) . ");\n";
+
 // Member roster (name + member number, if the last CSV import had that
 // column — see members-import.php) — used by the Add Registration form to
 // look up a Walk-In Member's number by name.
@@ -95,7 +100,8 @@ $appSettingsDefaults = [
     'walkInNonCarShowFee' => 0,
     'preregistrationFee' => 40,
     'windowCardPdf' => '',
-    'tshirtVendorEmail' => ''
+    'tshirtVendorEmail' => '',
+    'tshirtEventPurchaseCost' => 0
 ];
 $appSettings = array_merge($appSettingsDefaults, is_array($appSettingsRaw) ? $appSettingsRaw : []);
 // externalApiKey has no static default above — this file is committed to a

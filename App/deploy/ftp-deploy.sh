@@ -60,10 +60,33 @@ if [ ! -f "$DIR/../ETCCCarShow.html" ]; then
   exit 1
 fi
 
+# FTPS over Windows' schannel TLS stack has a history of dropping mid-transfer
+# on this host (see the file header comment) — manifesting as curl exit 28
+# (timeout), 55 (connection reset), or a server-side 550 (exit 25). The 550
+# case has a specific known cause here: the server (ProFTPd) uses
+# "HiddenStores" — it writes an upload to ".in.<filename>." first and only
+# renames it to the real filename on success. If a transfer gets dropped
+# mid-upload, that hidden temp file is left behind and blocks every further
+# attempt to upload the same filename with a 550. On a 550 we delete ONLY
+# that hidden temp file (never the real target — deleting the live file
+# would leave the site broken if a retry then also failed) before retrying.
 upload() {
   local remoteName="$1" localPath="${2:-$DIR/$1}"
-  echo "--- Uploading $remoteName ---"
-  curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T "$localPath" "$BASE/$remoteName" -m 120
+  local attempt rc
+  for attempt in 1 2 3; do
+    echo "--- Uploading $remoteName (attempt $attempt) ---"
+    rc=0
+    curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T "$localPath" "$BASE/$remoteName" -m 120 || rc=$?
+    if [ $rc -eq 0 ]; then return 0; fi
+    echo "    upload failed (curl exit $rc)" >&2
+    if [ $rc -eq 25 ] && [ $attempt -lt 3 ]; then
+      echo "    deleting stale hidden temp file .in.$remoteName. before retrying" >&2
+      curl -sS --netrc-file "$NETRC" --ftp-ssl -k -Q "-DELE .in.$remoteName." "$BASE/" -m 30 -o /dev/null 2>&1 || true
+    fi
+    if [ $attempt -lt 3 ]; then sleep 5; fi
+  done
+  echo "    giving up on $remoteName after 3 attempts" >&2
+  return $rc
 }
 
 # The built offline-tool bundle, re-uploaded under a different name — index.php
@@ -84,6 +107,7 @@ upload "paid-registrations-cache.php"
 upload "paid-registrations-api.php"
 upload "window-card-pdf.php"
 upload "send-tshirt-order-email.php"
+upload "tshirt-purchases.php"
 upload "registrations-upload.php"
 upload "members-import.php"
 upload "registrations-import.php"
@@ -104,9 +128,10 @@ upload ".htaccess"
 #   curl -sS --netrc-file "$NETRC" --ftp-ssl -k --ftp-pasv -T deploy/secrets.php "$BASE/secrets.php"
 # sponsor-submissions.json, walkin-registrations.json, app-settings.json,
 # deleted-registrations.json, registration-overrides.json, registrations-data.json,
-# members-data.json, password-reset.json, paid-registrations-cache.json, and
-# window-card.pdf (the fillable template currently uploaded, via
-# window-card-pdf.php) are likewise deliberately never uploaded here —
+# members-data.json, password-reset.json, paid-registrations-cache.json,
+# tshirt-purchases.json, and window-card.pdf (the fillable template
+# currently uploaded, via window-card-pdf.php) are likewise deliberately
+# never uploaded here —
 # they're live, server-accumulated data with no meaningful
 # local copy to overwrite them with. See upload-registrations.js, members-import.php, and the Sponsors/Registration
 # tabs (including its Developer > Settings) for how those actually get

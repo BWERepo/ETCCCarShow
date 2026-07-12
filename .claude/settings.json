@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(App/deploy/ftp-deploy.sh)"
+    ]
+  }
+}

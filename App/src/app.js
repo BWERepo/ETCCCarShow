@@ -62,7 +62,8 @@
       preregistrationFee: 40,
       externalApiKey: "",
       windowCardPdf: "",
-      tshirtVendorEmail: ""
+      tshirtVendorEmail: "",
+      tshirtEventPurchaseCost: 0
     },
     appSettingsSaving: false,
     appSettingsError: null,   // set when a Settings save fails; shown in the Settings modal
@@ -76,6 +77,7 @@
     windowCardUploading: false,
     windowCardError: null,
     windowCardPdfVersion: 0, // bumped on every successful upload, for cache-busting the fetch() that fills it
+    emailTo: "",              // editable To recipient; defaulted from tshirtVendorEmail when opened
     emailSubject: "",         // editable; defaulted when T-Shirts tab is opened
     emailBody: "",            // editable; defaulted when T-Shirts tab is opened
     emailCc: "",              // editable CC recipients
@@ -83,6 +85,16 @@
     emailSending: false,
     emailSendError: null,
     emailSent: false,         // brief "Sent!" confirmation after a successful send
+    tshirtOrderPageOpen: false, // T-Shirts tab > "T-Shirt Order Form" full-page screen
+    tshirtReportPageOpen: false, // T-Shirts tab > "T-Shirt Report" full-page screen
+    tshirtPurchasePageOpen: false, // T-Shirts tab > "Buy T-Shirt" full-page screen
+    tshirtPurchases: [],       // day-of-event walk-up sales — filled by ingestTshirtPurchases()
+    tshirtPurchaseName: "",    // Buy T-Shirt form's in-progress Name field
+    tshirtPurchaseCost: "",    // Buy T-Shirt form's in-progress Cost field (defaults from settings when opened)
+    tshirtPurchaseSize: "",    // Buy T-Shirt form's in-progress T-Shirt Size field (e.g. "Men's Large")
+    tshirtPurchasePaymentType: "Cash", // Buy T-Shirt form's in-progress Payment Type field
+    tshirtPurchaseCheckNum: "", // Buy T-Shirt form's in-progress Check # field (only used when Payment Type is Check)
+    tshirtPurchaseSyncError: null, // set when persisting an add/delete fails
     deletedCsvKeys: {},       // csvRegKey(rec) -> true, for CSV-derived rows removed via the
                                // Registration tab's checkbox/bulk-delete — filled by
                                // ingestDeletedRegistrations(); excluded from state.result.registrations
@@ -116,6 +128,17 @@
   var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
   function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
+  // "Reg Date" comes straight from the ClubExpress CSV export as an unpadded,
+  // seconds-included string (e.g. "7/8/2026 7:55:00 AM") — reformat it through
+  // fmtDate() (defined below) so it lines up with every other date/time shown
+  // in the app (2-digit month/day/hour, no seconds).
+  var DATE_COLS = { "Reg Date": 1 };
+  function fmtCsvDate(v) {
+    if (v == null || v === "") return v;
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return v;
+    return fmtDate(d);
+  }
   function isShirtCol(c) { return state.result && state.result.shirtColumns.indexOf(c) !== -1; }
   function isNumericCol(c) { return NUMERIC_BASE[c] || isShirtCol(c); }
 
@@ -479,7 +502,7 @@
     var thead = el("thead", {}, [el("tr", {}, headerLabels.map(function (c) { return el("th", {}, [c]); }))]);
     var tbody = el("tbody", {}, visibleRows().map(function (r) {
       var cells = cols.map(function (c) {
-        var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : r[c];
+        var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : DATE_COLS[c] ? fmtCsvDate(r[c]) : r[c];
         return el("td", {}, [v == null ? "" : String(v)]);
       });
       cells.push(el("td", { class: "shirtsum" }, [shirtSummaryText(r)]));
@@ -833,6 +856,7 @@
         var v, cls = "";
         if (c === SHIRTS_COL) { cls = "shirtsum"; v = shirtSummaryText(r); }
         else if (CURRENCY_COLS[c]) { cls = "num"; v = fmtMoney(r[c]); }
+        else if (DATE_COLS[c]) { v = fmtCsvDate(r[c]); }
         else if (isNumericCol(c)) { cls = "num"; v = r[c]; v = v == null ? "" : v; }
         else { v = r[c]; }
         cls += pinnedClass(idx + 1);
@@ -937,7 +961,7 @@
       fieldEls[c] = input;
       return li(c, "", input);
     }
-    var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : r[c];
+    var v = CURRENCY_COLS[c] ? fmtMoney(r[c]) : DATE_COLS[c] ? fmtCsvDate(r[c]) : r[c];
     return li(c, v == null || v === "" ? "—" : String(v));
   }
 
@@ -1074,15 +1098,17 @@
   // dataset — so this tab always reflects "what I've selected over there".
   function buildSummaryView() {
     var s = LOGIC.summarizeRecords(visibleRows(), CONFIG);
-    // Funds = registrations' own Total Fee (s.funds, includes each
+    // Total Income = registrations' own Total Fee (s.funds, includes each
     // registrant's own Individual Sponsorship add-on fee, since that's part
-    // of their registration) + Premier/Corporate sponsor fees, which are
-    // standalone businesses with no registration of their own to carry a
-    // Total Fee. Individual sponsors are deliberately excluded here — their
-    // $100 is already counted once via the registrant's own Total Fee, so
-    // adding sponsorStatsByType("individual").total too would double it.
+    // of their registration) + Premier/Corporate sponsor fees (standalone
+    // businesses with no registration of their own) + Walk-In T-Shirt
+    // purchases (day-of sales). Individual sponsors are deliberately excluded
+    // here — their $100 is already counted once via the registrant's own
+    // Total Fee, so adding sponsorStatsByType("individual").total too would
+    // double it.
     var sponsorFunds = sponsorStatsByType("premier").total + sponsorStatsByType("corporate").total;
-    var totalFunds = Number(s.funds) + sponsorFunds;
+    var tshirtPurchaseTotal = state.tshirtPurchases.reduce(function (sum, p) { return sum + (Number(p.cost) || 0); }, 0);
+    var totalIncome = Number(s.funds) + sponsorFunds + tshirtPurchaseTotal;
     var m = state.result.meta, C = CONFIG;
     var container = el("div", { class: "view" });
 
@@ -1101,7 +1127,7 @@
     // totals cards
     container.appendChild(el("div", { class: "cards" }, [
       card("Registrations", s.registrations),
-      card("Funds", "$" + totalFunds.toLocaleString(undefined, { minimumFractionDigits: 0 }))
+      card("Total Income", "$" + totalIncome.toLocaleString(undefined, { minimumFractionDigits: 0 }))
     ]));
 
     // sponsor cards (independent of the loaded CSVs — reads state.sponsors directly)
@@ -1120,6 +1146,20 @@
       el("div", { class: "cards sponsor-cards" }, [
         el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Registration Shirts" }), shirtMatrix(s)]),
         el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }), combinedShirtMatrix(s)])
+      ])
+    ]));
+
+    // Walk-In T-Shirt purchases (day-of-event sales) — total cost card plus
+    // a per-size breakdown, same "cards sponsor-cards" / "sponsor-card"
+    // styling as the panels above.
+    container.appendChild(el("div", { class: "panel" }, [
+      el("h3", { text: "Walk-In T-Shirt" }),
+      el("div", { class: "cards sponsor-cards" }, [
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Total Cost" }),
+          el("div", { class: "cards" }, [card("Purchases", state.tshirtPurchases.length), card("Total", fmtMoney(tshirtPurchaseTotal))])
+        ]),
+        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Sizes Purchased" }), tshirtPurchaseSizeMatrix()])
       ])
     ]));
 
@@ -1186,12 +1226,31 @@
     });
     return counts;
   }
+  // Purchase-size counts for Walk-In T-Shirt sales (Buy T-Shirt screen) —
+  // each purchase's size is one of CONFIG.SPONSOR_SHIRT_SIZES's "Men's/
+  // Women's <size>" strings (same set used by the Sponsors tab's T-Shirt
+  // field), so CONFIG.SPONSOR_SIZE_INDEX maps it straight to { gender,
+  // sizeKey }. Shared by combinedShirtMatrix() and tshirtPurchaseSizeMatrix().
+  function tshirtPurchaseShirtCounts() {
+    var C = CONFIG;
+    var counts = {};
+    C.SIZES.forEach(function (sz) { counts[sz.key] = { mens: 0, womens: 0 }; });
+    state.tshirtPurchases.forEach(function (p) {
+      var info = p.size && C.SPONSOR_SIZE_INDEX[p.size];
+      if (!info || !counts[info.sizeKey]) return;
+      if (info.gender === "Men's") counts[info.sizeKey].mens++; else counts[info.sizeKey].womens++;
+    });
+    return counts;
+  }
+
   // Registration shirts (Free+Xtra collapsed to just gender) plus sponsor
-  // shirts, per size — the "how many actual shirts of each size do we need"
-  // number, as opposed to the registration-only breakdown in shirtMatrix().
+  // shirts plus Walk-In T-Shirt purchases, per size — the "how many actual
+  // shirts of each size do we need" number, as opposed to the
+  // registration-only breakdown in shirtMatrix().
   function combinedShirtMatrix(s) {
     var C = CONFIG;
     var sponsorCounts = allSponsorShirtCounts();
+    var purchaseCounts = tshirtPurchaseShirtCounts();
     var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
     var body = C.SIZES.map(function (sz) {
       var regMens = 0, regWomens = 0;
@@ -1199,8 +1258,24 @@
         var val = s.shirtTotals[g.key + sz.key] || 0;
         if (g.gender === "Men's") regMens += val; else regWomens += val;
       });
-      var mens = regMens + sponsorCounts[sz.key].mens;
-      var womens = regWomens + sponsorCounts[sz.key].womens;
+      var mens = regMens + sponsorCounts[sz.key].mens + purchaseCounts[sz.key].mens;
+      var womens = regWomens + sponsorCounts[sz.key].womens + purchaseCounts[sz.key].womens;
+      return el("tr", {}, [
+        el("td", { class: "lbl", text: sz.label }),
+        el("td", { class: mens ? "" : "z", text: String(mens) }),
+        el("td", { class: womens ? "" : "z", text: String(womens) })
+      ]);
+    });
+    return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
+  }
+
+  // Size breakdown for Walk-In T-Shirt purchases (Summary tab).
+  function tshirtPurchaseSizeMatrix() {
+    var C = CONFIG;
+    var counts = tshirtPurchaseShirtCounts();
+    var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
+    var body = C.SIZES.map(function (sz) {
+      var mens = counts[sz.key].mens, womens = counts[sz.key].womens;
       return el("tr", {}, [
         el("td", { class: "lbl", text: sz.label }),
         el("td", { class: mens ? "" : "z", text: String(mens) }),
@@ -1287,18 +1362,18 @@
   // data happens to be loaded.
   var SPONSOR_COLS = [
     { key: "name", label: "Sponsor Name" },
+    { key: "etccMemberName", label: "Member" },
     { key: "regDate", label: "Reg Date" },
+    { key: "sponsorType", label: "Sponsor Type" },
     { key: "lastPaymentDate", label: "Payment Date" },
     { key: "lastPaymentType", label: "Type" },
     { key: "lastPaymentCheckNum", label: "Check #" },
-    { key: "lastPaymentAmount", label: "Amount" },
+    { key: "lastPaymentAmount", label: "Paid" },
     { key: "contactPerson", label: "Contact Person" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
     { key: "address", label: "Address" },
     { key: "website", label: "Website" },
-    { key: "etccMemberName", label: "Member" },
-    { key: "sponsorType", label: "Sponsor Type" },
     { key: "individualSponsorshipText", label: "Individual Sponsorship Text" },
     { key: "shirtSize", label: "T-Shirt" }
   ];
@@ -1358,6 +1433,29 @@
     sponsorPayments.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
     return sponsorPayments[0];
   }
+  // True when there's no payment on file yet, or the last one's amount is 0 —
+  // the Sponsors table shows a "Paid" checkbox in the Amount column for these,
+  // so an officer can record a full-fee payment in one click without opening
+  // Edit Sponsor (e.g. a cash payment that was collected but never logged).
+  function sponsorAmountIsZero(s) {
+    var payment = getLastPaymentForSponsor(s.id);
+    return !payment || !payment.amount || Number(payment.amount) === 0;
+  }
+  function markSponsorPaid(s) {
+    var typeCfg = CONFIG.SPONSOR_TYPES.filter(function (t) { return t.key === s.sponsorType; })[0];
+    var fee = typeCfg ? typeCfg.fee : 0;
+    recordPayment({
+      id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      sponsorId: s.id,
+      sponsorName: s.name,
+      paymentType: "Cash",
+      checkNum: "",
+      date: new Date().toISOString().split("T")[0],
+      amount: fee,
+      recordedAt: new Date().toISOString()
+    });
+    renderSponsorsBody();
+  }
 
   function sponsorFieldText(s, colKey) {
     if (colKey === "sponsorType") return sponsorTypeLabel(s.sponsorType);
@@ -1384,7 +1482,7 @@
     // it uses sponsor-form.php's submittedAt (ISO string) instead, formatted
     // to match. Manually-added sponsors with neither show blank.
     if (colKey === "regDate") {
-      if (s.regDate) return String(s.regDate);
+      if (s.regDate) return fmtCsvDate(s.regDate);
       if (s.submittedAt) return fmtDate(s.submittedAt);
       return "";
     }
@@ -1454,6 +1552,37 @@
     }).catch(function () {
       state.walkinSyncError = "Could not save that change to the server — check your connection and try again.";
       renderViews();
+    });
+  }
+
+  // ---------- t-shirt purchases (T-Shirts tab's "🛒 Buy T-Shirt") ----------
+  // Same optimistic-local-update-then-server-push pattern as sponsors/walkins
+  // above — see upsertSponsor/pushSponsorToServer's comments.
+  function upsertTshirtPurchase(record) {
+    var idx = -1;
+    state.tshirtPurchases.forEach(function (p, i) { if (p.id === record.id) idx = i; });
+    if (idx === -1) state.tshirtPurchases.push(record); else state.tshirtPurchases[idx] = record;
+    pushTshirtPurchaseToServer("upsert", { purchase: record });
+  }
+  function removeTshirtPurchase(id) {
+    state.tshirtPurchases = state.tshirtPurchases.filter(function (p) { return p.id !== id; });
+    pushTshirtPurchaseToServer("delete", { id: id });
+  }
+  function pushTshirtPurchaseToServer(action, payload) {
+    if (!SITE_CONFIG.tshirtPurchasesApiUrl) return;
+    var body = { action: action };
+    Object.keys(payload).forEach(function (k) { body[k] = payload[k]; });
+    fetch(SITE_CONFIG.tshirtPurchasesApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.tshirtPurchaseSyncError = null;
+      renderTshirtPurchasePage();
+    }).catch(function () {
+      state.tshirtPurchaseSyncError = "Could not save that change to the server — check your connection and try again.";
+      renderTshirtPurchasePage();
     });
   }
 
@@ -1638,7 +1767,18 @@
       cb.addEventListener("click", function (e) { e.stopPropagation(); });
       cb.addEventListener("change", function () { setSponsorSelected(s.id, cb.checked); renderSponsorsBody(); });
       tr.appendChild(el("td", { class: "no-print" }, [cb]));
-      SPONSOR_COLS.forEach(function (c) { tr.appendChild(el("td", { text: sponsorFieldText(s, c.key) })); });
+      SPONSOR_COLS.forEach(function (c) {
+        if (c.key === "lastPaymentAmount" && sponsorAmountIsZero(s)) {
+          var paidCb = el("input", { type: "checkbox", title: "Mark this sponsor's fee as paid" });
+          paidCb.addEventListener("click", function (e) { e.stopPropagation(); });
+          paidCb.addEventListener("change", function () {
+            if (paidCb.checked) markSponsorPaid(s); else paidCb.checked = false;
+          });
+          tr.appendChild(el("td", {}, [paidCb, document.createTextNode(" Paid")]));
+        } else {
+          tr.appendChild(el("td", { text: sponsorFieldText(s, c.key) }));
+        }
+      });
       tr.appendChild(el("td", { class: "no-print" }));
       frag.appendChild(tr);
     });
@@ -2432,7 +2572,7 @@
     d = d instanceof Date ? d : new Date(d);
     function p(n) { return (n < 10 ? "0" : "") + n; }
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-    return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear() + " " + h + ":" + p(d.getMinutes()) + " " + ap;
+    return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
   }
 
   // Converts any parseable date string/Date (e.g. a raw CSV "Reg Date" like
@@ -2459,7 +2599,11 @@
       el("span", { class: "bar" }), el("span", { class: "bar" }), el("span", { class: "bar" })
     ]);
     hamburgerBtn.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
-    header.insertBefore(hamburgerBtn, header.firstChild);
+    // Goes inside .hdr-left (before the logo), not header.firstChild — the
+    // header is now a 3-column grid (see header.app in styles.css) and a 4th
+    // top-level child here would break the centered title.
+    var hdrLeft = header.querySelector(".hdr-left") || header;
+    hdrLeft.insertBefore(hamburgerBtn, hdrLeft.firstChild);
 
     var backdrop = el("div", { id: "hdrNavBackdrop", class: "hdr-nav-backdrop" });
     backdrop.addEventListener("click", closeMenu);
@@ -2723,6 +2867,10 @@
       ["Reference contact only — not used to send anything automatically anywhere in the app."]));
     var tshirtVendorEmailInput = el("input", { type: "text", value: state.appSettings.tshirtVendorEmail || "" });
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Vendor Email" }), tshirtVendorEmailInput]));
+    body.appendChild(el("div", { class: "hint", style: "margin:6px 0 4px" },
+      ["Reference figure for officers selling shirts at the event — not applied anywhere automatically."]));
+    var tshirtPurchaseCostInput = el("input", { type: "text", value: String(state.appSettings.tshirtEventPurchaseCost) });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Cost to Purchase at Event" }), tshirtPurchaseCostInput]));
 
     var settingsSaveBtn = el("button", { class: "btn primary" }, [state.appSettingsSaving ? "Saving…" : "Save"]);
     if (state.appSettingsSaving) settingsSaveBtn.setAttribute("disabled", "disabled");
@@ -2731,7 +2879,8 @@
         ["walkinFirstNonMember", firstNonMemberInput, "First NonMember Number"],
         ["walkInCarShowFee", carShowFeeInput, "Walk-In Car Show Registration"],
         ["walkInNonCarShowFee", nonCarShowFeeInput, "Walk-In Non Car Show Registration"],
-        ["preregistrationFee", preregFeeInput, "Preregistration"]
+        ["preregistrationFee", preregFeeInput, "Preregistration"],
+        ["tshirtEventPurchaseCost", tshirtPurchaseCostInput, "Cost to Purchase at Event"]
       ];
       var patch = {};
       for (var i = 0; i < fields.length; i++) {
@@ -2900,7 +3049,7 @@
     var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
     function p(n) { return (n < 10 ? "0" : "") + n; }
-    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + h + ":" + p(d.getMinutes()) + " " + ap;
+    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
   }
 
   // Full page, not a centered modal — matches SilentAuctionManager, where
@@ -2911,9 +3060,7 @@
     host.innerHTML = "";
     if (!state.changelogOpen) return;
 
-    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
-    closeBtn.addEventListener("click", closeChangelog);
-    var head = el("div", { class: "changelog-page-head" }, [closeBtn, el("h2", { text: "Change Log" })]);
+    var head = buildPageBanner(closeChangelog);
 
     var body = el("div", { class: "changelog-page-inner" }, []);
 
@@ -3039,9 +3186,7 @@
     host.innerHTML = "";
     if (!state.apiPageOpen) return;
 
-    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
-    closeBtn.addEventListener("click", closeApiPage);
-    var head = el("div", { class: "api-page-head" }, [closeBtn, el("h2", { text: "Paid Registrations API" })]);
+    var head = buildPageBanner(closeApiPage);
 
     var body = el("div", { class: "api-page-inner" });
 
@@ -3160,25 +3305,25 @@
 
   // T-Shirt Order Email (T-Shirts tab) — Premier/Corporate/Individual sponsor
   // sections plus a combined shirt-count breakdown (see buildTshirtOrderEmailBody()
-  // above), sent to the Vendor Email address from Developer > Settings > T-Shirt
-  // Vendor. The recipient is deliberately NOT sent from here — send-tshirt-order-
-  // email.php reads tshirtVendorEmail from app-settings.json itself, so Settings
-  // stays the single source of truth for who this goes to (see that file).
+  // above). To defaults from the Vendor Email address in Developer > Settings >
+  // T-Shirt Vendor but is editable per-send (see state.emailTo) — send-tshirt-
+  // order-email.php accepts an explicit "to" and falls back to the configured
+  // Vendor Email only if none is supplied.
   function sendTshirtOrderEmail() {
     if (!SITE_CONFIG.sendTshirtOrderEmailApiUrl) return;
-    if (!state.appSettings.tshirtVendorEmail) {
-      state.emailSendError = "No Vendor Email set — add one in Developer > Settings first.";
-      renderViews();
+    if (!state.emailTo) {
+      state.emailSendError = "No recipient set — type a To address, or add one in Developer > Settings first.";
+      renderTshirtOrderPage();
       return;
     }
     state.emailSending = true;
     state.emailSendError = null;
     state.emailSent = false;
-    renderViews();
+    renderTshirtOrderPage();
     fetch(SITE_CONFIG.sendTshirtOrderEmailApiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject: state.emailSubject, body: state.emailBody, cc: state.emailCc, bcc: state.emailBcc })
+      body: JSON.stringify({ to: state.emailTo, subject: state.emailSubject, body: state.emailBody, cc: state.emailCc, bcc: state.emailBcc })
     }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (r) {
         state.emailSending = false;
@@ -3187,19 +3332,16 @@
         } else {
           state.emailSendError = (r.data && r.data.error) || "Send failed.";
         }
-        renderViews();
+        renderTshirtOrderPage();
       })
       .catch(function () {
         state.emailSending = false;
         state.emailSendError = "Could not send — check your connection and try again.";
-        renderViews();
+        renderTshirtOrderPage();
       });
   }
 
   function buildTshirtView() {
-    // Initialize defaults if not yet set
-    if (!state.emailSubject) state.emailSubject = "ETCC Car Show — T-Shirt Order";
-
     var wrap = el("div", { class: "tshirt-view" });
 
     // Total Shirts Needed For Event card (from Summary tab)
@@ -3214,101 +3356,335 @@
       ]));
     }
 
-    // Email Composer Section
-    var emailSection = el("div", { class: "panel" }, [el("h3", { text: "📧 T-Shirt Order Email" })]);
-
-    var vendorEmail = state.appSettings.tshirtVendorEmail || "";
-    emailSection.appendChild(el("div", { class: "form-group" }, [
-      el("label", { text: "To:" }),
-      vendorEmail
-        ? el("div", { class: "form-value", text: vendorEmail })
-        : el("div", { class: "form-error", text: "No Vendor Email set — add one in Developer > Settings > T-Shirt Vendor first." })
+    // Navigation into the three full-page screens below.
+    var orderBtn = el("button", { class: "btn primary" }, ["📧 T-Shirt Order Form"]);
+    orderBtn.addEventListener("click", openTshirtOrderPage);
+    var reportBtn = el("button", { class: "btn" }, ["📊 T-Shirt Report"]);
+    reportBtn.addEventListener("click", openTshirtReportPage);
+    var purchaseBtn = el("button", { class: "btn" }, ["🛒 Buy T-Shirt"]);
+    purchaseBtn.addEventListener("click", openTshirtPurchasePage);
+    wrap.appendChild(el("div", { class: "panel" }, [
+      el("div", { class: "settings-actions" }, [orderBtn, reportBtn, purchaseBtn])
     ]));
+
+    return wrap;
+  }
+
+  // ---------- Page banner helper (shared by all full-page overlays) ----------
+  // Single-line banner: Back button + logo on the left, "Car Show Manager"
+  // (plus an optional pageTitle sub-line naming the specific screen, e.g.
+  // "T-Shirt Order Form") centered — grid layout so the title stays
+  // centered on the page regardless of the left content's width.
+  function buildPageBanner(closeCallback, pageTitle) {
+    var headerLogo = $("header.app img.hdr-logo");
+    var logoImg = headerLogo ? el("img", { src: headerLogo.src, style: "height:40px" }) : null;
+    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
+    closeBtn.addEventListener("click", closeCallback);
+    var centerKids = [el("h2", { text: "Car Show Manager", style: "margin: 0" })];
+    if (pageTitle) centerKids.push(el("h3", { text: pageTitle, style: "margin: 4px 0 0; color: var(--muted); font-weight: 600" }));
+    return el("div", { class: "api-page-head", style: "display: grid; grid-template-columns: 1fr auto 1fr; align-items: center" }, [
+      el("div", { style: "display: flex; align-items: center; gap: 10px; justify-self: start" }, logoImg ? [closeBtn, logoImg] : [closeBtn]),
+      el("div", { style: "justify-self: center; text-align: center" }, centerKids),
+      el("div", { style: "justify-self: end" })
+    ]);
+  }
+
+  // ---------- T-Shirt Order Form (full-page screen) ----------
+  function openTshirtOrderPage() {
+    if (!state.emailTo) state.emailTo = state.appSettings.tshirtVendorEmail || "";
+    if (!state.emailSubject) state.emailSubject = "ETCC Car Show — T-Shirt Order";
+    if (!state.emailBody) state.emailBody = buildTshirtOrderEmailBody();
+    state.tshirtOrderPageOpen = true;
+    renderTshirtOrderPage();
+  }
+  function closeTshirtOrderPage() { state.tshirtOrderPageOpen = false; renderTshirtOrderPage(); }
+
+  function renderTshirtOrderPage() {
+    var host = $("#tshirtOrderHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.tshirtOrderPageOpen) return;
+
+    var head = buildPageBanner(closeTshirtOrderPage, "T-Shirt Order Form");
+
+    var body = el("div", { class: "api-page-inner" });
+
+    if (!state.emailTo) state.emailTo = state.appSettings.tshirtVendorEmail || "";
+    var toInput = el("input", { type: "text", value: state.emailTo || "", placeholder: "email@example.com" });
+    toInput.addEventListener("input", function () { state.emailTo = toInput.value; });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "To" }), toInput
+    ]));
+    if (!state.emailTo) {
+      body.appendChild(el("div", { class: "form-error", text: "No Vendor Email set — add one in Developer > Settings > T-Shirt Vendor, or type a recipient above." }));
+    }
 
     var subjectInput = el("input", { type: "text", value: state.emailSubject || "" });
     subjectInput.addEventListener("input", function () { state.emailSubject = subjectInput.value; });
-    emailSection.appendChild(el("div", { class: "form-group" }, [
-      el("label", { text: "Subject:" }),
-      subjectInput
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Subject" }), subjectInput
     ]));
 
     var ccInput = el("input", { type: "text", value: state.emailCc || "", placeholder: "email@example.com" });
     ccInput.addEventListener("input", function () { state.emailCc = ccInput.value; });
-    emailSection.appendChild(el("div", { class: "form-group" }, [
-      el("label", { text: "CC:" }),
-      ccInput
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "CC" }), ccInput
     ]));
 
     var bccInput = el("input", { type: "text", value: state.emailBcc || "", placeholder: "email@example.com" });
     bccInput.addEventListener("input", function () { state.emailBcc = bccInput.value; });
-    emailSection.appendChild(el("div", { class: "form-group" }, [
-      el("label", { text: "BCC:" }),
-      bccInput
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "BCC" }), bccInput
     ]));
 
-    var defaultBody = buildTshirtOrderEmailBody();
-    if (!state.emailBody) state.emailBody = defaultBody;
     var bodyTextarea = el("textarea", { rows: "40", style: "width:100%; font-family:monospace; font-size:13px; padding:8px; border:1px solid #ccc; resize:vertical" });
     bodyTextarea.value = state.emailBody || "";
     bodyTextarea.addEventListener("input", function () { state.emailBody = bodyTextarea.value; });
-    emailSection.appendChild(el("div", { class: "form-group" }, [
+    body.appendChild(el("div", { class: "form-group" }, [
       el("label", { text: "Message Body (editable):" }),
       bodyTextarea
     ]));
 
     var sendBtn = el("button", { class: "btn primary" }, [state.emailSending ? "Sending…" : "Send"]);
-    if (state.emailSending || !vendorEmail) sendBtn.setAttribute("disabled", "disabled");
+    if (state.emailSending || !state.emailTo) sendBtn.setAttribute("disabled", "disabled");
     sendBtn.addEventListener("click", sendTshirtOrderEmail);
     var actionRow = el("div", { class: "settings-actions" }, [sendBtn]);
     if (state.emailSent) actionRow.appendChild(el("div", { class: "test-summary good", text: "Sent!" }));
     if (state.emailSendError) actionRow.appendChild(el("div", { class: "form-error", text: state.emailSendError }));
-    emailSection.appendChild(actionRow);
+    body.appendChild(actionRow);
 
-    wrap.appendChild(emailSection);
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
+  }
 
-    // T-Shirt Report Section — only show if registration data exists
-    if (state.result && state.result.ok) {
-      var reportSection = el("div", { class: "panel", style: "margin-top:20px" }, [el("h3", { text: "📊 T-Shirt Report" })]);
+  // ---------- T-Shirt Report (full-page screen) ----------
+  function openTshirtReportPage() { state.tshirtReportPageOpen = true; renderTshirtReportPage(); }
+  function closeTshirtReportPage() { state.tshirtReportPageOpen = false; renderTshirtReportPage(); }
 
-      var paidRecs = allRegistrations().filter(function (r) {
-        return classifyStatus(r["Status"]) === "paid";
-      }).sort(function (a, b) {
-        var aLast = String(a["Last Name"] || "").toLowerCase();
-        var bLast = String(b["Last Name"] || "").toLowerCase();
-        if (aLast !== bLast) return aLast < bLast ? -1 : 1;
-        var aFirst = String(a["First Name"] || "").toLowerCase();
-        var bFirst = String(b["First Name"] || "").toLowerCase();
-        return aFirst < bFirst ? -1 : aFirst > bFirst ? 1 : 0;
+  function renderTshirtReportPage() {
+    var host = $("#tshirtReportHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.tshirtReportPageOpen) return;
+
+    var head = buildPageBanner(closeTshirtReportPage, "T-Shirt Report");
+
+    var body = el("div", { class: "api-page-inner" });
+
+    var paidRecs = allRegistrations().filter(function (r) {
+      return classifyStatus(r["Status"]) === "paid";
+    }).sort(function (a, b) {
+      var aLast = String(a["Last Name"] || "").toLowerCase();
+      var bLast = String(b["Last Name"] || "").toLowerCase();
+      if (aLast !== bLast) return aLast < bLast ? -1 : 1;
+      var aFirst = String(a["First Name"] || "").toLowerCase();
+      var bFirst = String(b["First Name"] || "").toLowerCase();
+      return aFirst < bFirst ? -1 : aFirst > bFirst ? 1 : 0;
+    });
+
+    if (!paidRecs.length) {
+      body.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No paid registrations."]));
+    } else {
+      var rows = paidRecs.map(function (r) {
+        var shirtText = shirtSummaryText(r);
+        return el("tr", {}, [
+          el("td", { text: r["Last Name"] || "—" }),
+          el("td", { text: r["First Name"] || "—" }),
+          el("td", { text: shirtText || "—" })
+        ]);
       });
-
-      if (!paidRecs.length) {
-        reportSection.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No paid registrations."]));
-      } else {
-        var rows = paidRecs.map(function (r) {
-          var shirtText = shirtSummaryText(r);
-          return el("tr", {}, [
-            el("td", { text: r["Last Name"] || "—" }),
-            el("td", { text: r["First Name"] || "—" }),
-            el("td", { text: shirtText || "—" })
-          ]);
-        });
-        reportSection.appendChild(el("table", { class: "matrix" }, [
-          el("thead", {}, [el("tr", {}, [
-            el("th", { text: "Last Name" }),
-            el("th", { text: "First Name" }),
-            el("th", { text: "Shirts" })
-          ])]),
-          el("tbody", {}, rows)
-        ]));
-        var printBtn = el("button", { class: "btn", style: "margin-top:16px" }, ["🖨 Print"]);
-        printBtn.addEventListener("click", printTshirtReport);
-        reportSection.appendChild(printBtn);
-      }
-
-      wrap.appendChild(reportSection);
+      body.appendChild(el("table", { class: "matrix" }, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: "Last Name" }),
+          el("th", { text: "First Name" }),
+          el("th", { text: "Shirts" })
+        ])]),
+        el("tbody", {}, rows)
+      ]));
+      var printBtn = el("button", { class: "btn", style: "margin-top:16px" }, ["🖨 Print"]);
+      printBtn.addEventListener("click", printTshirtReport);
+      body.appendChild(printBtn);
     }
 
-    return wrap;
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
+  }
+
+  // ---------- T-Shirt Purchases (full-page screen) ----------
+  // Day-of-event walk-up sales — an officer types the purchaser's name (Cost
+  // defaults from Developer > Settings > T-Shirt Vendor > "Cost to Purchase
+  // at Event" but is editable per-sale) and clicks Add; the date/time is
+  // stamped server-side at that moment. Every purchase made this way is
+  // listed below, newest first, with a Delete for corrections.
+  function openTshirtPurchasePage() {
+    if (state.tshirtPurchaseCost === "") {
+      state.tshirtPurchaseCost = String(state.appSettings.tshirtEventPurchaseCost || 0);
+    }
+    state.tshirtPurchasePageOpen = true;
+    renderTshirtPurchasePage();
+  }
+  function closeTshirtPurchasePage() {
+    state.tshirtPurchasePageOpen = false;
+    renderTshirtPurchasePage();
+    // The T-Shirts tab's "Total Shirts Needed For Event" matrix (rendered
+    // underneath this overlay) was built before any purchases made in this
+    // session — re-render it so it reflects them now that we're returning.
+    renderViews();
+  }
+
+  function addTshirtPurchase() {
+    var name = (state.tshirtPurchaseName || "").trim();
+    var cost = Number(state.tshirtPurchaseCost);
+    var paymentType = state.tshirtPurchasePaymentType || "Cash";
+    var checkNum = (state.tshirtPurchaseCheckNum || "").trim();
+    if (!name) {
+      state.tshirtPurchaseSyncError = "Purchaser name is required.";
+      renderTshirtPurchasePage();
+      return;
+    }
+    if (isNaN(cost) || cost < 0) {
+      state.tshirtPurchaseSyncError = "Cost must be a number (0 or more).";
+      renderTshirtPurchasePage();
+      return;
+    }
+    if (paymentType === "Check" && !checkNum) {
+      state.tshirtPurchaseSyncError = "Check # is required for a Check payment.";
+      renderTshirtPurchasePage();
+      return;
+    }
+    upsertTshirtPurchase({
+      id: "ts" + Date.now() + Math.random().toString(36).slice(2),
+      purchasedAt: new Date().toISOString(),
+      name: name,
+      cost: cost,
+      size: state.tshirtPurchaseSize || "",
+      paymentType: paymentType,
+      checkNum: paymentType === "Check" ? checkNum : ""
+    });
+    state.tshirtPurchaseName = "";
+    state.tshirtPurchaseCost = String(state.appSettings.tshirtEventPurchaseCost || 0);
+    state.tshirtPurchaseSize = "";
+    state.tshirtPurchasePaymentType = "Cash";
+    state.tshirtPurchaseCheckNum = "";
+    state.tshirtPurchaseSyncError = null;
+    renderTshirtPurchasePage();
+  }
+
+  function fmtPurchaseTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso || "—";
+    return fmtDate(d);
+  }
+
+  function renderTshirtPurchasePage() {
+    var host = $("#tshirtPurchaseHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.tshirtPurchasePageOpen) return;
+
+    var head = buildPageBanner(closeTshirtPurchasePage, "Buy T-Shirt");
+
+    var body = el("div", { class: "api-page-inner" });
+
+    var nameInput = el("input", { type: "text", value: state.tshirtPurchaseName || "", placeholder: "Purchaser name" });
+    nameInput.addEventListener("input", function () { state.tshirtPurchaseName = nameInput.value; });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Name" }), nameInput
+    ]));
+
+    var costInput = el("input", { type: "number", step: "0.01", min: "0", placeholder: "0.00", value: state.tshirtPurchaseCost, style: "padding-left:20px" });
+    costInput.addEventListener("input", function () { state.tshirtPurchaseCost = costInput.value; });
+    var costWrap = el("div", { style: "position:relative; display:inline-block" }, [
+      el("span", { style: "position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#666", text: "$" }),
+      costInput
+    ]);
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Cost" }), costWrap
+    ]));
+
+    var sizeSelect = el("select", {});
+    sizeSelect.appendChild(el("option", { value: "", text: "— none —" }));
+    CONFIG.SPONSOR_SHIRT_SIZES.forEach(function (sz) {
+      sizeSelect.appendChild(el("option", { value: sz, text: sz }));
+    });
+    sizeSelect.value = state.tshirtPurchaseSize || "";
+    sizeSelect.addEventListener("change", function () { state.tshirtPurchaseSize = sizeSelect.value; });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "T-Shirt Size" }), sizeSelect
+    ]));
+
+    var paymentTypeSelect = el("select", {});
+    ["Cash", "Check", "Credit Card"].forEach(function (t) {
+      paymentTypeSelect.appendChild(el("option", { value: t, text: t }));
+    });
+    paymentTypeSelect.value = state.tshirtPurchasePaymentType || "Cash";
+    paymentTypeSelect.addEventListener("change", function () {
+      state.tshirtPurchasePaymentType = paymentTypeSelect.value;
+      checkNumRow.style.display = paymentTypeSelect.value === "Check" ? "" : "none";
+    });
+    body.appendChild(el("div", { class: "form-row" }, [
+      el("span", { class: "form-label", text: "Payment Type" }), paymentTypeSelect
+    ]));
+
+    var checkNumInput = el("input", { type: "text", placeholder: "Check #", value: state.tshirtPurchaseCheckNum || "" });
+    checkNumInput.addEventListener("input", function () { state.tshirtPurchaseCheckNum = checkNumInput.value; });
+    var checkNumRow = el("div", { class: "form-row", style: "display:" + (paymentTypeSelect.value === "Check" ? "" : "none") }, [
+      el("span", { class: "form-label", text: "Check #" }), checkNumInput
+    ]);
+    body.appendChild(checkNumRow);
+
+    var addBtn = el("button", { class: "btn primary" }, ["Add Purchase"]);
+    addBtn.addEventListener("click", addTshirtPurchase);
+    var actionRow = el("div", { class: "settings-actions" }, [addBtn]);
+    if (state.tshirtPurchaseSyncError) actionRow.appendChild(el("div", { class: "form-error", text: state.tshirtPurchaseSyncError }));
+    body.appendChild(actionRow);
+
+    var purchases = state.tshirtPurchases.slice().sort(function (a, b) {
+      return String(b.purchasedAt || "").localeCompare(String(a.purchasedAt || ""));
+    });
+
+    if (!purchases.length) {
+      body.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No purchases recorded yet."]));
+    } else {
+      var rows = purchases.map(function (p) {
+        var delBtn = el("button", { class: "btn", style: "padding:2px 8px; font-size:12px" }, ["Delete"]);
+        delBtn.addEventListener("click", function () { removeTshirtPurchase(p.id); });
+        return el("tr", {}, [
+          el("td", { text: fmtPurchaseTime(p.purchasedAt) }),
+          el("td", { text: p.name || "—" }),
+          el("td", { text: fmtMoney(p.cost) }),
+          el("td", { text: p.size || "—" }),
+          el("td", { text: p.paymentType || "—" }),
+          el("td", { text: p.paymentType === "Check" ? (p.checkNum || "—") : "" }),
+          el("td", {}, [delBtn])
+        ]);
+      });
+      var total = purchases.reduce(function (sum, p) { return sum + (Number(p.cost) || 0); }, 0);
+      var totalRow = el("tr", {}, [
+        el("td", { colspan: "2", style: "text-align:right; font-weight:600", text: purchases.length + " purchase" + (purchases.length === 1 ? "" : "s") + " — Total" }),
+        el("td", { style: "font-weight:600", text: fmtMoney(total) }),
+        el("td", {}), el("td", {}), el("td", {}), el("td", {})
+      ]);
+      body.appendChild(el("table", { class: "matrix" }, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: "Date/Time" }),
+          el("th", { text: "Name" }),
+          el("th", { text: "Cost" }),
+          el("th", { text: "Size" }),
+          el("th", { text: "Payment Type" }),
+          el("th", { text: "Check #" }),
+          el("th", { text: "" })
+        ])]),
+        el("tbody", {}, rows),
+        el("tfoot", {}, [totalRow])
+      ]));
+    }
+
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
   }
 
   function init() {
@@ -3317,6 +3693,9 @@
     document.body.appendChild(el("div", { id: "settingsHost" }));
     document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "apiHost" }));
+    document.body.appendChild(el("div", { id: "tshirtOrderHost" }));
+    document.body.appendChild(el("div", { id: "tshirtReportHost" }));
+    document.body.appendChild(el("div", { id: "tshirtPurchaseHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
     document.body.appendChild(el("div", { id: "paymentHost" }));
     document.body.appendChild(el("div", { id: "addRegHost" }));
@@ -3336,6 +3715,9 @@
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.apiPageOpen) { closeApiPage(); return; }
+      if (e.key === "Escape" && state.tshirtOrderPageOpen) { closeTshirtOrderPage(); return; }
+      if (e.key === "Escape" && state.tshirtReportPageOpen) { closeTshirtReportPage(); return; }
+      if (e.key === "Escape" && state.tshirtPurchasePageOpen) { closeTshirtPurchasePage(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.addRegOpen) { closeAddRegistration(); return; }
       if (e.key === "Escape" && state.clearSponsorsOpen) { closeClearSponsorsConfirm(); return; }
@@ -3371,6 +3753,12 @@
     ingestWalkins: function (list) {
       state.walkins = Array.isArray(list) ? list : [];
       renderViews();
+    },
+    // Called by index.php's boot script with the day-of-event t-shirt
+    // purchases list read fresh from the server on this page load.
+    ingestTshirtPurchases: function (list) {
+      state.tshirtPurchases = Array.isArray(list) ? list : [];
+      renderTshirtPurchasePage();
     },
     // Called by index.php's boot script with the member roster read fresh
     // from the server on this page load — used by the Add Registration

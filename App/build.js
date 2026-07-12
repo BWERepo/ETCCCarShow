@@ -60,7 +60,7 @@ fs.writeFileSync(VERSION_PATH, JSON.stringify({
 function fmtDateTime(d) {
   function p(n) { return (n < 10 ? "0" : "") + n; }
   var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-  return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear() + " " + h + ":" + p(d.getMinutes()) + " " + ap;
+  return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
 }
 
 var html =
@@ -70,8 +70,9 @@ var html =
 '<title>ETCC Car Show — Registration</title>\n' +
 '<style>\n' + css + '\n</style>\n</head>\n<body>\n' +
 '<header class="app">\n' +
-'  <img src="' + logoDataUri + '" alt="ETCC Logo" class="hdr-logo">\n' +
-'  <h1>ETCC Car Show</h1>\n' +
+'  <div class="hdr-left"><img src="' + logoDataUri + '" alt="ETCC Logo" class="hdr-logo"></div>\n' +
+'  <div class="hdr-center"><h1>Car Show Manager</h1></div>\n' +
+'  <div class="hdr-right"></div>\n' +
 '</header>\n' +
 '<div class="wrap">\n' +
 '  <div id="app"></div>\n' +

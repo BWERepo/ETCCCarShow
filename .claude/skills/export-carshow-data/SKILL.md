@@ -14,14 +14,29 @@ through those ClubExpress clicks and saves the two files into the Exports folder
 the right names — it stops there. Loading the CSVs into the app (or the hosted site) is
 a separate step the user triggers themselves.
 
+## Which browser tool to use
+
+Use **Claude in Chrome** (`mcp__claude-in-chrome__*` tools) for this skill, not the
+Claude Browser pane (`mcp__Claude_Browser__*`). Claude in Chrome drives the user's actual
+Chrome profile/cookies, where they're typically already logged into ClubExpress. The
+Claude Browser pane is a separate, isolated session with its own cookie jar — confirmed
+by a live run on 2026-07-12, navigating there landed on ClubExpress's login page even
+though the user was logged in in their real Chrome at the time. If Claude in Chrome's
+tools aren't loaded yet, fetch them first with `ToolSearch`
+(`select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__find,mcp__claude-in-chrome__tabs_create_mcp`)
+before calling them.
+
 ## Hard rule: never touch login
 
 This skill only works on an **already-logged-in** browser session. It must never type a
 username, password, or attempt to authenticate in any way. If navigation lands on a
 login page (or anything that looks like one), **stop immediately** and tell the user:
-"You're not logged into ClubExpress in Chrome — please log in and re-run
-/export-carshow-data." Do not guess credentials, do not retry logging in, do not proceed
-past a login page under any circumstances.
+"You're not logged into ClubExpress — please log in (in the browser this skill is
+using) and re-run /export-carshow-data." Do not guess credentials, do not retry logging
+in, do not proceed past a login page under any circumstances, and do not silently switch
+to a different browser tool to work around it — surface the problem and let the user
+decide (e.g. whether to log in, or point you at a different already-authenticated
+browser).
 
 ## Configuration — update this each new event
 
@@ -48,8 +63,10 @@ this only runs a couple of times a year.
 
 ## Steps
 
-1. **Get a browser tab.** Call `tabs_context_mcp` (with `createIfEmpty: true`) to get a
-   tab ID.
+1. **Get a browser tab.** Call `mcp__claude-in-chrome__tabs_context_mcp` (with
+   `createIfEmpty: true`) to get a tab ID — this is the user's real Chrome, so prefer
+   creating a fresh tab over reusing whatever's already open, unless the user says
+   otherwise.
 
 2. **Navigate to `EVENT_URL`.** Take a screenshot. If you land on anything that looks
    like a login/sign-in form, stop and tell the user to log in first (see the hard rule
@@ -77,6 +94,13 @@ this only runs a couple of times a year.
      file" below. If nothing has downloaded after ~10 seconds and the tab seems
      unresponsive to screenshots, wait once more before concluding something's wrong;
      ClubExpress can take a few seconds to generate the file server-side.
+   - **The `screenshot` action can itself time out** (`CDP sendCommand
+     "Page.captureScreenshot" timed out`) without anything actually being wrong — seen
+     repeatedly during the 2026-07-12 run, always resolved by a short `wait` and
+     retrying the screenshot. Don't treat one timeout as a failure signal; wait ~2s and
+     try again before concluding the page is stuck. If the Export click doesn't seem to
+     have registered (dialog still open on the next screenshot), just click Export again
+     at its current on-screen position rather than assuming something is broken.
 
 5. **Export Activity Registrant Data:** repeat step 4's pattern — click Exports again,
    click the **Activity Registrant Data** radio button, re-screenshot to confirm the

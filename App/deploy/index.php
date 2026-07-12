@@ -54,7 +54,7 @@ if ($bundle === false) {
 // Must run BEFORE the bundled app.js so its init() (which fires on
 // DOMContentLoaded — after every inline script in the document, including
 // this one, has already run) sees window.__carshowSite already set.
-$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\", windowCardPdfApiUrl: \"window-card-pdf.php\", sendTshirtOrderEmailApiUrl: \"send-tshirt-order-email.php\" };</script>\n";
+$siteConfigScript = "<script>window.__carshowSite = { sponsorsApiUrl: \"sponsor-submissions.php\", walkinsApiUrl: \"walkin-registrations.php\", appSettingsApiUrl: \"app-settings.php\", deletedRegistrationsApiUrl: \"deleted-registrations.php\", registrationOverridesApiUrl: \"registration-overrides.php\", paidRegistrationsCacheApiUrl: \"paid-registrations-cache.php\", windowCardPdfApiUrl: \"window-card-pdf.php\", sendTshirtOrderEmailApiUrl: \"send-tshirt-order-email.php\", sponsorPaymentsApiUrl: \"sponsor-payments.php\" };</script>\n";
 $bundle = str_replace('<head>', '<head>' . "\n" . $siteConfigScript, $bundle);
 
 $bootParts = [];
@@ -67,6 +67,12 @@ $bootParts = [];
 // re-upsert (overwriting) entries that already exist on the server.
 $sponsors = carshow_read_json_list(__DIR__ . '/sponsor-submissions.json');
 $bootParts[] = "    window.__carshow.ingestSponsors(" . carshow_safe_inline_json($sponsors) . ");\n";
+
+// Payments (Cash/Check/Credit Card records against a sponsor) — ingested
+// right after sponsors so backfillPaymentDefaults() (triggered inside
+// ingestPayments) sees the real current sponsor list, not an empty one.
+$payments = carshow_read_json_list(__DIR__ . '/sponsor-payments.json');
+$bootParts[] = "    window.__carshow.ingestPayments(" . carshow_safe_inline_json($payments) . ");\n";
 
 // Walk-In registrations are independent of the CSV-derived data below —
 // they survive a fresh CSV import, unlike registrations-data.json — so

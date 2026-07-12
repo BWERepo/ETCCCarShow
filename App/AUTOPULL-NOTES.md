@@ -17,8 +17,8 @@
 ## Outcome: built a browser-automation skill instead
 
 Rather than wait on ClubExpress or store credentials anywhere, we automated the *manual
-UI steps themselves*. See [`.claude/skills/export-carshow-data/SKILL.md`](../.claude/skills/export-carshow-data/SKILL.md) —
-run it with `/export-carshow-data` in a Claude Code session.
+UI steps themselves*. See [`.claude/skills/CarShowGetRegistrations/SKILL.md`](../.claude/skills/CarShowGetRegistrations/SKILL.md) —
+run it with `/CarShowGetRegistrations` in a Claude Code session.
 
 How it works:
 - You stay logged into ClubExpress in Chrome as normal — the skill never sees or enters
@@ -35,7 +35,8 @@ How it works:
   tradeoff was intentional: it keeps your ClubExpress login off disk entirely, at the
   cost of needing you to run the command instead of it firing on a schedule.
 
-**Status: live-tested and working (2026-07-07).** Ran `/export-carshow-data` end to end:
+**Status: live-tested and working (2026-07-07).** Ran `/CarShowGetRegistrations` (then
+named `/export-carshow-data`) end to end:
 landed directly on the event's Admin Panel (already logged in — no separate "Admin
 Options" click needed, that button doubles as the panel itself), opened Exports, pulled
 both Registration Data and Activity Registrant Data, and saved them into the Exports

@@ -1,5 +1,5 @@
 /* Static file server for Z:\Backup\ETCC\Car Show\Exports — used only by the
- * export-carshow-data skill to hand today's two CSVs to the app via fetch()
+ * CarShowGetRegistrations skill to hand today's two CSVs to the app via fetch()
  * instead of hand-copying their content into a JS injection (which silently
  * corrupted a row once — see "Loading data into the app" in SKILL.md).
  *

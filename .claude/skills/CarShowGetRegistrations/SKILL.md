@@ -1,5 +1,5 @@
 ---
-name: export-carshow-data
+name: CarShowGetRegistrations
 description: Automates the two manual ClubExpress admin CSV exports (Registration Data, Activity Registrant Data) for the ETCC car show and saves them into the Exports folder with the right filenames. Use this whenever the user wants to "export the car show data," "pull the ClubExpress CSVs," "get today's registration/activity export," "grab the latest signups," "refresh the registration list/dashboard," or otherwise wants current car-show signup data — even if they don't say "ClubExpress" or "CSV" explicitly, e.g. "get the latest car show signups" or "show me who's registered so far." Do NOT use this for anything involving logging into ClubExpress, changing ClubExpress settings, or exporting data for events other than the car show.
 ---
 
@@ -32,7 +32,7 @@ This skill only works on an **already-logged-in** browser session. It must never
 username, password, or attempt to authenticate in any way. If navigation lands on a
 login page (or anything that looks like one), **stop immediately** and tell the user:
 "You're not logged into ClubExpress — please log in (in the browser this skill is
-using) and re-run /export-carshow-data." Do not guess credentials, do not retry logging
+using) and re-run /CarShowGetRegistrations." Do not guess credentials, do not retry logging
 in, do not proceed past a login page under any circumstances, and do not silently switch
 to a different browser tool to work around it — surface the problem and let the user
 decide (e.g. whether to log in, or point you at a different already-authenticated

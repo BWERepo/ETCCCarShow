@@ -59,8 +59,9 @@ fs.writeFileSync(VERSION_PATH, JSON.stringify({
 
 function fmtDateTime(d) {
   function p(n) { return (n < 10 ? "0" : "") + n; }
+  function sp(n) { return (n < 10 ? " " : "") + n; }
   var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-  return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
+  return sp(d.getMonth() + 1) + "/" + sp(d.getDate()) + "/" + d.getFullYear() + " " + sp(h) + ":" + p(d.getMinutes()) + " " + ap;
 }
 
 var html =

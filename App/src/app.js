@@ -2384,6 +2384,33 @@
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 
+    // Switching Reg Type mid-fill-out usually means the officer picked the
+    // wrong one and is starting over — clear every other field rather than
+    // leave stale values from the previous type sitting under the new one.
+    // syncRegNumberField (registered first, above) already handles Reg #
+    // specially, so it's left out here.
+    function clearOtherFields() {
+      lookupInput.value = "";
+      lastNameInput.value = "";
+      firstNameInput.value = "";
+      clubNameInput.value = "";
+      phoneInput.value = "";
+      emailInput.value = "";
+      addressInput.value = "";
+      cityInput.value = "";
+      stateInput.value = "";
+      zipInput.value = "";
+      yearInput.value = "";
+      modelInput.value = "";
+      colorInput.value = "";
+      shirtSel.value = "";
+      statusSel.value = "Paid";
+      inCarShowSel.value = "No";
+      feeInput.value = String(state.appSettings.walkInNonCarShowFee);
+      errorMsg.textContent = "";
+    }
+    regTypeSel.addEventListener("change", clearOtherFields);
+
     var saveBtn = el("button", { class: "btn primary" }, ["Save"]);
     saveBtn.addEventListener("click", function () {
       var lastName = lastNameInput.value.trim();
@@ -2571,8 +2598,9 @@
   function fmtDate(d) {
     d = d instanceof Date ? d : new Date(d);
     function p(n) { return (n < 10 ? "0" : "") + n; }
+    function sp(n) { return (n < 10 ? " " : "") + n; }
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-    return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
+    return sp(d.getMonth() + 1) + "/" + sp(d.getDate()) + "/" + d.getFullYear() + " " + sp(h) + ":" + p(d.getMinutes()) + " " + ap;
   }
 
   // Converts any parseable date string/Date (e.g. a raw CSV "Reg Date" like
@@ -3049,7 +3077,8 @@
     var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
     function p(n) { return (n < 10 ? "0" : "") + n; }
-    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
+    function sp(n) { return (n < 10 ? " " : "") + n; }
+    return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " · " + sp(h) + ":" + p(d.getMinutes()) + " " + ap;
   }
 
   // Full page, not a centered modal — matches SilentAuctionManager, where

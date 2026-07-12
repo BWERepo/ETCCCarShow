@@ -87,18 +87,11 @@ $success = false;
 $values = [
     'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
     'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
-    'paymentType' => '', 'checkNum' => '', 'paymentAmount' => '', 'paymentDate' => '',
 ];
 // See the post-submit redirect below for what this actually controls —
 // carried as a hidden form field (not just the URL's query string) so it
 // survives a validation-error re-render too.
 $fromParam = (string)($_POST['from'] ?? ($_GET['from'] ?? ''));
-// Payment recording is an officer/treasurer task, not something to ask a
-// sponsor/business to self-report — only show (and accept) those fields on
-// the from=app path (opened from inside the app's Sponsors tab), same
-// distinction the post-submit redirect below already makes.
-$isOfficer = $fromParam === 'app';
-if (!$values['paymentDate']) $values['paymentDate'] = gmdate('Y-m-d');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website', 'etccMemberName'] as $f) {
@@ -106,12 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $values['sponsorType'] = (string)($_POST['sponsorType'] ?? '');
     $values['shirtSize'] = (string)($_POST['shirtSize'] ?? '');
-    if ($isOfficer) {
-        $values['paymentType'] = (string)($_POST['paymentType'] ?? '');
-        $values['checkNum'] = trim((string)($_POST['checkNum'] ?? ''));
-        $values['paymentAmount'] = trim((string)($_POST['paymentAmount'] ?? ''));
-        $values['paymentDate'] = trim((string)($_POST['paymentDate'] ?? '')) ?: gmdate('Y-m-d');
-    }
 
     if ($values['name'] === '') $errors[] = 'Sponsor Name is required.';
     if (!array_key_exists($values['sponsorType'], $SPONSOR_TYPES)) $errors[] = 'Choose a valid sponsor type.';
@@ -123,10 +110,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $values['etccMemberName'] = $matched; // normalize to the roster's canonical casing
         }
-    }
-    if ($isOfficer && $values['paymentAmount'] !== '') {
-        if (!is_numeric($values['paymentAmount']) || (float)$values['paymentAmount'] < 0) $errors[] = 'Payment amount must be a positive number.';
-        if ($values['paymentType'] === 'Check' && $values['checkNum'] === '') $errors[] = 'Check number is required for check payments.';
     }
 
     if (!$errors) {
@@ -145,22 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         $file = __DIR__ . '/sponsor-submissions.json';
         if (carshow_append_json_list($file, $record)) {
-            // Officer path only, and only if an amount was actually entered —
-            // same "only records payment if Amount is filled in" behavior as
-            // the in-app Edit Sponsor modal's payment section.
-            if ($isOfficer && $values['paymentAmount'] !== '') {
-                $payment = [
-                    'id' => 'pay' . str_replace('.', '', uniqid('', true)),
-                    'sponsorId' => $record['id'],
-                    'sponsorName' => $record['name'],
-                    'paymentType' => $values['paymentType'] ?: 'Cash',
-                    'checkNum' => $values['paymentType'] === 'Check' ? $values['checkNum'] : '',
-                    'date' => $values['paymentDate'],
-                    'amount' => (float)$values['paymentAmount'],
-                    'recordedAt' => gmdate('c'),
-                ];
-                carshow_append_json_list(__DIR__ . '/sponsor-payments.json', $payment);
-            }
+            // No payment is ever recorded from this form — a sponsorship
+            // submitted here isn't actually paid yet; an officer records the
+            // real payment later from the Sponsors tab's "Mark Paid…" modal.
             // Stay on this same form after a successful submission (rather
             // than redirecting away) so an officer can add several sponsors
             // back to back without re-navigating here each time — show a
@@ -169,7 +139,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $values = [
                 'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
                 'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
-                'paymentType' => '', 'checkNum' => '', 'paymentAmount' => '', 'paymentDate' => gmdate('Y-m-d'),
             ];
         } else {
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
@@ -294,56 +263,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <?php endforeach; ?>
         </select>
       </div>
-      <?php if ($isOfficer): ?>
-      <div style="border-top:1px solid var(--line); margin:20px 0 4px; padding-top:16px;">
-        <div style="font-size:13px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">Record Payment (optional)</div>
-      </div>
-      <div class="form-row">
-        <label for="f-pay-type">Payment Type</label>
-        <select id="f-pay-type" name="paymentType">
-          <?php foreach (['Cash', 'Check', 'Credit Card'] as $t): ?>
-            <option value="<?php echo $t; ?>" <?php echo $values['paymentType'] === $t ? 'selected' : ''; ?>><?php echo $t; ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="form-row" id="f-checknum-row" style="display:none">
-        <label for="f-checknum">Check #</label>
-        <input type="text" id="f-checknum" name="checkNum" value="<?php echo htmlspecialchars($values['checkNum']); ?>">
-      </div>
-      <div class="form-row">
-        <label for="f-pay-amount">Payment Amount</label>
-        <input type="number" id="f-pay-amount" name="paymentAmount" step="0.01" min="0" placeholder="0.00" value="<?php echo htmlspecialchars($values['paymentAmount']); ?>">
-      </div>
-      <div class="form-row">
-        <label for="f-pay-date">Date Received</label>
-        <input type="date" id="f-pay-date" name="paymentDate" value="<?php echo htmlspecialchars($values['paymentDate']); ?>">
-      </div>
-      <script>
-        (function () {
-          var typeSel = document.getElementById('f-type');
-          var payTypeSel = document.getElementById('f-pay-type');
-          var payAmount = document.getElementById('f-pay-amount');
-          var checkNumRow = document.getElementById('f-checknum-row');
-          function syncCheckRow() { checkNumRow.style.display = payTypeSel.value === 'Check' ? '' : 'none'; }
-          payTypeSel.addEventListener('change', syncCheckRow);
-          syncCheckRow();
-          // Individual Sponsorships default to a $100 Credit Card payment —
-          // same default the in-app Edit Sponsor modal uses.
-          typeSel.addEventListener('change', function () {
-            if (typeSel.value === 'individual') {
-              payTypeSel.value = 'Credit Card';
-              payAmount.value = '100';
-              syncCheckRow();
-            }
-          });
-          if (typeSel.value === 'individual' && !payAmount.value) {
-            payTypeSel.value = 'Credit Card';
-            payAmount.value = '100';
-            syncCheckRow();
-          }
-        })();
-      </script>
-      <?php endif; ?>
       <?php $cancelUrl = $fromParam === 'app' ? 'index.php#sponsors' : 'https://www.etccwebsite.com/content.aspx?page_id=0&club_id=313652'; ?>
       <div class="btn-row">
         <button type="button" class="btn btn-secondary" onclick="location.href='<?php echo htmlspecialchars($cancelUrl, ENT_QUOTES); ?>'">Done</button>

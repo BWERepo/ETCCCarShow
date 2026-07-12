@@ -33,6 +33,7 @@
     sponsorSortDir: 1,
     sponsorEditing: null,  // sponsor record being added/edited in the form modal, or null
     sponsorPaymentOpen: false, // sponsor payment recording modal
+    sponsorPaymentSponsorId: null, // which sponsor the payment modal is for
     sponsorPaymentError: null, // error message in payment modal
     sponsorSyncError: null, // set when a push to the server fails; shown in the Sponsors tab
     clearSponsorsOpen: false, // "Remove All Sponsors" confirmation modal
@@ -130,7 +131,11 @@
   // instead of the label, narrowing the overall row width.
   var NARROW_HEADER_COLS = { "Individual Sponsorship": 1, "In Car Show?": 1 };
   var CURRENCY_COLS = { "Total Fee": 1, "Individual Sponsorship": 1 };
-  function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toFixed(2); }
+  // The one currency formatter every money value in this app should go
+  // through — always 2 decimals, comma-grouped for anything over 999 (e.g.
+  // Summary's Total Income), so no field shows a bare "$845" next to
+  // another showing "$845.00".
+  function fmtMoney(v) { return v === "" || v == null ? "" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   // Normalizes any 10-digit US phone number to "(123) 456-7890" for display,
   // regardless of how it was originally stored (raw CSV export, a sponsor-
   // form submission from before that form's live-formatting existed, hand
@@ -215,6 +220,27 @@
     });
     (kids || []).forEach(function (c) { e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return e;
+  }
+
+  // A money input always shown with a "$" prefix, so every dollar figure an
+  // officer types looks like currency, not a bare number (this used to only
+  // exist on the Buy T-Shirt Cost field — every other money input lacked it).
+  // Returns { input, wrap } — append wrap, read/write input as usual.
+  function moneyInput(attrs) {
+    attrs = attrs || {};
+    attrs.type = attrs.type || "number";
+    if (attrs.type === "number") {
+      attrs.step = attrs.step || "0.01";
+      attrs.min = attrs.min || "0";
+    }
+    attrs.placeholder = attrs.placeholder || "0.00";
+    attrs.style = (attrs.style ? attrs.style + "; " : "") + "padding-left:20px; width:100%";
+    var input = el("input", attrs);
+    var wrap = el("div", { style: "position:relative; flex:1" }, [
+      el("span", { style: "position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#666", text: "$" }),
+      input
+    ]);
+    return { input: input, wrap: wrap };
   }
 
   function debounce(fn, delay) {
@@ -978,6 +1004,11 @@
           if (v === current) o.setAttribute("selected", "selected");
           input.appendChild(o);
         });
+      } else if (NUM_EDIT_FIELDS[c]) {
+        var moneyField = moneyInput({ type: "text", value: r[c] == null ? "" : String(r[c]) });
+        input = moneyField.input;
+        fieldEls[c] = input;
+        return li(c, "", moneyField.wrap);
       } else {
         input = el("input", { type: "text", value: r[c] == null ? "" : String(r[c]) });
       }
@@ -1150,7 +1181,7 @@
     // totals cards
     container.appendChild(el("div", { class: "cards" }, [
       card("Registrations", s.registrations),
-      card("Total Income", "$" + totalIncome.toLocaleString(undefined, { minimumFractionDigits: 0 }))
+      card("Total Income", fmtMoney(totalIncome))
     ]));
 
     // sponsor cards (independent of the loaded CSVs — reads state.sponsors directly)
@@ -1168,7 +1199,11 @@
     container.appendChild(el("div", { class: "panel" }, [
       el("div", { class: "cards sponsor-cards" }, [
         el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Registration Shirts" }), shirtMatrix(s)]),
-        el("div", { class: "sponsor-card" }, [el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }), combinedShirtMatrix(s)])
+        el("div", { class: "sponsor-card" }, [
+          el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }),
+          el("div", { style: "font-size:11px; color:var(--muted); margin:-6px 0 8px", text: "Paid registrations + all sponsors (excludes Walk-In T-Shirt purchases)" }),
+          combinedShirtMatrix()
+        ])
       ])
     ]));
 
@@ -1266,23 +1301,33 @@
     return counts;
   }
 
-  // Registration shirts (Free+Xtra collapsed to just gender) plus sponsor
-  // shirts plus Walk-In T-Shirt purchases, per size — the "how many actual
-  // shirts of each size do we need" number, as opposed to the
-  // registration-only breakdown in shirtMatrix().
-  function combinedShirtMatrix(s) {
+  // Registration shirtTotals, scoped to only registrations whose Status
+  // classifies as "paid" — shared by combinedShirtMatrix() and
+  // tshirtOrderShirtCounts() (the T-Shirt Order Email) so both agree on
+  // what "how many shirts do we actually need to order" means: don't count
+  // someone who never completed payment.
+  function paidRegShirtTotals() {
+    var paidRows = allRegistrations().filter(function (r) { return classifyStatus(r["Status"]) === "paid"; });
+    return LOGIC.summarizeRecords(paidRows, CONFIG).shirtTotals;
+  }
+  // Paid-registration shirts (Free+Xtra collapsed to just gender) plus
+  // sponsor shirts, per size — deliberately excludes Walk-In T-Shirt
+  // purchases (those are day-of-event sales already fulfilled on the spot,
+  // not part of what needs to be ordered ahead of time) — as opposed to the
+  // registration-only breakdown in shirtMatrix() (which is unfiltered).
+  function combinedShirtMatrix() {
     var C = CONFIG;
+    var totals = paidRegShirtTotals();
     var sponsorCounts = allSponsorShirtCounts();
-    var purchaseCounts = tshirtPurchaseShirtCounts();
     var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
     var body = C.SIZES.map(function (sz) {
       var regMens = 0, regWomens = 0;
       C.GROUPS.forEach(function (g) {
-        var val = s.shirtTotals[g.key + sz.key] || 0;
+        var val = totals[g.key + sz.key] || 0;
         if (g.gender === "Men's") regMens += val; else regWomens += val;
       });
-      var mens = regMens + sponsorCounts[sz.key].mens + purchaseCounts[sz.key].mens;
-      var womens = regWomens + sponsorCounts[sz.key].womens + purchaseCounts[sz.key].womens;
+      var mens = regMens + sponsorCounts[sz.key].mens;
+      var womens = regWomens + sponsorCounts[sz.key].womens;
       return el("tr", {}, [
         el("td", { class: "lbl", text: sz.label }),
         el("td", { class: mens ? "" : "z", text: String(mens) }),
@@ -1316,8 +1361,7 @@
   // completed payment), and returning plain data rather than a DOM table so
   // it can feed the email's plain-text body.
   function tshirtOrderShirtCounts() {
-    var paidRows = allRegistrations().filter(function (r) { return classifyStatus(r["Status"]) === "paid"; });
-    var totals = LOGIC.summarizeRecords(paidRows, CONFIG).shirtTotals;
+    var totals = paidRegShirtTotals();
     var sponsorCounts = allSponsorShirtCounts();
     return CONFIG.SIZES.map(function (sz) {
       var mens = 0, womens = 0;
@@ -1445,39 +1489,29 @@
       el("div", { class: "sponsor-card-head", text: stats.label + " Sponsors" }),
       el("div", { class: "sponsor-card-stats" }, [
         el("div", {}, [el("div", { class: "stat-v", text: String(stats.count) }), el("div", { class: "stat-k", text: stats.count === 1 ? "Sponsor" : "Sponsors" })]),
-        el("div", {}, [el("div", { class: "stat-v", text: "$" + stats.total.toLocaleString() }), el("div", { class: "stat-k", text: "Total" })])
+        el("div", {}, [el("div", { class: "stat-v", text: fmtMoney(stats.total) }), el("div", { class: "stat-k", text: "Total" })])
       ]),
       table
     ]);
   }
+  // Sorted by recordedAt (a real millisecond-precision timestamp set when
+  // the payment was created), not date (the user-entered calendar day a
+  // payment was received on) — two payments for the same sponsor recorded
+  // on the same day would otherwise tie on date, and a stable sort would
+  // keep whichever was created first instead of the actually-latest one.
   function getLastPaymentForSponsor(sponsorId) {
     var sponsorPayments = state.payments.filter(function (p) { return p.sponsorId === sponsorId; });
     if (!sponsorPayments.length) return null;
-    sponsorPayments.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+    sponsorPayments.sort(function (a, b) { return new Date(b.recordedAt) - new Date(a.recordedAt); });
     return sponsorPayments[0];
   }
   // True when there's no payment on file yet, or the last one's amount is 0 —
-  // the Sponsors table shows a "Paid" checkbox in the Amount column for these,
-  // so an officer can record a full-fee payment in one click without opening
-  // Edit Sponsor (e.g. a cash payment that was collected but never logged).
+  // the Sponsors table shows a "Mark Paid…" button in the Amount column for
+  // these, opening Edit Sponsor's Record Payment section so an officer can
+  // enter the actual amount/type/check # instead of assuming a default.
   function sponsorAmountIsZero(s) {
     var payment = getLastPaymentForSponsor(s.id);
     return !payment || !payment.amount || Number(payment.amount) === 0;
-  }
-  function markSponsorPaid(s) {
-    var typeCfg = CONFIG.SPONSOR_TYPES.filter(function (t) { return t.key === s.sponsorType; })[0];
-    var fee = typeCfg ? typeCfg.fee : 0;
-    recordPayment({
-      id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-      sponsorId: s.id,
-      sponsorName: s.name,
-      paymentType: "Cash",
-      checkNum: "",
-      date: new Date().toISOString().split("T")[0],
-      amount: fee,
-      recordedAt: new Date().toISOString()
-    });
-    renderSponsorsBody();
   }
 
   function sponsorFieldText(s, colKey) {
@@ -1526,7 +1560,7 @@
     if (colKey === "lastPaymentDate" || colKey === "lastPaymentAmount") {
       var payment = getLastPaymentForSponsor(s.id);
       if (colKey === "lastPaymentAmount") return payment ? Number(payment.amount) || 0 : 0;
-      return payment && payment.date ? new Date(payment.date).getTime() : -Infinity;
+      return payment && payment.date ? parseMaybeDateOnly(payment.date).getTime() : -Infinity;
     }
     return sponsorFieldText(s, colKey).toLowerCase();
   }
@@ -1836,12 +1870,13 @@
       tr.appendChild(el("td", { class: "no-print" }, [cb]));
       SPONSOR_COLS.forEach(function (c) {
         if (c.key === "lastPaymentAmount" && sponsorAmountIsZero(s)) {
-          var paidCb = el("input", { type: "checkbox", title: "Mark this sponsor's fee as paid" });
-          paidCb.addEventListener("click", function (e) { e.stopPropagation(); });
-          paidCb.addEventListener("change", function () {
-            if (paidCb.checked) markSponsorPaid(s); else paidCb.checked = false;
-          });
-          tr.appendChild(el("td", {}, [paidCb, document.createTextNode(" Paid")]));
+          // Opens a small dedicated payment modal (Payment Type/Check #/
+          // Amount only) instead of blindly logging a full-fee Cash payment —
+          // an officer needs to record whatever was actually paid, which
+          // isn't always the full fee in cash.
+          var markPaidBtn = el("button", { class: "btn", style: "padding:2px 8px; font-size:12px" }, ["Mark Paid…"]);
+          markPaidBtn.addEventListener("click", function (e) { e.stopPropagation(); openPaymentModal(s); });
+          tr.appendChild(el("td", {}, [markPaidBtn]));
         } else if (c.key === "email" && s.email) {
           var mailLink = el("a", { href: "mailto:" + s.email, text: s.email });
           mailLink.addEventListener("click", function (e) { e.stopPropagation(); });
@@ -1986,7 +2021,12 @@
     var existingPayment = editing.id ? getLastPaymentForSponsor(editing.id) : null;
 
     var paymentTypeSelect = el("select", {});
-    ["Cash", "Check", "Credit Card"].forEach(function (t) {
+    // "Unpaid" isn't a real payment method — it's an escape hatch for a
+    // payment recorded in error: selecting it and saving records a $0
+    // payment, which is exactly what sponsorAmountIsZero() already treats as
+    // "no payment on file", so the sponsor flips back to showing "Mark
+    // Paid…" in the Sponsors table instead of a wrong amount.
+    ["Cash", "Check", "Credit Card", "Unpaid"].forEach(function (t) {
       paymentTypeSelect.appendChild(el("option", { value: t, text: t }));
     });
     if (existingPayment) paymentTypeSelect.value = existingPayment.paymentType;
@@ -1998,27 +2038,35 @@
 
     var defaultAmount = existingPayment ? existingPayment.amount
       : (editing.sponsorType === "individual" ? "100" : "");
-    var paymentAmountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0", value: defaultAmount });
-    body.appendChild(el("div", { class: "form-row" }, [
+    var paymentAmountField = moneyInput({ value: defaultAmount });
+    var paymentAmountInput = paymentAmountField.input;
+    var amountRow = el("div", { class: "form-row" }, [
       el("span", { class: "form-label", text: "Amount" }),
-      paymentAmountInput
-    ]));
+      paymentAmountField.wrap
+    ]);
+    body.appendChild(amountRow);
 
     var defaultDate = existingPayment ? dateInputValue(existingPayment.date) : new Date().toISOString().split("T")[0];
     var paymentDateInput = el("input", { type: "date", value: defaultDate });
-    body.appendChild(el("div", { class: "form-row" }, [
+    var dateRow = el("div", { class: "form-row" }, [
       el("span", { class: "form-label", text: "Date Received" }),
       paymentDateInput
-    ]));
+    ]);
+    body.appendChild(dateRow);
 
     var checkNumInput = el("input", { type: "text", placeholder: "Check #", value: existingPayment ? (existingPayment.checkNum || "") : "" });
     var checkNumRow = el("div", { class: "form-row", style: "display:" + (paymentTypeSelect.value === "Check" ? "" : "none") }, [
       el("span", { class: "form-label", text: "Check #" }),
       checkNumInput
     ]);
-    paymentTypeSelect.addEventListener("change", function () {
+    function syncPaymentRows() {
+      var unpaid = paymentTypeSelect.value === "Unpaid";
       checkNumRow.style.display = paymentTypeSelect.value === "Check" ? "" : "none";
-    });
+      amountRow.style.display = unpaid ? "none" : "";
+      dateRow.style.display = unpaid ? "none" : "";
+    }
+    paymentTypeSelect.addEventListener("change", syncPaymentRows);
+    syncPaymentRows();
     body.appendChild(checkNumRow);
 
     // Individual Sponsorships default to a $100 Credit Card payment — re-apply
@@ -2028,7 +2076,7 @@
       if (typeSel.value === "individual") {
         paymentTypeSelect.value = "Credit Card";
         paymentAmountInput.value = "100";
-        checkNumRow.style.display = "none";
+        syncPaymentRows();
       }
     });
 
@@ -2052,7 +2100,18 @@
       upsertSponsor(record);
 
       var paymentAmount = paymentAmountInput.value.trim();
-      if (paymentAmount) {
+      if (paymentTypeSelect.value === "Unpaid") {
+        recordPayment({
+          id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+          sponsorId: editing.id,
+          sponsorName: record.name,
+          paymentType: "Unpaid",
+          checkNum: "",
+          date: new Date().toISOString().split("T")[0],
+          amount: 0,
+          recordedAt: new Date().toISOString()
+        });
+      } else if (paymentAmount) {
         var payment = {
           id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
           sponsorId: editing.id,
@@ -2091,18 +2150,35 @@
   }
 
   // ---------- sponsor payment recording modal ----------
-  function closePaymentModal() { state.sponsorPaymentOpen = false; renderPaymentModal(); }
+  // Opened from the Sponsors table's "Mark Paid…" button — scoped to one
+  // already-known sponsor (no sponsor picker), just the fields an officer
+  // actually needs at that moment: Payment Type, Check # (Check only), and
+  // Amount. Date is always "now" — this modal only exists for logging a
+  // payment as it's collected, not backdating one.
+  function openPaymentModal(sponsor) {
+    state.sponsorPaymentSponsorId = sponsor.id;
+    state.sponsorPaymentError = null;
+    state.sponsorPaymentOpen = true;
+    renderPaymentModal();
+  }
+  function closePaymentModal() {
+    state.sponsorPaymentOpen = false;
+    state.sponsorPaymentSponsorId = null;
+    renderPaymentModal();
+  }
 
   function renderPaymentModal() {
     var host = $("#paymentHost");
     if (!host) return;
     host.innerHTML = "";
     if (!state.sponsorPaymentOpen) return;
+    var sponsor = state.sponsors.filter(function (s) { return s.id === state.sponsorPaymentSponsorId; })[0];
+    if (!sponsor) { closePaymentModal(); return; }
 
     var closeBtn = el("button", { class: "btn" }, ["✕"]);
     closeBtn.addEventListener("click", closePaymentModal);
     var head = el("div", { class: "modal-head" }, [
-      el("h3", { text: "Record Sponsor Payment" }),
+      el("h3", { text: "Record Payment — " + sponsor.name }),
       el("span", { class: "spacer" }), closeBtn
     ]);
 
@@ -2114,21 +2190,15 @@
       ]));
     }
 
-    var sponsorSel = el("select", {});
-    sponsorSel.appendChild(el("option", { value: "", text: "— Select Sponsor —" }));
-    state.sponsors.forEach(function (s) {
-      sponsorSel.appendChild(el("option", { value: s.id, text: s.name }));
-    });
-    row("Sponsor", sponsorSel, true);
-
     var typeSel = el("select", {});
     ["Cash", "Check", "Credit Card"].forEach(function (t) {
       typeSel.appendChild(el("option", { value: t, text: t }));
     });
+    typeSel.value = sponsor.sponsorType === "individual" ? "Credit Card" : "Cash";
     row("Payment Type", typeSel, true);
 
     var checkNumInput = el("input", { type: "text", placeholder: "Check #" });
-    var checkNumRow = el("div", { class: "form-row", style: "display:none" }, [
+    var checkNumRow = el("div", { class: "form-row", style: "display:" + (typeSel.value === "Check" ? "" : "none") }, [
       el("span", { class: "form-label", text: "Check #" }),
       checkNumInput
     ]);
@@ -2137,37 +2207,21 @@
     });
     body.appendChild(checkNumRow);
 
-    var dateInput = el("input", { type: "date", value: new Date().toISOString().split("T")[0] });
-    row("Date Received", dateInput, true);
-
-    var amountInput = el("input", { type: "number", placeholder: "0.00", step: "0.01", min: "0" });
-    row("Payment Amount", amountInput, true);
-
-    sponsorSel.addEventListener("change", function () {
-      var selectedId = sponsorSel.value;
-      if (!selectedId) { typeSel.value = "Cash"; amountInput.value = ""; return; }
-      var sponsor = state.sponsors.find(function (s) { return s.id === selectedId; });
-      if (sponsor && sponsor.sponsorType === "individual") {
-        typeSel.value = "Credit Card";
-        amountInput.value = "100";
-      } else {
-        typeSel.value = "Cash";
-        amountInput.value = "";
-      }
-    });
+    var typeCfg = CONFIG.SPONSOR_TYPES.filter(function (t) { return t.key === sponsor.sponsorType; })[0];
+    var amountField = moneyInput({ value: typeCfg ? String(typeCfg.fee) : "" });
+    var amountInput = amountField.input;
+    row("Payment Amount", amountField.wrap, true);
 
     var errorMsg = el("div", { class: "form-error" });
     body.appendChild(errorMsg);
 
     var recordBtn = el("button", { class: "btn primary" }, ["Record Payment"]);
     recordBtn.addEventListener("click", function () {
-      var sponsorId = sponsorSel.value.trim();
       var paymentType = typeSel.value.trim();
       var checkNum = checkNumInput.value.trim();
-      var date = dateInput.value.trim();
       var amount = amountInput.value.trim();
 
-      if (!sponsorId || !paymentType || !date || !amount) {
+      if (!paymentType || !amount) {
         errorMsg.textContent = "Please fill in all required fields.";
         return;
       }
@@ -2176,18 +2230,16 @@
         return;
       }
 
-      var sponsor = state.sponsors.find(function (s) { return s.id === sponsorId; });
-      var payment = {
+      recordPayment({
         id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-        sponsorId: sponsorId,
-        sponsorName: sponsor ? sponsor.name : "",
+        sponsorId: sponsor.id,
+        sponsorName: sponsor.name,
         paymentType: paymentType,
         checkNum: paymentType === "Check" ? checkNum : "",
-        date: date,
+        date: new Date().toISOString().split("T")[0],
         amount: Number(amount),
         recordedAt: new Date().toISOString()
-      };
-      recordPayment(payment);
+      });
       closePaymentModal();
     });
     var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
@@ -2434,7 +2486,8 @@
     // Total Fee Collected is filled in from Developer > Settings' matching fee
     // whenever In Car Show? changes (still freely editable after that, e.g.
     // for a partial payment or a manually negotiated amount).
-    var feeInput = el("input", { type: "text" });
+    var feeField = moneyInput({ type: "text" });
+    var feeInput = feeField.input;
     var inCarShowSel = el("select", {});
     ["No", "Yes"].forEach(function (v) { inCarShowSel.appendChild(el("option", { value: v, text: v })); });
     inCarShowSel.addEventListener("change", function () {
@@ -2448,7 +2501,7 @@
     Object.keys(CONFIG.freeSizeMap).forEach(function (sz) { shirtSel.appendChild(el("option", { value: sz, text: sz })); });
     row("Free T-Shirt Size", shirtSel);
 
-    row("Total Fee Collected", feeInput);
+    row("Total Fee Collected", feeField.wrap);
 
     var statusSel = el("select", {});
     ["Paid", "Not Paid"].forEach(function (v) { statusSel.appendChild(el("option", { value: v, text: v })); });
@@ -2671,8 +2724,21 @@
     printWindowCards(toPrint);
   }
 
+  // A bare "YYYY-MM-DD" string (what <input type=date> — e.g. the payment
+  // date field — produces) is a plain calendar day with no time-of-day
+  // attached. new Date("2026-07-12") parses that as UTC midnight, so
+  // displaying it with local getters (below) can shift it back to the
+  // previous evening in any timezone behind UTC. Parse it as a local date
+  // instead so it always shows as midnight on the day actually picked.
+  function parseMaybeDateOnly(d) {
+    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      var parts = d.split("-");
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    return d instanceof Date ? d : new Date(d);
+  }
   function fmtDate(d) {
-    d = d instanceof Date ? d : new Date(d);
+    d = parseMaybeDateOnly(d);
     function p(n) { return (n < 10 ? "0" : "") + n; }
     var h = d.getHours(), ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
     return p(d.getMonth() + 1) + "/" + p(d.getDate()) + "/" + d.getFullYear() + " " + p(h) + ":" + p(d.getMinutes()) + " " + ap;
@@ -2682,7 +2748,7 @@
   // "7/8/2026 7:55:00 AM") into the "YYYY-MM-DD" shape <input type=date>
   // requires — falls back to today if the value can't be parsed.
   function dateInputValue(d) {
-    var parsed = d instanceof Date ? d : new Date(d);
+    var parsed = parseMaybeDateOnly(d);
     if (isNaN(parsed.getTime())) parsed = new Date();
     function p(n) { return (n < 10 ? "0" : "") + n; }
     return parsed.getFullYear() + "-" + p(parsed.getMonth() + 1) + "-" + p(parsed.getDate());
@@ -2957,12 +3023,15 @@
       ["The Add Registration form's Total Fee Collected auto-fills from Car Show or Non Car Show " +
        "based on the In Car Show? field (still editable there). Preregistration is a reference figure " +
        "only — CSV-preregistered attendees' fees come from ClubExpress, not this setting."]));
-    var carShowFeeInput = el("input", { type: "text", value: String(state.appSettings.walkInCarShowFee) });
-    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Car Show Registration" }), carShowFeeInput]));
-    var nonCarShowFeeInput = el("input", { type: "text", value: String(state.appSettings.walkInNonCarShowFee) });
-    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Non Car Show Registration" }), nonCarShowFeeInput]));
-    var preregFeeInput = el("input", { type: "text", value: String(state.appSettings.preregistrationFee) });
-    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Preregistration" }), preregFeeInput]));
+    var carShowFeeField = moneyInput({ type: "text", value: String(state.appSettings.walkInCarShowFee) });
+    var carShowFeeInput = carShowFeeField.input;
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Car Show Registration" }), carShowFeeField.wrap]));
+    var nonCarShowFeeField = moneyInput({ type: "text", value: String(state.appSettings.walkInNonCarShowFee) });
+    var nonCarShowFeeInput = nonCarShowFeeField.input;
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Walk-In Non Car Show Registration" }), nonCarShowFeeField.wrap]));
+    var preregFeeField = moneyInput({ type: "text", value: String(state.appSettings.preregistrationFee) });
+    var preregFeeInput = preregFeeField.input;
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Preregistration" }), preregFeeField.wrap]));
 
     // ---- T-Shirt Vendor ----
     body.appendChild(el("h4", { text: "T-Shirt Vendor" }));
@@ -2972,8 +3041,9 @@
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Vendor Email" }), tshirtVendorEmailInput]));
     body.appendChild(el("div", { class: "hint", style: "margin:6px 0 4px" },
       ["Reference figure for officers selling shirts at the event — not applied anywhere automatically."]));
-    var tshirtPurchaseCostInput = el("input", { type: "text", value: String(state.appSettings.tshirtEventPurchaseCost) });
-    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Cost to Purchase at Event" }), tshirtPurchaseCostInput]));
+    var tshirtPurchaseCostField = moneyInput({ type: "text", value: String(state.appSettings.tshirtEventPurchaseCost) });
+    var tshirtPurchaseCostInput = tshirtPurchaseCostField.input;
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Cost to Purchase at Event" }), tshirtPurchaseCostField.wrap]));
 
     var settingsSaveBtn = el("button", { class: "btn primary" }, [state.appSettingsSaving ? "Saving…" : "Save"]);
     if (state.appSettingsSaving) settingsSaveBtn.setAttribute("disabled", "disabled");
@@ -3453,7 +3523,8 @@
         el("div", { class: "cards sponsor-cards" }, [
           el("div", { class: "sponsor-card" }, [
             el("div", { class: "sponsor-card-head", text: "Total Shirts Needed For Event" }),
-            combinedShirtMatrix(state.result.summary)
+            el("div", { style: "font-size:11px; color:var(--muted); margin:-6px 0 8px", text: "Paid registrations + all sponsors (excludes Walk-In T-Shirt purchases)" }),
+            combinedShirtMatrix()
           ])
         ])
       ]));
@@ -3697,14 +3768,11 @@
       el("span", { class: "form-label", text: "Name" }), nameInput
     ]));
 
-    var costInput = el("input", { type: "number", step: "0.01", min: "0", placeholder: "0.00", value: state.tshirtPurchaseCost, style: "padding-left:20px" });
+    var costField = moneyInput({ value: state.tshirtPurchaseCost });
+    var costInput = costField.input;
     costInput.addEventListener("input", function () { state.tshirtPurchaseCost = costInput.value; });
-    var costWrap = el("div", { style: "position:relative; display:inline-block" }, [
-      el("span", { style: "position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#666", text: "$" }),
-      costInput
-    ]);
     body.appendChild(el("div", { class: "form-row" }, [
-      el("span", { class: "form-label", text: "Cost" }), costWrap
+      el("span", { class: "form-label", text: "Cost" }), costField.wrap
     ]));
 
     var sizeSelect = el("select", {});

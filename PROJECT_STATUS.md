@@ -18,11 +18,14 @@ form fix** (Reg Type change now clears the rest of the form); and a **real produ
 near-incident** during `ftp-deploy.sh` troubleshooting — see
 **"This session's work (2026-07-12)"** below for full detail, including the root cause
 (a ProFTPd hidden-temp-file conflict, not a size/quota issue as first suspected) and the
-Claude memory entry (`[[feedback-ftp-debug-safety]]`) written to prevent a repeat. Two
-Claude Code skills exist for this project's session boundaries: `/CarShowBegin` and
-`/CarShowEnd` (read/write this file automatically at session start/end — see their
-descriptions in `.claude/skills/`); `/export-carshow-data` (ClubExpress CSV pulls) also
-got a fix this session — see below.
+Claude memory entry (`[[feedback-ftp-debug-safety]]`) written to prevent a repeat. Four
+Claude Code skills now exist for this project (see `.claude/skills/`): `/ETCCCarShowBegin`
+and `/ETCCCarShowEnd` (renamed this session from `/CarShowBegin`/`/CarShowEnd`; read/write
+this file automatically at session start/end);
+`/ETCCGetCarShowRegistrations` (ClubExpress CSV pulls — renamed this session from
+`/export-carshow-data`, then again from `/CarShowGetRegistrations`; also got a fix
+this session — see below); and `/BWEDeploy` (new this session — builds the app and
+runs `deploy/ftp-deploy.sh`; commit/push are still separate, explicit requests).
 
 Previous session (2026-07-11 evening through 2026-07-12 morning, commit `12177b1`)
 shipped two major pieces: **(1)** a **Registration detail modal refactor** — removed the
@@ -93,8 +96,10 @@ directly. See "This session's work" for the full list of what was deleted.
   `Z:\Backup\ETCC\Document Library\Restricted\Events\Car Show\Spreadsheets\`. Kept
   for history only.
 - **ClubExpress CSV exports** land in `Z:\Backup\ETCC\Car Show\Exports\`, pulled via
-  the `/export-carshow-data` Claude Code skill (browser-automates the ClubExpress
-  admin UI; see `AUTOPULL-NOTES.md` in `App/` and the skill-behavior change below).
+  the `/ETCCGetCarShowRegistrations` Claude Code skill (renamed this session from
+  `/export-carshow-data`, then `/CarShowGetRegistrations`; browser-automates the
+  ClubExpress admin UI; see
+  `AUTOPULL-NOTES.md` in `App/` and the skill-behavior change below).
   This session's live run produced `registration_data20260710.csv` (11 data rows) and
   `activity_registrant_data20260710.csv` (18 data rows) — the current newest export.
 
@@ -249,7 +254,8 @@ Run from `App/`:
 - **Refresh the site's member roster:** hamburger → Developer → Import Members →
   `members-import.php`.
 - **Deploy a code change:** `node build.js` then `bash deploy/ftp-deploy.sh` (reads
-  credentials from `deploy/.ftp-credentials` automatically if present).
+  credentials from `deploy/.ftp-credentials` automatically if present), or just invoke
+  the `/BWEDeploy` Claude Code skill (new this session), which does the same two steps.
 - **Manually push `secrets.php`:** see the one-off `curl` command documented in
   `ftp-deploy.sh`'s comments and `deploy/README.md`.
 

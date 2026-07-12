@@ -1,9 +1,9 @@
 ---
-name: CarShowEnd
-description: End-of-session wrap-up for the CarShow project — updates PROJECT_STATUS.md with everything accomplished in the current session, then commits and pushes it, written so a brand-new Claude Code session can resume with no prior context. Use when the user says "wrap up", "end of session", "update project status", or invokes /CarShowEnd.
+name: ETCCCarShowEnd
+description: End-of-session wrap-up for the CarShow project — updates PROJECT_STATUS.md with everything accomplished in the current session, then commits and pushes it, written so a brand-new Claude Code session can resume with no prior context. Use when the user says "wrap up", "end of session", "update project status", or invokes /ETCCCarShowEnd.
 ---
 
-# CarShow End-of-Session
+# ETCC CarShow End-of-Session
 
 When this skill is invoked, do two things in order:
 

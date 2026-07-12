@@ -2,7 +2,7 @@
  * Assertions live in ../src/regression-tests.js, shared with the in-app
  * Settings -> Run Regression Tests button so both stay in sync. Never point
  * this at the live Exports folder — it gets overwritten by every real
- * /CarShowGetRegistrations run, which broke these assertions once already. */
+ * /ETCCGetCarShowRegistrations run, which broke these assertions once already. */
 var fs = require("fs");
 var path = require("path");
 var Papa = require("papaparse");

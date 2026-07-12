@@ -1,9 +1,9 @@
 ---
-name: CarShowBegin
-description: Start-of-session resume for the CarShow project — reads PROJECT_STATUS.md and continues development from where the last session left off. Use when the user says "let's continue", "pick up where we left off", "start of session", or invokes /CarShowBegin.
+name: ETCCCarShowBegin
+description: Start-of-session resume for the CarShow project — reads PROJECT_STATUS.md and continues development from where the last session left off. Use when the user says "let's continue", "pick up where we left off", "start of session", or invokes /ETCCCarShowBegin.
 ---
 
-# CarShow Begin-of-Session
+# ETCC CarShow Begin-of-Session
 
 When this skill is invoked, treat it exactly as if the user sent this message:
 

@@ -17,7 +17,8 @@
 ## Outcome: built a browser-automation skill instead
 
 Rather than wait on ClubExpress or store credentials anywhere, we automated the *manual
-UI steps themselves*. See [`.claude/skills/ETCCGetCarShowRegistrations/SKILL.md`](../.claude/skills/ETCCGetCarShowRegistrations/SKILL.md) —
+UI steps themselves*. See [`Z:\Backup\Websites\Claude\.claude\skills\ETCCGetCarShowRegistrations\SKILL.md`](file:///Z:/Backup/Websites/Claude/.claude/skills/ETCCGetCarShowRegistrations/SKILL.md)
+(moved out of this repo into the global skills folder) —
 run it with `/ETCCGetCarShowRegistrations` in a Claude Code session.
 
 How it works:

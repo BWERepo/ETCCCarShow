@@ -1,33 +1,67 @@
 # ETCC Car Show App — Project Status
 
 Last updated: 2026-07-12 (end of session). **Git and the live site are caught up as of
-this doc's own commit** (this `/CarShowEnd` run commits + pushes it alongside the last
-few uncommitted app.js/build.js fixes — check `git log` for the exact hash if picking
-this up cold; the last content commit before that was `a4c9a8c`). The most recent
-session (2026-07-12, this doc's own writing) shipped: a new **Walk-In T-Shirt
-purchases** feature (a "🛒 Buy T-Shirt" screen for day-of-event sales, server-persisted,
-folded into Summary's Total Income and both "Total Shirts Needed For Event" matrices); a
-**unified page banner redesign** (logo left, "Car Show Manager" centered, via CSS Grid,
-applied consistently to the main header and every full-page overlay — removed several
-inconsistent/duplicate banners along the way); **Sponsors tab fixes** (column reorder,
-plus a one-click "Paid" checkbox for $0 payments); **date/time formatting standardized**
-everywhere (found and fixed a previously-unformatted raw-CSV "Reg Date" column on both
-the Registration and Sponsors tabs, then iterated the padding style twice per explicit
-follow-up requests, landing on space-padded month/day/hour); an **Add Registration
-form fix** (Reg Type change now clears the rest of the form); and a **real production
-near-incident** during `ftp-deploy.sh` troubleshooting — see
-**"This session's work (2026-07-12)"** below for full detail, including the root cause
-(a ProFTPd hidden-temp-file conflict, not a size/quota issue as first suspected) and the
-Claude memory entry (`[[feedback-ftp-debug-safety]]`) written to prevent a repeat. Four
-Claude Code skills now exist for this project (see `.claude/skills/`): `/ETCCCarShowBegin`
-and `/ETCCCarShowEnd` (renamed this session from `/CarShowBegin`/`/CarShowEnd`; read/write
-this file automatically at session start/end);
-`/ETCCGetCarShowRegistrations` (ClubExpress CSV pulls — renamed this session from
-`/export-carshow-data`, then again from `/CarShowGetRegistrations`; also got a fix
-this session — see below); and `/BWEDeploy` (new this session — builds the app and
-runs `deploy/ftp-deploy.sh`; commit/push are still separate, explicit requests).
+this doc's own commit** (this `/ETCCCarShowEnd` run commits + pushes it; the last
+content commit before that was `1ff23287` — check `git log` for the exact hash of this
+doc's own commit if picking this up cold). This session (2026-07-12, commits
+`86d6fda6..1ff23287` plus this doc's own commit) was almost entirely Sponsors/Summary
+polish and bugfixes, plus a Claude Code skills reorganization — no single big feature
+this time, see **"This session's work (2026-07-12, continued)"** below for the full
+chronological list. Highlights: a **real payment display bug fixed** (editing a
+sponsor's payment and saving same-day silently looked like it did nothing — the "latest
+payment" picker compared `date`, which ties across same-day payments, instead of
+`recordedAt`; extracted the fix into a new pure `LOGIC.pickLatestPayment()` with
+regression coverage); a **currency-formatting audit** (every money input in the app now
+shows a `$` prefix via a new shared `moneyInput()` helper, `fmtMoney()` now
+comma-groups thousands); a **"Mark Paid…" redesign** (opens a small dedicated modal
+instead of blindly logging a full-fee Cash payment) plus a new **"Unpaid" payment-type
+option** to undo a payment recorded in error; **`sponsor-form.php` simplified** (its
+"Record Payment" section was removed entirely — that form never actually records a
+payment — and Submit now shows a confirmation banner and resets for another entry
+instead of redirecting away); **hotlinked emails/URLs** and **phone-number display
+formatting** on both the Registration and Sponsors tables; **shirt matrix totals**
+(Total Men's/Women's/Grand Total columns + a footer row) added to every shirt-size
+matrix, and the "Total Shirts Needed For Event" matrix rescoped to paid registrations +
+sponsors only (excludes Walk-In T-Shirt purchases, matching the T-Shirt Order Email);
+**Registration/Sponsors tabs now default to "Fit" zoom** once per session; and the
+**Walk-In T-Shirt / Car Show / Clubs panels combined into one three-column row**. Five
+Claude Code skills exist for this project — **moved this session** from this repo's own
+`.claude/skills/` out to a global, version-controlled location,
+`Z:\Backup\Websites\Claude\.claude\skills\` (its own git repo, pushed to
+`https://github.com/BWERepo/ClaudeConfig`, shared across all website projects — check
+there, not here, if a skill file needs editing; symlinked into
+`C:\Users\Admin\.claude\skills\` via git-bash `ln -s` so they're globally discoverable
+by name in any project — note this only worked via git-bash, not native PowerShell
+`New-Item -ItemType SymbolicLink`, which needs admin privilege on this machine):
+`/ETCCCarShowBegin` and `/ETCCCarShowEnd` (renamed this session from
+`/CarShowBegin`/`/CarShowEnd`; read/write this file automatically at session
+start/end); `/ETCCGetCarShowRegistrations` (ClubExpress CSV pulls — renamed this
+session from `/export-carshow-data`, then again from `/CarShowGetRegistrations`; also
+got a fix this session — see below); `/BWEDeploy` (new this session — builds the app
+and runs `deploy/ftp-deploy.sh`; commit/push are still separate, explicit requests);
+and `/BWECheckpoint` (new this session — regression suite + build/deploy + commit +
+push, all in one). Also this session: a live data fix (a stray $100 Cash payment
+mistakenly recorded against Business Web Express was removed directly from the live
+`sponsor-payments.json` via FTP, with explicit user approval each time the safety
+classifier blocked the raw-file overwrite — see below for detail); and 2 new regression
+assertions added for `LOGIC.pickLatestPayment()`'s same-day tie-break fix (60 total, up
+from 58).
 
-Previous session (2026-07-11 evening through 2026-07-12 morning, commit `12177b1`)
+Previous session (2026-07-12 earlier, commit `d377f3d1`) shipped: a new **Walk-In
+T-Shirt purchases** feature (a "🛒 Buy T-Shirt" screen for day-of-event sales,
+server-persisted, folded into Summary's Total Income and both "Total Shirts Needed For
+Event" matrices); a **unified page banner redesign** (logo left, "Car Show Manager"
+centered, via CSS Grid, applied consistently to the main header and every full-page
+overlay); **Sponsors tab fixes** (column reorder, plus a one-click "Paid" checkbox for
+$0 payments — since redesigned this session, see above); **date/time formatting**
+(iterated twice, landing on space-padded month/day/hour — since reverted back to
+zero-padding this session, see above); an **Add Registration form fix** (Reg Type
+change now clears the rest of the form); and a **real production near-incident** during
+`ftp-deploy.sh` troubleshooting (a ProFTPd hidden-temp-file conflict, not a size/quota
+issue as first suspected) — Claude memory entry `[[feedback-ftp-debug-safety]]` written
+to prevent a repeat.
+
+Session before that (2026-07-11 evening through 2026-07-12 morning, commit `12177b1`)
 shipped two major pieces: **(1)** a **Registration detail modal refactor** — removed the
 old Edit-toggle button; all fields are now always editable inline with Save/Cancel/
 Delete always visible, matching the Sponsors tab's Edit Sponsor modal pattern; **(2)** a
@@ -2007,17 +2041,159 @@ in this repo since before this session started (visible in `git status` at sessi
 start) — unrelated to any of this session's work, contents/purpose unknown to this
 session, left untouched both times a commit was made this session.
 
+## This session's work (2026-07-12, continued) — Sponsors/Summary polish, payment bugfix, currency audit, skills reorg
+
+Starting point: commit `d377f3d1` (end of the prior session, doc above). This session,
+7 commits (`86d6fda6..1ff23287`) plus this doc's own commit:
+
+1. **`86d6fda6`** — Tracked `Images/` (`WindowCard.png`/`WindowCardFillable.pdf`), which
+   had been untracked in this repo since before any session in this doc's history —
+   unrelated reference assets for the Window Card PDF feature, no purpose to hide them.
+2. **`a7036fa4`** — A grab-bag of small, individually-requested fixes:
+   - Reverted date/time display (Registration/Sponsors tables, Change Log, footer)
+     from the prior session's space-padding back to 2-digit zero-padding for
+     month/day/hour/minute, per explicit request.
+   - Sponsors tab: added a "Paid" filter dropdown (All/Paid/Unpaid, using the existing
+     `sponsorAmountIsZero()` rule), clickable sortable column headers (mirroring the
+     Registration tab's existing pattern, with date/amount columns sorting by real
+     underlying value not display string), and hotlinked Email/Website columns.
+   - Registration tab: hotlinked the Email column.
+   - New `fmtPhone()` — normalizes any 10-digit number to `(123) 456-7890` for display
+     regardless of how it was stored — applied to both tables' Phone columns (later
+     this session, deduped into `LOGIC.formatPhone()`, see item 6 below).
+   - `sponsor-form.php`: Phone field live-formats as typed; Cancel button renamed to
+     "Done"; Submit now shows a green confirmation banner and resets every field
+     instead of redirecting away, so an officer can add several sponsors back to back.
+   - Footer/login-screen email addresses hotlinked as `mailto:` links.
+   - T-Shirts tab narrowed to 700px and centered (was full-bleed).
+   - A **live sponsor-payments.json data fix**: Business Web Express (a Corporate
+     sponsor) had picked up a stray $100 Cash payment it never actually received —
+     traced to an officer likely clicking the (at-the-time-unsafe) one-click "Paid"
+     checkbox in error. Fixed by downloading `sponsor-payments.json` via FTP, removing
+     that one record, and re-uploading — **the auto-mode safety classifier blocked this
+     twice** (treating it as the same class of risk as the earlier `ftp-deploy.sh`
+     hidden-temp-file incident), and went through only after the user explicitly
+     approved the specific upload each time. This is a live-data-only fix with no
+     corresponding code change, so it isn't part of any commit.
+3. **`a1648742`** — Bugfixes and a real feature gap closed, prompted directly by testing
+   the fixes above:
+   - **Real bug found and fixed**: editing a sponsor's payment in Edit Sponsor (e.g.
+     Cash → Credit Card) and saving didn't visibly update if done same-day, because
+     `getLastPaymentForSponsor()` picked the "latest" payment by comparing `date` (a
+     plain calendar day both the old and new payment share) — a stable sort on a tied
+     comparator kept the *older* record. Fixed to sort by `recordedAt` (a real
+     millisecond timestamp) instead.
+   - The Sponsors table's "Mark Paid…" no longer blindly logs a default Cash/full-fee
+     payment — it now opens a small dedicated modal (Payment Type/Check #/Amount only,
+     pre-filled with the sponsor's standard fee), repurposing the `renderPaymentModal`
+     code that had sat dead/unused since an earlier session (flagged in this doc's
+     "Next session" list below, now resolved).
+   - Added a 4th **"Unpaid"** payment-type option in Edit Sponsor's payment section —
+     selecting it and saving records a $0 payment, which `sponsorAmountIsZero()` already
+     treats as "no payment on file," so a payment recorded in error can be undone (the
+     other item in the old "Next session" list, now resolved — see below for the
+     remaining related follow-up).
+   - `sponsor-form.php`'s entire "Record Payment (optional)" section (Payment
+     Type/Check #/Amount/Date Received, and all its PHP handling) was removed —
+     submitting that form never actually records a payment against a sponsor, so
+     showing payment fields there was misleading.
+   - **Timezone display bug fixed**: a bare `"YYYY-MM-DD"` payment-date string (from
+     `<input type=date>`) was being parsed as UTC midnight and then displayed with
+     local-timezone getters, rolling it back to the previous evening (e.g.
+     `07/11/2026 08:00 PM` for a payment actually entered on 07/12). Fixed by parsing
+     bare date-only strings as local dates in `fmtDate`/`dateInputValue`/the Sponsors
+     sort comparator.
+   - **Currency-formatting audit**: added a shared `moneyInput()` helper (`$` prefix,
+     full width) and applied it to every money input in the app that lacked one —
+     Payment Amount (both the Edit Sponsor and dedicated payment modals), Total Fee
+     Collected, all four Developer > Settings fee fields, the Registration detail
+     modal's Total Fee/Individual Sponsorship fields, and Buy T-Shirt's Cost (refactored
+     to reuse the new helper instead of its own one-off markup). `fmtMoney()` now
+     comma-groups thousands; fixed two ad-hoc `"$" + toLocaleString(...)` call sites
+     (Summary's Total Income card, each sponsor-type card's Total stat) to use it.
+4. **`5acc345f`** — Shirt-matrix totals and scoping, prompted by comparing the T-Shirt
+   Order Email's counts against the Summary tab's "Total Shirts Needed For Event" and
+   finding they legitimately differ by design (confirmed via `AskUserQuestion`, then
+   changed again per explicit follow-up):
+   - `combinedShirtMatrix()` ("Total Shirts Needed For Event") rescoped to only
+     registrations whose Status classifies as "paid" (previously counted all
+     registrations regardless of status) — extracted the shared filter into a new
+     `paidRegShirtTotals()` helper, reused by both this matrix and the T-Shirt Order
+     Email's `tshirtOrderShirtCounts()` so they can't drift apart again.
+   - Then, per a follow-up request, **excluded Walk-In T-Shirt purchases** from that
+     same matrix too (they're already-fulfilled day-of-event sales, not part of an
+     advance order) — updated its on-screen annotation
+     ("Paid registrations + all sponsors (excludes Walk-In T-Shirt purchases)") to match.
+   - Added "Total Men's"/"Total Women's"/"Grand Total" columns and a bottom "Total"
+     footer row to every shirt-size matrix on the Summary/T-Shirts tabs (Registration
+     Shirts, Total Shirts Needed For Event, Sizes Purchased, and each sponsor-type
+     summary card) via two shared helpers, `withShirtMatrixTotals` (4-group case) and
+     `withGenderMatrixTotals` (2-column case) — then fixed the new totals cells
+     inheriting left-alignment from the `lbl` CSS class (meant only for row labels).
+5. **`32d6b123`** — Layout and defaults polish:
+   - Registration and Sponsors tabs now auto-apply "Fit" zoom once per session on first
+     render (via new `state.zoomAutoFitDone`/`sponsorZoomAutoFitDone` flags) — not on
+     every tab switch, so a manual zoom choice made afterward sticks.
+   - Combined the Walk-In T-Shirt, Car Show, and Clubs panels into one three-column row
+     (same `cards sponsor-cards` layout the Sponsors/Shirts rows already use) instead of
+     three stacked full-width panels; made the Walk-In T-Shirt card a single card (head
+     + stat row + matrix) matching the sponsor-type summary card pattern, instead of two
+     side-by-side cards — this also resolved an earlier width-mismatch fix attempt
+     (a guessed fixed pixel value) by making all three cards share width via the same
+     grid math instead.
+   - **Deduplicated phone formatting**: discovered `src/logic.js` already had a tested
+     `formatPhone()` (used by `generate()` for CSV/manual registration phones) that
+     app.js's new `fmtPhone()` (item 2 above) was an unnecessary near-duplicate of —
+     replaced the app.js copy with a thin wrapper delegating to `LOGIC.formatPhone`.
+   - **Extracted the payment-sort bugfix (item 3 above) into testable pure logic**: new
+     `LOGIC.pickLatestPayment()` in `logic.js`, with 2 new regression assertions
+     (including a same-day-tie case reproducing the exact bug) — 60 total, up from 58.
+     Prompted by the user redefining what a bare "test" request means for this project:
+     not just running the suite, but checking whether recent changes need new coverage
+     (most of this session's changes are DOM-only and have no feasible Node-level test —
+     see the note at the top of `src/regression-tests.js` for what's explicitly
+     out-of-scope there).
+6. **`6119d071`** and **`1ff23287`** — Claude Code skills reorganization, across several
+   separate rename requests:
+   - `export-carshow-data` → `CarShowGetRegistrations` → (next commit)
+     `ETCCGetCarShowRegistrations`; `CarShowBegin` → `ETCCCarShowBegin`; `CarShowEnd` →
+     `ETCCCarShowEnd` — each a `git mv` (preserving history) plus a frontmatter
+     `name:`/description update and a sweep of every forward-facing reference in
+     `AUTOPULL-NOTES.md`, `deploy/README.md`, `test/run-tests.js`, and this doc;
+     historical session-log mentions of the old names were deliberately left alone.
+   - Two new skills added: `/BWEDeploy` (build + `ftp-deploy.sh` only, no git) and
+     `/BWECheckpoint` (regression suite, checking for missing coverage, then
+     build/deploy/commit/push in one).
+7. **Not a commit** — All 5 skills (`BWEDeploy`, `BWECheckpoint`, `ETCCCarShowBegin`,
+   `ETCCCarShowEnd`, `ETCCGetCarShowRegistrations`) were then **moved out of this repo
+   entirely**, per explicit request, to a new shared location:
+   `Z:\Backup\Websites\Claude\.claude\skills\` — each keeping its own `SKILL.md` folder
+   (confirmed via `AskUserQuestion` rather than consolidating into one file, since
+   Claude Code's actual skill-discovery mechanism needs one folder per skill). That
+   directory was made its own git repo (`git init`, branch `main`) and pushed to a new
+   GitHub remote, `https://github.com/BWERepo/ClaudeConfig` (private; the user created
+   the empty repo by hand since this environment has no `gh` CLI or stored GitHub
+   token). To make the moved skills globally discoverable again, symlinked each one
+   into `C:\Users\Admin\.claude\skills\<name>` — **this only worked via git-bash's
+   `ln -s`**; native PowerShell `New-Item -ItemType SymbolicLink` failed with
+   "Administrator privilege required" on this machine. Also found and replaced a stale
+   leftover symlink there (`export-carshow-data`, pointing at the pre-rename path).
+   Skills added/changed mid-session don't appear in an already-running Claude Code
+   session's skill list — confirmed this requires a fresh session to pick up (this doc's
+   own `/ETCCCarShowEnd` invocation came from such a fresh session, confirming the fix
+   worked).
+
 ### Next session
 
-1. **`renderPaymentModal`/`state.sponsorPaymentOpen` dead code** (flagged in the prior
-   session's summary above) — still not investigated/removed.
-2. **Sponsor Payments feature's live end-to-end verification** (also carried over from
-   the prior session's summary) — no indication this was explicitly re-verified this
-   session; the Sponsors tab's new "Paid" checkbox (item 3 above) is a related but
-   separate code path (always `add`s a fresh payment, never touches an existing one).
-3. The Sponsors tab "Paid" checkbox can only ever *add* a payment, never mark one
-   unpaid/remove it (the `sponsor-payments.php` API has no `update`/`delete` action) —
-   worth a real decision (not just an accepted limitation) if officers hit this in
-   practice at the actual event.
-4. Git, the live site, and this doc should be back in sync once this `/CarShowEnd` run's
+1. **Sponsor Payments feature's live end-to-end verification** (carried over from
+   multiple prior sessions) — still no indication this has been explicitly re-verified
+   with a real payment collected at a real event, though this session's "Mark Paid…"
+   modal and "Unpaid" undo option make the feature meaningfully more complete than
+   before.
+2. **`Z:\Backup\Websites\Claude` has no automated deploy/sync step** — it's just a plain
+   git repo now; if a skill file there needs editing, remember to `cd` there (or use its
+   own path directly) rather than looking in this repo's (now-empty) `.claude/skills/`.
+3. No "undo" UI for a deleted CSV registration row (`deleted-registrations.json` is
+   add-only) — still true, unrelated to this session, carried forward from further back.
+4. Git, the live site, and this doc should be back in sync once this `/ETCCCarShowEnd` run's
    commit lands — verify with `git status` / `git log` if picking this back up cold.

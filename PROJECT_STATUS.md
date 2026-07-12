@@ -1,32 +1,34 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-11 (session in progress — latest committed hash `1775d95`).
-**Git is at `1775d95` (checkpoint commit "Window card: bigger field text..."); the live site is 
-currently ahead of it** with multiple uncommitted-but-deployed features from today's session:
-**T-Shirts tab** (new 4th tab with Total Shirts summary card, editable Order Email composer with 
-CC/BCC, printable Report with ETCC logo & date), **enhanced T-Shirt email** (40-row textarea, 
-CC/BCC support with multi-recipient parsing, configurable via Settings), **detail modal expansion** 
-(Last Name, First Name, Gen now editable alongside existing fields). **All of it is built and 
-live**, but **not yet committed to git.** Full details in dedicated sections below. The 
-**"CRITICAL: Current Deployment State"** section is authoritative. **"checkpoint" = commit + push 
-+ deploy, all three** (see Claude memory: `feedback-carshow-workflow`).
+Last updated: 2026-07-12. **Git is fully caught up to the live site — latest commit
+`12177b1`, nothing uncommitted, nothing undeployed.** The most recent work session
+(2026-07-11 evening through 2026-07-12) shipped two major pieces: **(1)** a **Registration
+detail modal refactor** — removed the old Edit-toggle button; all fields are now always
+editable inline with Save/Cancel/Delete always visible, matching the Sponsors tab's Edit
+Sponsor modal pattern; **(2)** a brand-new **Sponsor Payments feature** — tracks Cash/
+Check/Credit Card payments against sponsors, with a payment section built into the Edit
+Sponsor modal, four new payment columns on the Sponsors table (Payment Date/Type/Check #/
+Amount), zoom controls matching the Registration tab, autosave on both the detail and
+sponsor-edit modals, and an Individual-Sponsorship auto-default (Credit Card, $100) that
+applies both when adding a sponsor and when editing one. Two serious bugs were found and
+fixed along the way — see **"This session's work (Sponsor Payments feature...)"** below,
+which also explains why earlier payment fixes appeared to have "no effect": a
+`ReferenceError` was silently breaking script execution, and the payments API was never
+actually wired to the server at all (everything only lived in browser memory until this
+session). Two new Claude Code skills were also added: `/CarShowBegin` and `/CarShowEnd`
+(read/write this file automatically at session start/end — see their descriptions in
+`.claude/skills/`).
 
 This file exists so a brand-new Claude Code session can pick up this project with no
 prior conversation history. Read this fully before making changes. Previous revisions
-(ending at commits `a06df91`/v1.20 and `7e66bf8`/v1.38) are in git history if you need
-older context. This revision covers the session span from v1.43 to present. Earlier in
-this span: a major refactor removing the offline/standalone tool entirely (the codebase
-supports one deployment only — the hosted site) and a Shirts-column row-height fix, both
-committed/deployed. Most recently, **six major uncommitted-but-deployed rounds** building
-on a new "+ Add Registration" (Walk-In Member/Nonmember) feature: **(1)** the feature
-itself; **(2)** member-lookup autofill + Developer > Settings screen (walk-in numbering
-+ registration fees); **(3)** extending lookup to Corvette Year/Model/Color + Club Name,
-fixing hyphenated-header email-lookup bug, adding checkbox/bulk-delete to Registration
-tab (CSV rows too); **(4)** reworking Add Registration form's fee logic to key off "In
-Car Show?" instead of separate Registration Type field; **(5)** email-import alias fix
-(`primary_email`); **(6)** test-suite overhaul, dom-test.js deletion, editable detail-
-modal fields (all rows), and Individual Sponsorship Text + Spouse First Name auto-default
-columns. See "This session's work" for a comprehensive breakdown.
+(ending at commits `a06df91`/v1.20, `7e66bf8`/v1.38, and `1775d95`) are in git history if
+you need older context. Earlier session spans (still relevant background, all committed):
+a major refactor removing the offline/standalone tool entirely (the codebase supports one
+deployment only — the hosted site); a "+ Add Registration" (Walk-In Member/Nonmember)
+feature with member-lookup autofill, Developer > Settings, checkbox/bulk-delete; a
+T-Shirts tab (4th tab) consolidating the Order Email composer (with CC/BCC) and a
+printable T-Shirt Report; and a Window Card PDF form-filling feature. See the many
+chronological "This session's work" sections below for full detail on each.
 
 ## What this is
 
@@ -54,7 +56,7 @@ directly. See "This session's work" for the full list of what was deleted.
 - **Remote:** `https://github.com/BWERepo/ETCCCarShow.git` — **this is a PUBLIC repo.**
   Never commit real credentials, password hashes, or files containing real member PII.
   Everything sensitive is gitignored — see `.gitignore` at the repo root.
-- **Branch:** `main`. Latest commit as of this doc: `7e66bf8`.
+- **Branch:** `main`. Latest commit as of this doc: `12177b1`.
 - **App source:** `App/` subdirectory (see layout below).
 - **Sibling project referenced for patterns:**
   `Z:\Backup\Websites\BusinessWebExpress\` — its `.ftp-credentials` (gitignored,
@@ -1438,53 +1440,49 @@ A full-page screen showing all paid registrations sorted by last name, with thei
 
 ## **CRITICAL: Current Deployment State**
 
-**Git is at commit `1775d95` ("Window card: bigger field text..."); the live site is ahead of it**. 
-Uncommitted changes in working tree (all built and deployed):
-- Window card PDF form-filling rework (pdf-lib vendor, 75% scale, 36pt bold, landscape sheets)
-- T-Shirt Order Email feature (dev page + send-tshirt-order-email.php endpoint)
-- T-Shirt Report feature (dev page listing paid registrations by shirt)
-- Sponsors tab column header rename ("Ind. Spon. Text" → "Individual Sponsorship Text")
+**Git is fully caught up — commit `12177b1`, working tree clean (only an untracked
+`Images/` folder, unrelated to the app), nothing uncommitted, nothing undeployed.**
+Every commit in this session (see the two "This session's work" sections below covering
+`17ec139`..`6b77037` and `12177b1`) was individually built, deployed via
+`ftp-deploy.sh`, then committed and pushed — so git, the live site, and this doc are all
+in sync as of this update. There is no pending checkpoint to run.
 
-**New/changed files since `1775d95`**:
-- `App/src/app.js` (email/report state, helpers, pages, menu items)
-- `App/src/styles.css` (email/report page CSS)
-- `App/deploy/send-tshirt-order-email.php` (new endpoint)
-- `App/deploy/index.php` (sendTshirtOrderEmailApiUrl injection)
-- `App/deploy/ftp-deploy.sh` (added send-tshirt-order-email.php to upload list)
-- `App/ETCCCarShow.html` (rebuilt bundle)
-- `App/version.json` (auto-bumped)
+**Live version:** `v2.61`, last JS rebuild `2026-07-11T20:40:50Z`. Note: several PHP-only
+changes (the `sponsor-payments.php` endpoint, `index.php` wiring, `sponsor-form.php`
+payment fields) landed *after* that JS rebuild timestamp but don't bump `version.json`
+since `node build.js` wasn't re-run for them — they're deployed via `ftp-deploy.sh`
+independently of the JS bundle version. If you need to confirm what's live, check each
+file's mtime in the deploy directory rather than relying solely on the footer version.
 
-**New/changed files since `f7160b9`:** `App/src/app.js`, `App/src/config.js`,
-`App/src/excel.js`, `App/src/logic.js`, `App/src/regression-tests.js`,
-`App/src/styles.css`, `App/deploy/app-settings.php`, `App/deploy/index.php`,
-`App/deploy/sponsor-form.php`, `App/deploy/ftp-deploy.sh`, `App/deploy/README.md`, the
-rebuilt `App/ETCCCarShow.html`, and one new file: `App/deploy/window-card-image.php`.
-
-**"checkpoint" is explicitly defined (user's own words, 2026-07-11) as commit + push +
-deploy, all three, every time** — see [[feedback-carshow-workflow]] in Claude's memory
-system. A bare "checkpoint" should attempt all three in one go, not stop after commit.
-Deploys in this doc's "uncommitted" sections above already happened via explicit "deploy"
-requests mid-session — checkpoint still needs to run to catch git up to what's live.
+**"checkpoint" is explicitly defined (user's own words) as commit + push + deploy, all
+three, every time** — see [[feedback-checkpoint-workflow]] in Claude's memory system
+(note: the memory file's `name`/`description` frontmatter format was tightened by the
+user/a linter partway through this session — don't revert that). A bare "checkpoint"
+should attempt all three in one go, not stop after commit.
 
 **Known follow-ups for a fresh session to be aware of:**
-- **Window card PDF changes**: the fillable-PDF form-filling approach is new this session
-  and has not yet been verified against a real print/PDF by the user. The 75% scale on
-  8.5×11 landscape and 36pt bold font are configured but unconfirmed visually.
-- **T-Shirt Order Email**: reads vendor email server-side from `app-settings.json`. The
-  first send attempt will only work if an officer has already configured a Vendor Email
-  in Developer > Settings > T-Shirt Vendor. Email body is plain-text only (no HTML).
-- **T-Shirt Report**: uses `shirtSummaryText(r)` to format shirt info (same as
-  Registration tab's Shirts column) — if that helper changes, both update together.
+- **Sponsor Payments feature has not been end-to-end verified live** by the user beyond
+  the specific bugs reported and fixed during this session (see below). The full flow —
+  add a new Individual sponsor via "+ Add Sponsor", confirm Payment Type/Amount
+  auto-fill to Credit Card/$100, submit, confirm the Sponsors tab shows the payment
+  columns populated after redirect, confirm it *survives a page reload* — has not been
+  walked through live since the `sponsor-payments.php` persistence fix landed. This is
+  the single highest-value thing to verify first in a new session if payments come up.
+- **No local PHP interpreter available** in this environment — every PHP file
+  (`sponsor-payments.php`, `index.php`, `sponsor-form.php` changes) was reviewed by hand
+  and brace/paren-balance-checked, never actually executed, before deploy. Same
+  limitation as every other PHP file in this repo.
+- **Window card PDF changes** (from the prior session): the fillable-PDF form-filling
+  approach has still not been verified against a real print/PDF by the user. The 75%
+  scale on 8.5×11 landscape and 36pt bold font are configured but visually unconfirmed.
 - **Old window-card files**: `window-card.png` and `window-card-image.php` remain on the
-  server as unreferenced leftovers from the pre-PDF approach — harmless but could be
+  server as unreferenced leftovers from the pre-PDF approach — harmless, could be
   manually cleaned up via FTP if desired.
-- **No local PHP linting**: `send-tshirt-order-email.php` was reviewed carefully by hand
-  but never executed (no local PHP interpreter available), same as every other PHP file
-  in this repo.
-- **No test updates**: the test suites (`test/run-tests.js`, `regression-tests.js`)
-  remain unchanged and still passing (58/58 assertions); the email and report features
-  exercise existing helpers only (`tshirtOrderShirtCounts()` calls `LOGIC.summarizeRecords()`
-  and `allRegistrations()`, etc.) so no new assertions were needed.
+- **Test suites unchanged and still passing** (`node test/run-tests.js` → 58/58) — the
+  Sponsor Payments feature and detail modal refactor are both UI-only work that doesn't
+  touch `logic.js`'s `generate()`, so no new fixture assertions were needed.
+  `regression-tests.js`'s header comment documents which UI-only features are instead
+  manually tested in the browser.
 
 ## This session's work (T-Shirts tab + email enhancements, 2026-07-11)
 
@@ -1560,6 +1558,220 @@ Changes persist to server for CSV-imported rows (via `registration-overrides.jso
 - **First T-Shirt email send will only work if vendor email is configured** via Developer > Settings > T-Shirt Vendor
 - **CC/BCC fields accept comma-separated addresses** — parser is simple (split on `,`, trim whitespace) with no validation for malformed emails
 
-### Next session: 
+### Next session (superseded — see the two sections below for what actually happened)
 
-Say **"checkpoint"** to commit, push, AND deploy everything above in one go (deploy will be a re-upload of what's already live — harmless, but unnecessary if nothing else changed since 19:25 UTC). If git is behind and the user asks for brand-new work instead, mention it and ask if they want to checkpoint first.
+## This session's work (Registration detail modal refactor, 2026-07-11, commit `17ec139`)
+
+**User's request, verbatim:** "the alvin crown page does not need an edit button. it
+should work just like the Edit Sponsor and have a save."
+
+The Registration tab's detail modal (click any row) previously had a toggle: fields
+were read-only until you clicked "✎ Edit", which then swapped `EDITABLE_FIELDS` columns
+into inputs/selects and revealed Save/Cancel buttons. This was a different UX pattern
+than the Sponsors tab's Edit Sponsor modal, which is always directly editable.
+
+**Change:** removed the toggle entirely.
+- `state.detailEditing` flag deleted; `openDetailEdit()`/`closeDetailEdit()` functions
+  deleted (and their entries in the `window.__carshow` debug API).
+- `detailFieldItem(r, c, fieldEls)` now always renders `EDITABLE_FIELDS` columns as
+  inputs/selects — no `state.detailEditing &&` guard.
+- `renderDetailModal()`: removed the "✎ Edit" button from the header entirely; Save/
+  Cancel buttons are now always appended at the bottom of the modal body (previously
+  only appended `if (editing)`).
+- Added a **Delete** button (red/warn-colored) next to Save/Cancel, shown only for
+  Walk-In rows (`r.id` present — CSV-derived rows don't support row-level delete from
+  here, only via the Registration tab's checkbox/bulk-delete). New `deleteDetailRow()`
+  function handles both the Walk-In (`removeWalkin`) and CSV-derived
+  (`state.deletedCsvKeys` + `pushDeletedRegistrationsToServer`) cases, mirroring
+  `deleteSelectedReg()`'s existing logic.
+- Prev/Next navigation and Escape/Arrow-key keyboard shortcuts no longer have
+  `!state.detailEditing` guards — they just always work now, since there's no separate
+  edit mode to be "in".
+
+Verified via a screenshot: the modal (e.g. clicking "Nisley, Steve") now shows every
+field as an editable input by default, with Save/Cancel/Delete always visible — matching
+the Edit Sponsor modal's shape exactly.
+
+## This session's work (Sponsor Payments feature — full build + two critical bugfixes, 2026-07-11 to 2026-07-12, commits `7ecc591`..`6b77037`)
+
+**This was an iterative, multi-round feature build driven by the user testing after each
+deploy and reporting what still didn't work.** The two hardest bugs (API ReferenceError,
+missing server persistence) were only found because the user kept re-testing and
+reporting "no change" / "still not defaulting" rather than accepting a claimed fix — that
+persistence is exactly why it took this many rounds and is worth understanding if a
+similar "I fixed it but it's still broken" situation comes up again: **always ask whether
+the fix was actually verified live, and if a fix looks correct in isolation but doesn't
+change observed behavior, suspect something upstream is silently failing (a script
+error, a no-op API call) rather than assuming the fix itself is wrong.**
+
+### What was built (end state)
+
+**Sponsors tab table** — four new payment columns, computed live from `state.payments`
+via `getLastPaymentForSponsor(sponsorId)` (most recent payment by date):
+- **Payment Date**, **Type** (Cash/Check/Credit Card), **Check #** (blank/`—` unless
+  Check), **Amount** (currency-formatted via `fmtMoney`)
+
+**Sponsors tab toolbar** — zoom controls (`−`/`+`/`Fit`/percentage label) identical in
+behavior to the Registration tab's, but with independent state (`state.sponsorZoom`,
+`setSponsorZoom()`, `fitSponsorZoom()`) so zooming one tab doesn't affect the other.
+
+**Edit Sponsor modal** — a "Record Payment" section was added below the existing sponsor
+fields (not a separate modal — see "Removed" below):
+- **Payment Type** (select: Cash/Check/Credit Card), **Amount** (number input), **Date
+  Received** (date input), **Check #** (text input, shown only when Type = Check)
+- **Individual Sponsorship auto-default**: selecting "Individual" as Sponsor Type
+  defaults Payment Type → Credit Card and Amount → 100. This applies **both** at modal-
+  open time (if the sponsor's stored type is already "individual") **and reactively**
+  when the Sponsor Type dropdown is changed after opening (a `change` listener on
+  `typeSel` — this was the first of the two "still not defaulting" bugs, see below).
+- **Pre-fill from actual payment record**: if the sponsor already has a payment (e.g.
+  one created by backfill), the section pre-fills from `getLastPaymentForSponsor()`
+  instead of showing generic defaults — so re-opening an already-recorded sponsor shows
+  what was actually recorded, not blank/today's-date placeholders. New
+  `dateInputValue(d)` helper converts any parseable date (including raw CSV strings like
+  `"7/8/2026 7:55:00 AM"`) into the `YYYY-MM-DD` shape `<input type=date>` requires.
+- **Reg Date** — added as a read-only display field (not editable) above Sponsor Type,
+  using the same regDate-then-submittedAt fallback as the table's Reg Date column.
+- Saving the sponsor now also records the payment (if Amount is filled in) in the same
+  Save click — `upsertSponsor()` + a `recordPayment()` call, both fire-and-forget to the
+  server.
+- Autosave (1500ms debounce) added to both this modal and the Registration detail modal
+  — edits save automatically after you stop typing, in addition to the explicit Save
+  button.
+
+**"+ Add Sponsor" external form** (`deploy/sponsor-form.php` — the actual destination of
+the Sponsors tab's "+ Add Sponsor" button, a separate server-rendered page, NOT the
+in-app modal) — payment fields were added here too, since this is genuinely where new
+sponsors get created:
+- Payment Type/Check#/Amount/Date Received fields, shown **only** when reached from
+  inside the app (`?from=app` — the officer path). A member of the public who reaches
+  this form from a link on ClubExpress/the club website never sees payment fields —
+  asking a sponsor to self-report their own payment felt wrong, that's an officer/
+  treasurer task.
+- Same Credit Card/$100 default JS for Individual Sponsorship.
+- On successful submit, if an amount was entered, a payment record is written
+  **immediately** to `sponsor-payments.json` server-side (PHP, not a JS fetch) — no
+  reliance on the backfill safety net for sponsors added this way.
+
+**Backfill (for sponsors that predate or bypass the above)**:
+- `backfillPaymentDefaults()` — for every Individual-type sponsor with no existing
+  payment, creates one: Credit Card, $100, date = `sponsorRegDateForPayment(sponsor)`.
+  Runs automatically: (a) once at page load inside `ingestPayments()`, (b) after every
+  CSV (re)import inside `regenerate()` (right after `syncSponsorsFromRegistrations()`),
+  and (c) inside `upsertSponsor()` — so a sponsor added/edited via the in-app modal or
+  ingested from `sponsor-submissions.json` gets backfilled without waiting for a reload.
+  Idempotent (no-ops for sponsors that already have a payment) so it's safe to call
+  repeatedly.
+- `backfillIndividualSponsorPayments()` — same logic, manually triggerable, exposed on
+  `window.CarShow` for one-off console use: `CarShow.backfillIndividualSponsorPayments()`.
+- `sponsorRegDateForPayment(sponsor)` — `sponsor.regDate` if present, else
+  `fmtDate(sponsor.submittedAt)`. **This fallback was itself a bugfix** — sponsors added
+  via the external `sponsor-form.php` (or in-app) only ever get `submittedAt`, never
+  `regDate` (that field only exists on CSV-synced sponsors); the original backfill
+  required `regDate` truthy and silently skipped everyone else, leaving test sponsors
+  like "III"/"JJJ"/"KKK" with blank payment columns even though they were Individual
+  type. Same fallback pattern `sponsorFieldText()`'s Reg Date column already used.
+
+### Removed
+
+- The standalone "💳 Record Payment" button + its modal (`renderPaymentModal`,
+  `state.sponsorPaymentOpen`) were added early in this arc, then **removed** once payment
+  recording was folded directly into the Edit Sponsor modal — recording a payment for an
+  *existing* sponsor now happens by opening that sponsor's row and using the Record
+  Payment section there, not a separate sponsor-picker modal. The modal's code
+  (`renderPaymentModal`, `closePaymentModal`) is still in `app.js` but is currently
+  unreachable from the UI — dead code that could be cleaned up in a future session if
+  confirmed truly unused.
+
+### Two critical bugs found and fixed
+
+**Bug 1 — `ReferenceError: API is not defined`, silently breaking script execution
+(commit `6b3e105`).** While exposing the debug hook as `window.CarShow` for console
+access (`CarShow.backfillIndividualSponsorPayments()`), the code was written as
+`window.__carshow = { ...bigobject... }; return (window.CarShow = API);` — but `API` was
+never declared anywhere; the object literal was assigned directly to `window.__carshow`,
+not to a local variable. This threw at the very end of the file's IIFE, **after**
+`init()` had already run (so the page still rendered and looked fine), but it broke
+`window.CarShow` entirely and meant every fix made *before* this one was diagnosed
+appeared to have "no effect" — because the user's own verification step
+(`CarShow.backfillIndividualSponsorPayments()` in the console) was itself broken by this
+same error. **Fixed** by capturing the object correctly:
+`var API = window.__carshow = { ... }`. **Lesson: when a fix reportedly "does nothing,"
+check the browser console for unrelated errors before re-diagnosing the original fix.**
+
+**Bug 2 — payments never actually persisted to the server (commit `6b77037`).** All the
+`fetch(SITE_CONFIG.sponsorPaymentsApiUrl, ...)` calls throughout the payment code were
+correctly written, but `sponsorPaymentsApiUrl` was **never added to `index.php`'s**
+`window.__carshowSite` **injection**, and there was no `ingestPayments(...)` call in its
+boot script at all, and no `sponsor-payments.php` endpoint existed on the server. Every
+payment "recorded" during testing only ever lived in that browser tab's in-memory
+`state.payments` — nothing was written to disk, and a page reload would have silently
+lost it all. This was the real reason "backfill works" (visible within one session) but
+"fields not defaulting when adding a sponsor" kept resurfacing — there was no
+persistence layer at all. **Fixed** by:
+- New `App/deploy/sponsor-payments.php` — `list`/`add` actions against
+  `sponsor-payments.json`, mirroring `walkin-registrations.php`'s existing pattern
+  exactly (same `carshow_authed()` dual auth, same lock-guarded read/write helpers from
+  `lib.php`).
+- `App/deploy/index.php` — added `sponsorPaymentsApiUrl: "sponsor-payments.php"` to the
+  `window.__carshowSite` script, and a `window.__carshow.ingestPayments(...)` boot call
+  reading `sponsor-payments.json`, positioned **right after** `ingestSponsors(...)` so
+  `backfillPaymentDefaults()` (triggered inside `ingestPayments`) sees the real,
+  already-populated sponsor list rather than an empty one.
+- `App/deploy/.htaccess` — added a `<Files "sponsor-payments.json">` deny-all block,
+  matching every other server-side JSON data file.
+- `App/deploy/ftp-deploy.sh` — added `sponsor-payments.php` to the upload list.
+
+### Testing performed
+
+- `node test/run-tests.js` → **58/58 passing**, no regressions. The feature is UI-only
+  (doesn't touch `logic.js`'s `generate()`), so no new fixture assertions were needed —
+  `regression-tests.js`'s header comment was updated to document which UI-only features
+  (payment modal/columns, zoom controls, autosave, always-editable detail modal,
+  Individual Sponsorship backfill/defaults) are instead verified manually in the browser.
+- No local PHP interpreter available — the three PHP files touched
+  (`sponsor-payments.php`, `index.php`, `sponsor-form.php`) were reviewed by hand and
+  brace/paren-balance-checked (`grep -c` counts matched), but never actually executed
+  before deploy. **Not yet verified end-to-end live** — see the CRITICAL section's
+  follow-up above; this is the top thing to check first in the next session if payments
+  come up again.
+
+### Files changed this arc
+
+`App/src/app.js` (state, `SPONSOR_COLS`, `sponsorFieldText`, zoom fns, Edit Sponsor
+modal payment section, backfill fns, `window.CarShow` fix, detail modal refactor),
+`App/src/styles.css` (`.form-row .form-value` for the read-only Reg Date display),
+`App/src/regression-tests.js` (header comment only), `App/deploy/index.php`,
+`App/deploy/sponsor-form.php`, `App/deploy/.htaccess`, `App/deploy/ftp-deploy.sh`, new
+`App/deploy/sponsor-payments.php`, plus the built `App/ETCCCarShow.html` and bumped
+`App/version.json` after every JS change (final: v2.61).
+
+## New Claude Code skills added this session
+
+Two project-scoped skills were added to `.claude/skills/` (committed in `12177b1`):
+
+- **`/CarShowBegin`** — reads this file and resumes development from where the last
+  session left off. Body just forwards the instruction "Read
+  `Z:\Backup\Websites\CarShow\PROJECT_STATUS.md` and continue development from where we
+  left off."
+- **`/CarShowEnd`** — updates this file with the session's work, written so a
+  brand-new session can resume with no prior context (this is the skill that produced
+  this very update — see `.claude/skills/CarShowEnd/SKILL.md`).
+
+(A matching pair, `/SAMBegin`/`/SAMEnd`, was also added to the **sibling**
+`SilentAuctionManager` repo at `Z:\Backup\Websites\SilentAuctionManager\.claude\skills\`
+— different repo, different `PROJECT_STATUS.md`, not part of this project's history, but
+worth knowing about if the user references "the SAM skills.")
+
+### Next session
+
+1. **Verify the Sponsor Payments feature live, end-to-end**, per the CRITICAL section's
+   top follow-up: add an Individual sponsor via "+ Add Sponsor", confirm defaults, submit,
+   confirm the Sponsors tab shows the payment, then **reload the page** and confirm it's
+   still there (this last step specifically exercises the new server persistence and has
+   not been tested since the fix landed).
+2. Consider whether the now-unreachable `renderPaymentModal`/`state.sponsorPaymentOpen`
+   dead code (see "Removed" above) should be deleted outright.
+3. Git, the live site, and this doc are all in sync — no pending checkpoint. If new work
+   starts, say **"checkpoint"** at natural stopping points to commit + push + deploy in
+   one go (see `[[feedback-checkpoint-workflow]]` in Claude's memory).

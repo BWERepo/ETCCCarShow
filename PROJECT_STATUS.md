@@ -1,13 +1,39 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-12 (end of session). **Git and the live site are caught up as of
-this doc's own commit** (this `/ETCCCarShowEnd` run commits + pushes it; the last
-content commit before that was `1ff23287` — check `git log` for the exact hash of this
-doc's own commit if picking this up cold). This session (2026-07-12, commits
-`86d6fda6..1ff23287` plus this doc's own commit) was almost entirely Sponsors/Summary
-polish and bugfixes, plus a Claude Code skills reorganization — no single big feature
-this time, see **"This session's work (2026-07-12, continued)"** below for the full
-chronological list. Highlights: a **real payment display bug fixed** (editing a
+Last updated: 2026-07-12 (later session, end). **No CarShow app code changed this
+session** — the CarShow git repo was already clean/caught-up at session start (head
+`964d91a1`) and stayed that way throughout; this session's only work was in the
+**sibling global skills repo**, `Z:\Backup\Websites\Claude\.claude\skills\`
+(`https://github.com/BWERepo/ClaudeConfig`, commit `a6680a4`, pushed): two new skills,
+**`/ETCCSAMBegin`** and **`/ETCCSAMEnd`**, created for the **SilentAuctionManager**
+project (`Z:\Backup\Websites\SilentAuctionManager\`) by copying the exact pattern of
+this project's own `/ETCCCarShowBegin`/`/ETCCCarShowEnd` skills (same two-step
+structure: read/summarize `PROJECT_STATUS.md` at session start; update it + commit +
+push, no deploy, at session end). Both are symlinked into
+`C:\Users\Admin\.claude\skills\` the same git-bash-`ln -s` way as this project's skills
+(see the paragraph below) and were immediately discoverable/invokable in the same
+session they were created. Two classifier quirks logged this session: (1) writing
+`ETCCSAMEnd/SKILL.md` was initially blocked as "self-modification" (a skill file
+granting itself unrequested standing auto-commit/push authorization) even though it
+only mirrored an already-existing, already-approved skill (`ETCCCarShowEnd`) — resolved
+by explicitly asking the user via AskUserQuestion whether to include the
+auto-commit+push step, which they confirmed, then retrying the write, which then
+succeeded; (2) the `ClaudeConfig` repo's `git push origin main` was also blocked once,
+with reasoning that misidentified the target repo as the public `BWERepo/ETCCCarShow`
+instead of the actual remote (`BWERepo/ClaudeConfig`) — a bare "yes push it" from the
+user was sufficient to retry and succeed. **If picking this up cold: there is nothing
+new to resume in the CarShow app itself** — see the previous session's summary
+immediately below for the actual last substantive CarShow work.
+
+Previous session — last updated 2026-07-12 (end of session). **Git and the live site
+were caught up as of that session's own doc commit** (that `/ETCCCarShowEnd` run
+committed + pushed it; the last content commit before that was `1ff23287` — check
+`git log` for the exact hash of that doc commit if picking this up cold). That session
+(2026-07-12, commits `86d6fda6..1ff23287` plus that doc's own commit) was almost
+entirely Sponsors/Summary polish and bugfixes, plus a Claude Code skills reorganization
+— no single big feature that time, see **"This session's work (2026-07-12,
+continued)"** below for the full chronological list. Highlights: a **real payment
+display bug fixed** (editing a
 sponsor's payment and saving same-day silently looked like it did nothing — the "latest
 payment" picker compared `date`, which ties across same-day payments, instead of
 `recordedAt`; extracted the fix into a new pure `LOGIC.pickLatestPayment()` with

@@ -1256,18 +1256,48 @@
   }
   function card(k, v) { return el("div", { class: "card" }, [el("div", { class: "k", text: k }), el("div", { class: "v", text: String(v) })]); }
 
+  // Appends "Total Men's" / "Total Women's" / "Grand Total" columns (row-wise
+  // sums, using each group's gender) and a bottom "Total" footer row
+  // (column-wise sums) — shared by every shirt-size matrix on the Summary/
+  // T-Shirts tabs so they all present totals the same way.
+  function withShirtMatrixTotals(head, sizeRows, groups) {
+    head.appendChild(el("th", { text: "Total Men's" }));
+    head.appendChild(el("th", { text: "Total Women's" }));
+    head.appendChild(el("th", { text: "Grand Total" }));
+    var colTotals = groups.map(function () { return 0; });
+    var mensTotal = 0, womensTotal = 0;
+    var body = sizeRows.map(function (row) {
+      var mensSum = 0, womensSum = 0;
+      row.vals.forEach(function (val, i) {
+        colTotals[i] += val;
+        if (groups[i].gender === "Men's") mensSum += val; else womensSum += val;
+      });
+      mensTotal += mensSum;
+      womensTotal += womensSum;
+      row.cells.push(el("td", { class: mensSum ? "" : "z", text: String(mensSum) }));
+      row.cells.push(el("td", { class: womensSum ? "" : "z", text: String(womensSum) }));
+      row.cells.push(el("td", { class: (mensSum + womensSum) ? "" : "z", text: String(mensSum + womensSum) }));
+      return el("tr", {}, row.cells);
+    });
+    var footerCells = [el("td", { class: "lbl", text: "Total" })];
+    colTotals.forEach(function (t) { footerCells.push(el("td", { class: "lbl", text: String(t) })); });
+    footerCells.push(el("td", { class: "lbl", text: String(mensTotal) }));
+    footerCells.push(el("td", { class: "lbl", text: String(womensTotal) }));
+    footerCells.push(el("td", { class: "lbl", text: String(mensTotal + womensTotal) }));
+    body.push(el("tr", {}, footerCells));
+    return body;
+  }
   function shirtMatrix(s) {
     var C = CONFIG;
     var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" })].concat(
       C.GROUPS.map(function (g) { return el("th", { text: g.label }); })));
-    var body = C.SIZES.map(function (sz) {
-      var cells = [el("td", { class: "lbl", text: sz.label })];
-      C.GROUPS.forEach(function (g) {
-        var key = g.key + sz.key, val = s.shirtTotals[key] || 0;
-        cells.push(el("td", { class: val ? "" : "z", text: val ? String(val) : "0" }));
-      });
-      return el("tr", {}, cells);
+    var sizeRows = C.SIZES.map(function (sz) {
+      var vals = C.GROUPS.map(function (g) { return s.shirtTotals[g.key + sz.key] || 0; });
+      var cells = [el("td", { class: "lbl", text: sz.label })].concat(
+        vals.map(function (val) { return el("td", { class: val ? "" : "z", text: String(val) }); }));
+      return { cells: cells, vals: vals };
     });
+    var body = withShirtMatrixTotals(head, sizeRows, C.GROUPS);
     return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
   }
   // Every sponsor of any type picks one shirt (no Free/Xtra distinction like
@@ -1301,6 +1331,27 @@
     return counts;
   }
 
+  // Appends a "Grand Total" column (Men's + Women's, per row) and a bottom
+  // "Total" footer row (Men's/Women's/Grand Total column sums) to a plain
+  // Size/Men's/Women's matrix — shared by every such table on the Summary
+  // tab (combinedShirtMatrix, tshirtPurchaseSizeMatrix, sponsorSummaryCard).
+  function withGenderMatrixTotals(head, rows) {
+    head.appendChild(el("th", { text: "Grand Total" }));
+    var mensTotal = 0, womensTotal = 0;
+    var body = rows.map(function (row) {
+      mensTotal += row.mens;
+      womensTotal += row.womens;
+      row.cells.push(el("td", { class: (row.mens + row.womens) ? "" : "z", text: String(row.mens + row.womens) }));
+      return el("tr", {}, row.cells);
+    });
+    body.push(el("tr", {}, [
+      el("td", { class: "lbl", text: "Total" }),
+      el("td", { class: "lbl", text: String(mensTotal) }),
+      el("td", { class: "lbl", text: String(womensTotal) }),
+      el("td", { class: "lbl", text: String(mensTotal + womensTotal) })
+    ]));
+    return body;
+  }
   // Registration shirtTotals, scoped to only registrations whose Status
   // classifies as "paid" — shared by combinedShirtMatrix() and
   // tshirtOrderShirtCounts() (the T-Shirt Order Email) so both agree on
@@ -1320,7 +1371,7 @@
     var totals = paidRegShirtTotals();
     var sponsorCounts = allSponsorShirtCounts();
     var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
-    var body = C.SIZES.map(function (sz) {
+    var rows = C.SIZES.map(function (sz) {
       var regMens = 0, regWomens = 0;
       C.GROUPS.forEach(function (g) {
         var val = totals[g.key + sz.key] || 0;
@@ -1328,12 +1379,14 @@
       });
       var mens = regMens + sponsorCounts[sz.key].mens;
       var womens = regWomens + sponsorCounts[sz.key].womens;
-      return el("tr", {}, [
+      var cells = [
         el("td", { class: "lbl", text: sz.label }),
         el("td", { class: mens ? "" : "z", text: String(mens) }),
         el("td", { class: womens ? "" : "z", text: String(womens) })
-      ]);
+      ];
+      return { cells: cells, mens: mens, womens: womens };
     });
+    var body = withGenderMatrixTotals(head, rows);
     return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
   }
 
@@ -1342,14 +1395,16 @@
     var C = CONFIG;
     var counts = tshirtPurchaseShirtCounts();
     var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
-    var body = C.SIZES.map(function (sz) {
+    var rows = C.SIZES.map(function (sz) {
       var mens = counts[sz.key].mens, womens = counts[sz.key].womens;
-      return el("tr", {}, [
+      var cells = [
         el("td", { class: "lbl", text: sz.label }),
         el("td", { class: mens ? "" : "z", text: String(mens) }),
         el("td", { class: womens ? "" : "z", text: String(womens) })
-      ]);
+      ];
+      return { cells: cells, mens: mens, womens: womens };
     });
+    var body = withGenderMatrixTotals(head, rows);
     return el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
   }
 
@@ -1473,18 +1528,18 @@
 
   function sponsorSummaryCard(typeKey) {
     var stats = sponsorStatsByType(typeKey);
+    var head = el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })]);
     var rows = CONFIG.SIZES.map(function (sz) {
       var c = stats.sizeCounts[sz.key];
-      return el("tr", {}, [
+      var cells = [
         el("td", { class: "lbl", text: sz.label }),
         el("td", { class: c.mens ? "" : "z", text: String(c.mens) }),
         el("td", { class: c.womens ? "" : "z", text: String(c.womens) })
-      ]);
+      ];
+      return { cells: cells, mens: c.mens, womens: c.womens };
     });
-    var table = el("table", { class: "matrix" }, [
-      el("thead", {}, [el("tr", {}, [el("th", { class: "lbl", text: "Size" }), el("th", { text: "Men's" }), el("th", { text: "Women's" })])]),
-      el("tbody", {}, rows)
-    ]);
+    var body = withGenderMatrixTotals(head, rows);
+    var table = el("table", { class: "matrix" }, [el("thead", {}, [head]), el("tbody", {}, body)]);
     return el("div", { class: "sponsor-card" }, [
       el("div", { class: "sponsor-card-head", text: stats.label + " Sponsors" }),
       el("div", { class: "sponsor-card-stats" }, [

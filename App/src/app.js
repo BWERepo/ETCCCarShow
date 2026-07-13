@@ -499,14 +499,11 @@
     var continueBtn = el("button", { class: "btn primary" }, ["Continue"]);
     continueBtn.addEventListener("click", function () { state.splashOpen = false; renderViews(); });
 
-    // Same buildPageBanner() every other full-page screen (Change Log,
-    // T-Shirt Order Form, etc.) uses, so the splash page's heading matches
-    // theirs exactly — no Back button since splash has nothing to return to.
-    var head = buildPageBanner(null, "Welcome to the Car Show Manager");
-    head.style.alignSelf = "stretch";
-    head.style.marginBottom = "20px";
-
-    var kids = [head];
+    // No banner built here anymore — the splash page no longer covers the
+    // real header.app bar (see .splash-page in styles.css), so that same
+    // hamburger+logo+"Car Show Manager" bar every tab already shows is
+    // what's visible above the splash content, instead of a re-built copy.
+    var kids = [];
     if (bannerImg) kids.push(bannerImg);
     kids.push(el("div", { class: "splash-extra" }, SPLASH_COPY.map(function (p) { return el("p", { text: p }); })));
     kids.push(el("div", { class: "splash-actions" }, [cancelBtn, continueBtn]));

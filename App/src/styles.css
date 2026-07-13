@@ -321,9 +321,14 @@ table.matrix td.z { color: #c2c8d0; }
 }
 
 /* ── Splash page — shown on every app load, before the tabs ── */
+/* No longer position:fixed/inset:0 — it used to cover the whole viewport
+   including header.app; now it renders in normal flow inside #app, same as
+   every tab's content, so the real header.app bar (hamburger, logo, "Car
+   Show Manager") shows above it exactly as it does for every other tab. */
 .splash-page {
-  position: fixed; inset: 0; background: var(--bg); z-index: 400;
-  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 30px;
 }
 .splash-inner { display: flex; flex-direction: column; align-items: center; max-width: 760px; max-height: 90vh; overflow-y: auto; padding: 20px; text-align: center; }
 .splash-banner { width: 100%; max-width: 300px; height: auto; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }

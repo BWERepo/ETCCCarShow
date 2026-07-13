@@ -328,9 +328,14 @@ table.matrix td.z { color: #c2c8d0; }
 }
 
 /* ── Splash page — shown on every app load, before the tabs ── */
+/* No longer position:fixed/inset:0 — it used to cover the whole viewport
+   including header.app; now it renders in normal flow inside #app, same as
+   every tab's content, so the real header.app bar (hamburger, logo, "Car
+   Show Manager") shows above it exactly as it does for every other tab. */
 .splash-page {
-  position: fixed; inset: 0; background: var(--bg); z-index: 400;
-  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 30px;
 }
 .splash-inner { display: flex; flex-direction: column; align-items: center; max-width: 760px; max-height: 90vh; overflow-y: auto; padding: 20px; text-align: center; }
 .splash-banner { width: 100%; max-width: 300px; height: auto; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
@@ -353,7 +358,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.167 &middot; Deployed 07/13/2026 12:17 PM</div>
+  <div>v2.172 &middot; Deployed 07/13/2026 12:26 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </footer>
@@ -1967,14 +1972,11 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     var continueBtn = el("button", { class: "btn primary" }, ["Continue"]);
     continueBtn.addEventListener("click", function () { state.splashOpen = false; renderViews(); });
 
-    // Same buildPageBanner() every other full-page screen (Change Log,
-    // T-Shirt Order Form, etc.) uses, so the splash page's heading matches
-    // theirs exactly — no Back button since splash has nothing to return to.
-    var head = buildPageBanner(null, "Welcome to the Car Show Manager");
-    head.style.alignSelf = "stretch";
-    head.style.marginBottom = "20px";
-
-    var kids = [head];
+    // No banner built here anymore — the splash page no longer covers the
+    // real header.app bar (see .splash-page in styles.css), so that same
+    // hamburger+logo+"Car Show Manager" bar every tab already shows is
+    // what's visible above the splash content, instead of a re-built copy.
+    var kids = [];
     if (bannerImg) kids.push(bannerImg);
     kids.push(el("div", { class: "splash-extra" }, SPLASH_COPY.map(function (p) { return el("p", { text: p }); })));
     kids.push(el("div", { class: "splash-actions" }, [cancelBtn, continueBtn]));

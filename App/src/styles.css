@@ -299,7 +299,14 @@ table.matrix td.z { color: #c2c8d0; }
      padding + forced wrapping keep it readable at that width. */
   .tablewrap { display: none !important; }
   #printHost { display: block !important; }
-  #printHost h2 { margin: 0 0 8px; font-size: 14px; }
+  #printHost h2 { margin: 0; font-size: 14px; }
+  /* Shared logo + centered title header, and report-date footer, added by
+     buildPrintHeader()/buildPrintFooter() in app.js — used by every print
+     report (Registration, Sponsors, T-Shirt, and the three Reports-tab
+     reports) so they share one consistent look. */
+  #printHost .print-report-head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 10px; }
+  #printHost .print-report-head .print-logo { height: 40px; width: 40px; object-fit: contain; }
+  #printHost .print-report-foot { margin-top: 14px; text-align: center; font-size: 11px; color: var(--muted); }
   #printHost table.grid { table-layout: fixed; width: 100%; }
   #printHost table.grid th, #printHost table.grid td {
     font-size: 6px; line-height: 1.25; padding: 2px 3px;
@@ -310,6 +317,9 @@ table.matrix td.z { color: #c2c8d0; }
      override its tiny fixed-width/6px styling with a narrower, more
      readable table. */
   #printHost table.report-table { table-layout: auto; width: auto; max-width: 100%; }
+  /* Registration Report only — centers its (narrow, 4-column) table
+     horizontally on the printed page instead of sitting flush left. */
+  #printHost table.centered-report-table { margin: 0 auto; }
   #printHost table.report-table th, #printHost table.report-table td {
     font-size: 12px; line-height: 1.4; padding: 3px 10px; white-space: nowrap;
   }

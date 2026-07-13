@@ -1,11 +1,9 @@
 <?php
-// Sponsor sign-up form — behind the SAME password gate as index.php (shared
-// $PASSWORD_HASH/session from secrets.php, not a separate credential). It's
-// still meant to be linked/embedded from another website; officers hand the
-// site password out to sponsors/businesses that need to submit here, same as
-// anyone else who needs the main app. Submissions are appended to
-// sponsor-submissions.json (gitignored, contains PII) via lib.php's
-// lock-guarded read-modify-write.
+// Sponsor sign-up form — public, no password gate (removed; this page is
+// meant to be linked/embedded from another website for sponsors/businesses
+// to fill out directly, with no site password to hand out). Submissions are
+// appended to sponsor-submissions.json (gitignored, contains PII) via
+// lib.php's lock-guarded read-modify-write.
 //
 // sponsor-submissions.json is now the single always-current sponsor list —
 // the hosted index.php reads it fresh on every page load, and the Sponsors
@@ -19,49 +17,15 @@
 // This page isn't part of build.js's src/ pipeline, so if those config
 // lists change, update the two arrays below to match.
 //
-// ETCC Member Name is a free-text field constrained by a <datalist> and
-// validated server-side against members-data.json (imported via
+// ETCC Member Name is a required free-text field constrained by a <datalist>
+// and validated server-side against members-data.json (imported via
 // members-import.php from a club membership CSV) — not a boolean checkbox.
-// An empty value just means "not a member"; a non-empty value must match
-// the roster exactly (case-insensitively) or the submission is rejected.
+// It must match the roster exactly (case-insensitively) or the submission
+// is rejected.
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
-session_start();
-require __DIR__ . '/secrets.php';
 require __DIR__ . '/lib.php';
-
-// Same login POST handling as index.php — kept in sync deliberately rather
-// than factored out, since it's only a few lines and duplicating it here
-// avoids adding a require-order dependency between the two pages.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login') {
-    header('Content-Type: application/json');
-    $pw = (string)($_POST['password'] ?? '');
-    $ok = hash_equals($PASSWORD_HASH, crypt($pw, $PASSWORD_HASH));
-    if ($ok) {
-        session_regenerate_id(true);
-        $_SESSION['carshow_authenticated'] = true;
-        echo json_encode(['success' => true]);
-    } else {
-        http_response_code(401);
-        echo json_encode(['success' => false]);
-    }
-    exit;
-}
-
-if (empty($_SESSION['carshow_authenticated'])) {
-    // _login.html posts to location.pathname, so the same file works
-    // unmodified from this page's own URL. Swap in copy that fits this
-    // page's context instead of index.php's "registration & summary" text.
-    $login = file_get_contents(__DIR__ . '/_login.html');
-    $login = str_replace(
-        'Enter password to access the Car Show registration &amp; summary',
-        'Enter password to access the sponsor sign-up form',
-        $login
-    );
-    echo $login;
-    exit;
-}
 
 $SPONSOR_TYPES = [
     'premier' => 'Premier ($250)',
@@ -103,10 +67,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($values['name'] === '') $errors[] = 'Sponsor Name is required.';
     if (!array_key_exists($values['sponsorType'], $SPONSOR_TYPES)) $errors[] = 'Choose a valid sponsor type.';
     if ($values['shirtSize'] !== '' && !in_array($values['shirtSize'], $SHIRT_SIZES, true)) $errors[] = 'Choose a valid T-shirt size.';
-    if ($values['etccMemberName'] !== '') {
+    if ($values['etccMemberName'] === '') {
+        $errors[] = 'ETCC Member Name is required.';
+    } else {
         $matched = $memberNames[strtolower($values['etccMemberName'])] ?? null;
         if ($matched === null) {
-            $errors[] = 'ETCC Member Name not found in the roster — pick a name from the suggestions, or leave it blank if you\'re not a member.';
+            $errors[] = 'ETCC Member Name not found in the roster — pick a name from the suggestions.';
         } else {
             $values['etccMemberName'] = $matched; // normalize to the roster's canonical casing
         }
@@ -198,8 +164,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <form method="post" novalidate>
       <input type="hidden" name="from" value="<?php echo htmlspecialchars($fromParam); ?>">
       <div class="form-row">
-        <label for="f-name">Sponsor Name *</label>
+        <label for="f-type">Sponsor Type *</label>
+        <select id="f-type" name="sponsorType">
+          <?php foreach ($SPONSOR_TYPES as $key => $label): ?>
+            <option value="<?php echo htmlspecialchars($key); ?>" <?php echo $values['sponsorType'] === $key ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="f-name">Sponsor Name * <small style="font-weight:normal;color:var(--muted)">(Will appear on shirt)</small></label>
         <input type="text" id="f-name" name="name" required value="<?php echo htmlspecialchars($values['name']); ?>">
+      </div>
+      <div class="form-row">
+        <label for="f-member">ETCC Member Name *</label>
+        <input type="text" id="f-member" name="etccMemberName" list="etcc-members" autocomplete="off" required
+          placeholder="Start typing your last name…" value="<?php echo htmlspecialchars($values['etccMemberName']); ?>">
+        <datalist id="etcc-members">
+          <?php foreach ($members as $m): ?>
+            <?php if (!empty($m['name'])): ?>
+              <option value="<?php echo htmlspecialchars($m['name']); ?>">
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </datalist>
       </div>
       <div class="form-row">
         <label for="f-contact">Contact Person</label>
@@ -233,26 +219,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="form-row">
         <label for="f-website">Website</label>
         <input type="url" id="f-website" name="website" placeholder="https://" value="<?php echo htmlspecialchars($values['website']); ?>">
-      </div>
-      <div class="form-row">
-        <label for="f-member">ETCC Member Name</label>
-        <input type="text" id="f-member" name="etccMemberName" list="etcc-members" autocomplete="off"
-          placeholder="Start typing your last name…" value="<?php echo htmlspecialchars($values['etccMemberName']); ?>">
-        <datalist id="etcc-members">
-          <?php foreach ($members as $m): ?>
-            <?php if (!empty($m['name'])): ?>
-              <option value="<?php echo htmlspecialchars($m['name']); ?>">
-            <?php endif; ?>
-          <?php endforeach; ?>
-        </datalist>
-      </div>
-      <div class="form-row">
-        <label for="f-type">Sponsor Type *</label>
-        <select id="f-type" name="sponsorType">
-          <?php foreach ($SPONSOR_TYPES as $key => $label): ?>
-            <option value="<?php echo htmlspecialchars($key); ?>" <?php echo $values['sponsorType'] === $key ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
-          <?php endforeach; ?>
-        </select>
       </div>
       <div class="form-row">
         <label for="f-shirt">T-Shirt Size</label>

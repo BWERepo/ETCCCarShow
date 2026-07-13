@@ -93,7 +93,6 @@
     emailSendError: null,
     emailSent: false,         // brief "Sent!" confirmation after a successful send
     tshirtOrderPageOpen: false, // T-Shirts tab > "T-Shirt Order Form" full-page screen
-    tshirtReportPageOpen: false, // T-Shirts tab > "T-Shirt Report" full-page screen
     tshirtPurchasePageOpen: false, // T-Shirts tab > "Buy T-Shirt" full-page screen
     tshirtPurchases: [],       // day-of-event walk-up sales — filled by ingestTshirtPurchases()
     tshirtPurchaseName: "",    // Buy T-Shirt form's in-progress Name field
@@ -573,6 +572,26 @@
   // should still give a complete paper record, so this builds a separate,
   // print-only table with every column instead of reusing the visible one.
   function clearPrintHost() { var host = $("#printHost"); if (host) host.innerHTML = ""; }
+
+  // Shared logo + centered title header, and a report-date footer, used by
+  // every print report below (printRegistration/printSponsors/
+  // printTshirtReport/printSummaryReport/printRegistrationReport/
+  // printSponsorReport) so they all look like one consistent document. Real
+  // "Page n of m" numbering isn't something the app can compute itself —
+  // browsers don't expose a total page count to print CSS/JS — so that part
+  // is left to the browser's own print dialog "Headers and footers" option,
+  // which already prints real page numbers.
+  function buildPrintHeader(title) {
+    var headerLogo = $("header.app img.hdr-logo");
+    var kids = [];
+    if (headerLogo) kids.push(el("img", { src: headerLogo.src, class: "print-logo", alt: "ETCC Logo" }));
+    kids.push(el("h2", { text: title }));
+    return el("div", { class: "print-report-head" }, kids);
+  }
+  function buildPrintFooter() {
+    return el("div", { class: "print-report-foot", text: "Report Date: " + fmtDate(new Date()) });
+  }
+
   function printRegistration() {
     var host = $("#printHost");
     host.innerHTML = "";
@@ -594,8 +613,9 @@
       cells.push(el("td", { class: "shirtsum" }, [shirtSummaryText(r)]));
       return el("tr", {}, cells);
     }));
-    host.appendChild(el("h2", { text: state.result.meta.title }));
+    host.appendChild(buildPrintHeader(state.result.meta.title));
     host.appendChild(el("table", { class: "grid" }, [thead, tbody]));
+    host.appendChild(buildPrintFooter());
     window.print();
   }
 
@@ -2339,13 +2359,17 @@
         return;
       }
 
+      // date is the full current timestamp (not just a bare YYYY-MM-DD) —
+      // this modal only ever logs a payment as it's collected right now, so
+      // the date shown should reflect the actual time it was recorded, not
+      // just today's date at midnight.
       recordPayment({
         id: "pay" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
         sponsorId: sponsor.id,
         sponsorName: sponsor.name,
         paymentType: paymentType,
         checkNum: paymentType === "Check" ? checkNum : "",
-        date: new Date().toISOString().split("T")[0],
+        date: new Date().toISOString(),
         amount: Number(amount),
         recordedAt: new Date().toISOString()
       });
@@ -2532,7 +2556,7 @@
     var lastNameInput = el("input", { type: "text" });
     row("Last Name", lastNameInput, true);
     var firstNameInput = el("input", { type: "text" });
-    row("First Name", firstNameInput);
+    row("First Name", firstNameInput, true);
 
     lookupInput.addEventListener("input", function () {
       var q = lookupInput.value.trim().toLowerCase();
@@ -2559,7 +2583,7 @@
     // nextAvailableWalkinNumber()) and locked, so two walk-ins added back to
     // back never collide.
     var regNumberInput = el("input", { type: "text" });
-    row("Reg #", regNumberInput);
+    row("Reg #", regNumberInput, true);
     function syncRegNumberField() {
       lookupRow.style.display = regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER ? "" : "none";
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_NONMEMBER) {
@@ -2583,14 +2607,14 @@
       feeInput.value = String(inCarShowSel.value === "Yes" ? state.appSettings.walkInCarShowFee : state.appSettings.walkInNonCarShowFee);
       syncVehicleFieldsVisibility();
     });
-    row("In Car Show?", inCarShowSel);
+    row("In Car Show?", inCarShowSel, true);
 
     var clubNameInput = el("input", { type: "text" });
     row("Club Name", clubNameInput);
     var phoneInput = el("input", { type: "text" });
-    row("Phone", phoneInput);
+    row("Phone", phoneInput, true);
     var emailInput = el("input", { type: "text" });
-    row("Email", emailInput);
+    row("Email", emailInput, true);
     var addressInput = el("input", { type: "text" });
     row("Address", addressInput);
     var cityInput = el("input", { type: "text" });
@@ -2680,10 +2704,10 @@
     saveBtn.addEventListener("click", function () {
       var lastName = lastNameInput.value.trim();
       if (!lastName) { errorMsg.textContent = "Last Name is required."; return; }
-      if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !regNumberInput.value.trim()) {
-        errorMsg.textContent = "Reg # is required for a Walk-In Member.";
-        return;
-      }
+      if (!firstNameInput.value.trim()) { errorMsg.textContent = "First Name is required."; return; }
+      if (!regNumberInput.value.trim()) { errorMsg.textContent = "Reg # is required."; return; }
+      if (!phoneInput.value.trim()) { errorMsg.textContent = "Phone is required."; return; }
+      if (!emailInput.value.trim()) { errorMsg.textContent = "Email is required."; return; }
       if (paymentTypeSel.value === "Check" && !checkNumInput.value.trim()) {
         errorMsg.textContent = "Check # is required for a Check payment.";
         return;
@@ -2741,8 +2765,9 @@
     var tbody = el("tbody", {}, visibleSponsors().map(function (s) {
       return el("tr", {}, SPONSOR_COLS.map(function (c) { return el("td", { text: sponsorFieldText(s, c.key) }); }));
     }));
-    host.appendChild(el("h2", { text: "Car Show Sponsors" }));
+    host.appendChild(buildPrintHeader("Car Show Sponsors"));
     host.appendChild(el("table", { class: "grid" }, [thead, tbody]));
+    host.appendChild(buildPrintFooter());
     window.print();
   }
 
@@ -3592,8 +3617,10 @@
       ]);
     });
 
-    host.appendChild(el("h2", { text: "T-Shirt Report" }));
-    host.appendChild(el("table", { class: "grid report-table" }, [
+    // Same logo/centered-title header, centered table, and report-date
+    // footer as printRegistrationReport() — formatted identically.
+    host.appendChild(buildPrintHeader("T-Shirt Report"));
+    host.appendChild(el("table", { class: "grid report-table centered-report-table" }, [
       el("thead", {}, [el("tr", {}, [
         el("th", { text: "Last Name" }),
         el("th", { text: "First Name" }),
@@ -3601,6 +3628,7 @@
       ])]),
       el("tbody", {}, rows)
     ]));
+    host.appendChild(buildPrintFooter());
     window.print();
   }
 
@@ -3643,7 +3671,7 @@
   }
 
   function buildTshirtView() {
-    var wrap = el("div", { class: "tshirt-view" });
+    var wrap = el("div", { class: "view tshirt-view" });
 
     // Total Shirts Needed For Event card (from Summary tab)
     if (state.result && state.result.ok) {
@@ -3658,11 +3686,15 @@
       ]));
     }
 
-    // Navigation into the three full-page screens below.
+    // Navigation into the two full-page screens below, plus a direct-to-
+    // print-preview T-Shirt Report button (no intermediate on-screen page —
+    // same "straight to the browser's print dialog" pattern as the Reports
+    // tab's buttons, so the printed output is just the shirt rows, no
+    // banner/title text repeated on screen first).
     var orderBtn = el("button", { class: "btn primary" }, ["📧 T-Shirt Order Form"]);
     orderBtn.addEventListener("click", openTshirtOrderPage);
     var reportBtn = el("button", { class: "btn" }, ["📊 T-Shirt Report"]);
-    reportBtn.addEventListener("click", openTshirtReportPage);
+    reportBtn.addEventListener("click", printTshirtReport);
     var purchaseBtn = el("button", { class: "btn" }, ["🛒 Buy T-Shirt"]);
     purchaseBtn.addEventListener("click", openTshirtPurchasePage);
     wrap.appendChild(el("div", { class: "panel" }, [
@@ -3775,57 +3807,6 @@
     host.appendChild(page);
   }
 
-  // ---------- T-Shirt Report (full-page screen) ----------
-  function openTshirtReportPage() { state.tshirtReportPageOpen = true; renderTshirtReportPage(); }
-  function closeTshirtReportPage() { state.tshirtReportPageOpen = false; renderTshirtReportPage(); }
-
-  function renderTshirtReportPage() {
-    var host = $("#tshirtReportHost");
-    if (!host) return;
-    host.innerHTML = "";
-    if (!state.tshirtReportPageOpen) return;
-
-    var body = el("div", { class: "api-page-inner" });
-
-    var paidRecs = allRegistrations().filter(function (r) {
-      return classifyStatus(r["Status"]) === "paid";
-    }).sort(function (a, b) {
-      var aLast = String(a["Last Name"] || "").toLowerCase();
-      var bLast = String(b["Last Name"] || "").toLowerCase();
-      if (aLast !== bLast) return aLast < bLast ? -1 : 1;
-      var aFirst = String(a["First Name"] || "").toLowerCase();
-      var bFirst = String(b["First Name"] || "").toLowerCase();
-      return aFirst < bFirst ? -1 : aFirst > bFirst ? 1 : 0;
-    });
-
-    var head = buildPageBanner(closeTshirtReportPage, "T-Shirt Report", paidRecs.length ? printTshirtReport : null);
-
-    if (!paidRecs.length) {
-      body.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No paid registrations."]));
-    } else {
-      var rows = paidRecs.map(function (r) {
-        var shirtText = shirtSummaryText(r);
-        return el("tr", {}, [
-          el("td", { text: r["Last Name"] || "—" }),
-          el("td", { text: r["First Name"] || "—" }),
-          el("td", { text: shirtText || "—" })
-        ]);
-      });
-      body.appendChild(el("table", { class: "matrix" }, [
-        el("thead", {}, [el("tr", {}, [
-          el("th", { text: "Last Name" }),
-          el("th", { text: "First Name" }),
-          el("th", { text: "Shirts" })
-        ])]),
-        el("tbody", {}, rows)
-      ]));
-    }
-
-    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
-    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
-    host.appendChild(page);
-  }
-
   // ---------- Reports tab ----------
   // A launcher straight into print preview for four reports — no intermediate
   // on-screen page, each button just builds its report into #printHost and
@@ -3861,8 +3842,9 @@
     if (!state.result || !state.result.ok) return;
     var host = $("#printHost");
     host.innerHTML = "";
-    host.appendChild(el("h2", { text: "Car Show Summary Report" }));
+    host.appendChild(buildPrintHeader("Car Show Summary Report"));
     host.appendChild(buildSummaryView());
+    host.appendChild(buildPrintFooter());
     window.print();
   }
 
@@ -3893,8 +3875,9 @@
         el("td", { class: "shirtsum", text: shirtSummaryText(r) })
       ]);
     }));
-    host.appendChild(el("h2", { text: "Registration Report" }));
-    host.appendChild(el("table", { class: "grid report-table" }, [thead, tbody]));
+    host.appendChild(buildPrintHeader("Registration Report"));
+    host.appendChild(el("table", { class: "grid report-table centered-report-table" }, [thead, tbody]));
+    host.appendChild(buildPrintFooter());
     window.print();
   }
 
@@ -3931,8 +3914,9 @@
     var tbody = el("tbody", {}, visibleSponsors().map(function (s) {
       return el("tr", {}, SPONSOR_REPORT_COLS.map(function (c) { return sponsorReportCell(s, c); }));
     }));
-    host.appendChild(el("h2", { text: "Sponsor Report" }));
+    host.appendChild(buildPrintHeader("Sponsor Report"));
     host.appendChild(el("table", { class: "grid report-table" }, [thead, tbody]));
+    host.appendChild(buildPrintFooter());
     window.print();
   }
 
@@ -4115,7 +4099,6 @@
     document.body.appendChild(el("div", { id: "changelogHost" }));
     document.body.appendChild(el("div", { id: "apiHost" }));
     document.body.appendChild(el("div", { id: "tshirtOrderHost" }));
-    document.body.appendChild(el("div", { id: "tshirtReportHost" }));
     document.body.appendChild(el("div", { id: "tshirtPurchaseHost" }));
     document.body.appendChild(el("div", { id: "sponsorFormHost" }));
     document.body.appendChild(el("div", { id: "paymentHost" }));
@@ -4129,15 +4112,17 @@
     // sponsor-form.php redirects here with #sponsors after a successful
     // submission (opened in its own tab from the Sponsors tab's "+ Add
     // Sponsor" button) — land on a fresh Sponsors tab, already showing the
-    // new submission, instead of the default Summary tab.
-    if (location.hash === "#sponsors") state.tab = "sponsors";
+    // new submission, instead of the default Summary tab. Also skip the
+    // splash screen in this case — it's the same tab the officer was
+    // already using, not a fresh app load, so there's nothing to welcome
+    // them back to.
+    if (location.hash === "#sponsors") { state.tab = "sponsors"; state.splashOpen = false; }
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.apiPageOpen) { closeApiPage(); return; }
       if (e.key === "Escape" && state.tshirtOrderPageOpen) { closeTshirtOrderPage(); return; }
-      if (e.key === "Escape" && state.tshirtReportPageOpen) { closeTshirtReportPage(); return; }
       if (e.key === "Escape" && state.tshirtPurchasePageOpen) { closeTshirtPurchasePage(); return; }
       if (e.key === "Escape" && state.sponsorEditing) { closeSponsorForm(); return; }
       if (e.key === "Escape" && state.addRegOpen) { closeAddRegistration(); return; }

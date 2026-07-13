@@ -14,6 +14,7 @@
     sortDir: 1,
     search: "",
     statusFilter: { paid: true, notpaid: false, cancelled: false, empty: false },
+    splashOpen: true, // full-page splash shown on every app load, until Continue is clicked
     inCarShowFilter: false, // Registration tab toolbar's "In Car Show" checkbox — when checked, only rows with In Car Show? = Yes are shown
     tab: "sum",
     detailRow: null,  // registration row currently shown in the detail modal, or null
@@ -417,6 +418,12 @@
   function renderViews() {
     var app = $("#app");
     app.innerHTML = "";
+
+    if (state.splashOpen) {
+      app.appendChild(buildSplashPage());
+      return;
+    }
+
     app.appendChild(buildTabs());
 
     // Sponsors are manually entered and independent of the loaded CSVs, so
@@ -430,6 +437,14 @@
     // T-Shirts tab shows email composer and report; also works without CSV data.
     if (state.tab === "tsh") {
       app.appendChild(buildTshirtView());
+      return;
+    }
+
+    // Reports tab is just a launcher into the four full-page report screens
+    // below; also works without CSV data (each report screen handles its own
+    // empty state).
+    if (state.tab === "reports") {
+      app.appendChild(buildReportsView());
       return;
     }
 
@@ -460,7 +475,46 @@
       t.addEventListener("click", function () { state.tab = id; renderViews(); });
       return t;
     };
-    return el("div", { class: "tabs no-print" }, [mk("sum", "Summary"), mk("reg", "Registration"), mk("sponsors", "Sponsors"), mk("tsh", "T-Shirts")]);
+    return el("div", { class: "tabs no-print" }, [mk("sum", "Summary"), mk("reg", "Registration"), mk("sponsors", "Sponsors"), mk("tsh", "T-Shirts"), mk("reports", "Reports")]);
+  }
+
+  // ---------- Splash page (shown on every app load, before the tabs) ----------
+  // Blocks the rest of the app until Continue is clicked. Cancel logs out
+  // (same destination as the hamburger menu's Logout). The empty div below
+  // the welcome text is deliberate room for additional copy in a later
+  // session — leave it in place even if it renders empty for now.
+  // Splash copy — plain text, no markdown/bold.
+  var SPLASH_COPY = [
+    "The ETCC Car Show Manager is a comprehensive application designed to manage every aspect of the ETCC Annual Car Show from a single, centralized system. It streamlines event administration by providing organizers with the tools needed to efficiently coordinate participants, sponsors, registrations, merchandise sales, payments, and reporting throughout the entire event lifecycle.",
+    "The system supports both pre-registration and walk-in registration, allowing participants to register before the event or on show day. It maintains detailed records for each participant and vehicle, simplifying check-in, reducing paperwork, and ensuring accurate tracking of entrants. Organizers can quickly search, update, and manage participant information while monitoring registration activity in real time."
+  ];
+
+  function buildSplashPage() {
+    var headerLogo = $("header.app img.hdr-logo");
+    var logoImg = headerLogo ? el("img", { src: headerLogo.src, style: "height:56px" }) : null;
+    var bannerImg = window.__carshowSplashBanner
+      ? el("img", { src: window.__carshowSplashBanner, class: "splash-banner", alt: "ETCC Car Show" })
+      : null;
+
+    var cancelBtn = el("button", { class: "btn" }, ["Cancel"]);
+    cancelBtn.addEventListener("click", function () { location.href = "logout.php"; });
+    var continueBtn = el("button", { class: "btn primary" }, ["Continue"]);
+    continueBtn.addEventListener("click", function () { state.splashOpen = false; renderViews(); });
+
+    // Same logo + "Car Show Manager" title treatment every other full-page
+    // screen's banner uses (see buildPageBanner()), so the splash page reads
+    // as part of the same app rather than a standalone screen.
+    var kids = [];
+    var titleKids = [];
+    if (logoImg) titleKids.push(logoImg);
+    titleKids.push(el("h2", { text: "Car Show Manager", style: "margin: 0" }));
+    kids.push(el("div", { style: "display: flex; align-items: center; gap: 12px; margin-bottom: 20px" }, titleKids));
+    kids.push(el("h1", { text: "Welcome to the Car Show Manager", style: "margin: 0 0 16px; font-size: 28px; text-align: center" }));
+    if (bannerImg) kids.push(bannerImg);
+    kids.push(el("div", { class: "splash-extra" }, SPLASH_COPY.map(function (p) { return el("p", { text: p }); })));
+    kids.push(el("div", { class: "splash-actions" }, [cancelBtn, continueBtn]));
+
+    return el("div", { class: "splash-page" }, [el("div", { class: "splash-inner" }, kids)]);
   }
 
   // CSVs are (re)ingested synchronously right before regenerate() runs, so
@@ -512,13 +566,11 @@
       el("span", { class: "spacer" }),
       zoomGroup
     ];
-    kids.push(prn, printCardsBtn, delBtn, addBtn);
+    kids.push(printCardsBtn, delBtn, addBtn, prn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
   function buildSummaryToolbar() {
-    var prn = el("button", { class: "btn" }, ["🖨 Print"]);
-    prn.addEventListener("click", function () { clearPrintHost(); window.print(); });
-    return el("div", { class: "toolbar no-print" }, [el("span", { class: "spacer" }), prn]);
+    return el("div", { class: "toolbar no-print" }, [el("span", { class: "spacer" })]);
   }
 
   // ---------- print (Registration tab: print every column, not just what's on screen) ----------
@@ -1877,7 +1929,7 @@
     var zoomLabel = el("span", { class: "count", text: Math.round(state.sponsorZoom * 100) + "%" });
     var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
     var kids = [search, typeGroup, paidGroup, count, el("span", { class: "spacer" }), zoomGroup];
-    kids.push(prn, delBtn, addBtn);
+    kids.push(delBtn, addBtn, prn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
 
@@ -3483,13 +3535,6 @@
     var host = $("#printHost");
     host.innerHTML = "";
 
-    // Get the logo from the header
-    var headerLogo = $("header.app img.hdr-logo");
-    var logoImg = null;
-    if (headerLogo) {
-      logoImg = el("img", { src: headerLogo.src, style: "height:60px; margin:0 auto 16px; display:block" });
-    }
-
     var paidRecs = allRegistrations().filter(function (r) {
       return classifyStatus(r["Status"]) === "paid";
     }).sort(function (a, b) {
@@ -3509,18 +3554,8 @@
       ]);
     });
 
-    // Header section
-    if (logoImg) host.appendChild(logoImg);
-    host.appendChild(el("h1", {
-      text: "T-Shirt Report",
-      style: "text-align:center; margin:0 0 8px 0; font-size:24px"
-    }));
-    host.appendChild(el("div", {
-      text: "Report Date: " + fmtDate(new Date()),
-      style: "text-align:center; color:#666; font-size:12px; margin-bottom:16px"
-    }));
-
-    host.appendChild(el("table", { class: "matrix" }, [
+    host.appendChild(el("h2", { text: "T-Shirt Report" }));
+    host.appendChild(el("table", { class: "grid report-table" }, [
       el("thead", {}, [el("tr", {}, [
         el("th", { text: "Last Name" }),
         el("th", { text: "First Name" }),
@@ -3604,17 +3639,27 @@
   // (plus an optional pageTitle sub-line naming the specific screen, e.g.
   // "T-Shirt Order Form") centered — grid layout so the title stays
   // centered on the page regardless of the left content's width.
-  function buildPageBanner(closeCallback, pageTitle) {
+  // printCallback is optional — when given, a "🖨 Print" button appears in
+  // the banner's upper-right corner (same position on every full-page report
+  // screen that has one), instead of each screen placing its own print
+  // button somewhere in its body.
+  function buildPageBanner(closeCallback, pageTitle, printCallback) {
     var headerLogo = $("header.app img.hdr-logo");
     var logoImg = headerLogo ? el("img", { src: headerLogo.src, style: "height:40px" }) : null;
     var closeBtn = el("button", { class: "btn" }, ["← Back"]);
     closeBtn.addEventListener("click", closeCallback);
     var centerKids = [el("h2", { text: "Car Show Manager", style: "margin: 0" })];
     if (pageTitle) centerKids.push(el("h3", { text: pageTitle, style: "margin: 4px 0 0; color: var(--muted); font-weight: 600" }));
+    var rightKids = [];
+    if (printCallback) {
+      var printBtn = el("button", { class: "btn" }, ["🖨 Print"]);
+      printBtn.addEventListener("click", printCallback);
+      rightKids.push(printBtn);
+    }
     return el("div", { class: "api-page-head", style: "display: grid; grid-template-columns: 1fr auto 1fr; align-items: center" }, [
       el("div", { style: "display: flex; align-items: center; gap: 10px; justify-self: start" }, logoImg ? [closeBtn, logoImg] : [closeBtn]),
       el("div", { style: "justify-self: center; text-align: center" }, centerKids),
-      el("div", { style: "justify-self: end" })
+      el("div", { style: "justify-self: end" }, rightKids)
     ]);
   }
 
@@ -3697,8 +3742,6 @@
     host.innerHTML = "";
     if (!state.tshirtReportPageOpen) return;
 
-    var head = buildPageBanner(closeTshirtReportPage, "T-Shirt Report");
-
     var body = el("div", { class: "api-page-inner" });
 
     var paidRecs = allRegistrations().filter(function (r) {
@@ -3711,6 +3754,8 @@
       var bFirst = String(b["First Name"] || "").toLowerCase();
       return aFirst < bFirst ? -1 : aFirst > bFirst ? 1 : 0;
     });
+
+    var head = buildPageBanner(closeTshirtReportPage, "T-Shirt Report", paidRecs.length ? printTshirtReport : null);
 
     if (!paidRecs.length) {
       body.appendChild(el("div", { class: "hint", style: "text-align:center; padding:20px" }, ["No paid registrations."]));
@@ -3731,14 +3776,121 @@
         ])]),
         el("tbody", {}, rows)
       ]));
-      var printBtn = el("button", { class: "btn", style: "margin-top:16px" }, ["🖨 Print"]);
-      printBtn.addEventListener("click", printTshirtReport);
-      body.appendChild(printBtn);
     }
 
     var bodyWrap = el("div", { class: "api-page-body" }, [body]);
     var page = el("div", { class: "api-page" }, [head, bodyWrap]);
     host.appendChild(page);
+  }
+
+  // ---------- Reports tab ----------
+  // A launcher straight into print preview for four reports — no intermediate
+  // on-screen page, each button just builds its report into #printHost and
+  // calls window.print() directly.
+  function buildReportsView() {
+    var summaryBtn = el("button", { class: "btn" }, ["📊 Car Show Summary Report"]);
+    summaryBtn.addEventListener("click", printSummaryReport);
+    var regBtn = el("button", { class: "btn" }, ["📋 Registration Report"]);
+    regBtn.addEventListener("click", printRegistrationReport);
+    var sponsorBtn = el("button", { class: "btn" }, ["🤝 Sponsor Report"]);
+    sponsorBtn.addEventListener("click", printSponsorReport);
+    var tshirtBtn = el("button", { class: "btn" }, ["👕 T-Shirt Report"]);
+    tshirtBtn.addEventListener("click", printTshirtReport);
+    var buttonCol = el("div", { class: "settings-actions", style: "flex-direction: column; align-items: flex-start" }, [summaryBtn, regBtn, sponsorBtn, tshirtBtn]);
+    var row = el("div", { class: "reports-row" }, []);
+    if (window.__carshowReportsBanner) {
+      row.appendChild(el("img", { src: window.__carshowReportsBanner, class: "reports-banner", alt: "Reports" }));
+    }
+    row.appendChild(buttonCol);
+    return el("div", { class: "view reports-view" }, [
+      el("div", { class: "panel" }, [
+        el("h3", { text: "Reports" }),
+        row
+      ])
+    ]);
+  }
+
+  // ---------- Car Show Summary Report (print) ----------
+  // Reuses buildSummaryView() verbatim (the same panels the Summary tab
+  // shows on screen), cloned into #printHost, so this report can never drift
+  // out of sync with what the Summary tab actually displays.
+  function printSummaryReport() {
+    if (!state.result || !state.result.ok) return;
+    var host = $("#printHost");
+    host.innerHTML = "";
+    host.appendChild(el("h2", { text: "Car Show Summary Report" }));
+    host.appendChild(buildSummaryView());
+    window.print();
+  }
+
+  // ---------- Registration Report (print) ----------
+  // Last Name / First Name / Reg # / Shirts only, always sorted by Last Name
+  // (regardless of the Registration tab's own current sort) — scoped to that
+  // tab's current search/status filters, same as its on-screen table.
+  function registrationReportRows() {
+    return visibleRows().slice().sort(function (a, b) {
+      var aLast = String(a["Last Name"] || "").toLowerCase();
+      var bLast = String(b["Last Name"] || "").toLowerCase();
+      return aLast < bLast ? -1 : aLast > bLast ? 1 : 0;
+    });
+  }
+
+  function printRegistrationReport() {
+    if (!state.result || !state.result.ok) return;
+    var host = $("#printHost");
+    host.innerHTML = "";
+    var thead = el("thead", {}, [el("tr", {}, [
+      el("th", { text: "Last Name" }), el("th", { text: "First Name" }), el("th", { text: "Reg #" }), el("th", { text: "Shirts" })
+    ])]);
+    var tbody = el("tbody", {}, registrationReportRows().map(function (r) {
+      return el("tr", {}, [
+        el("td", { text: r["Last Name"] || "" }),
+        el("td", { text: r["First Name"] || "" }),
+        el("td", { text: r["Reg #"] || "" }),
+        el("td", { class: "shirtsum", text: shirtSummaryText(r) })
+      ]);
+    }));
+    host.appendChild(el("h2", { text: "Registration Report" }));
+    host.appendChild(el("table", { class: "grid report-table" }, [thead, tbody]));
+    window.print();
+  }
+
+  // ---------- Sponsor Report (full-page screen) ----------
+  // Sponsor Name / Member Name / Sponsor Type / Contact / Phone / Website only
+  // — a narrower column set than the Sponsors tab's own SPONSOR_COLS/printSponsors().
+  var SPONSOR_REPORT_COLS = [
+    { key: "name", label: "Sponsor Name" },
+    { key: "etccMemberName", label: "Member Name" },
+    { key: "sponsorType", label: "Sponsor Type" },
+    { key: "contactPerson", label: "Contact" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "website", label: "Website" }
+  ];
+  // Email/Website cells render as clickable mailto:/https:// links (same
+  // treatment the Sponsors tab's own table already gives those two columns —
+  // see renderSponsorsBody()'s c.key === "email"/"website" branches).
+  function sponsorReportCell(s, c) {
+    if (c.key === "email" && s.email) {
+      return el("td", {}, [el("a", { href: "mailto:" + s.email, text: s.email })]);
+    }
+    if (c.key === "website" && s.website) {
+      var websiteHref = /^https?:\/\//i.test(s.website) ? s.website : "https://" + s.website;
+      return el("td", {}, [el("a", { href: websiteHref, target: "_blank", rel: "noopener", text: s.website })]);
+    }
+    return el("td", { text: sponsorFieldText(s, c.key) });
+  }
+  function printSponsorReport() {
+    if (!visibleSponsors().length) return;
+    var host = $("#printHost");
+    host.innerHTML = "";
+    var thead = el("thead", {}, [el("tr", {}, SPONSOR_REPORT_COLS.map(function (c) { return el("th", { text: c.label }); }))]);
+    var tbody = el("tbody", {}, visibleSponsors().map(function (s) {
+      return el("tr", {}, SPONSOR_REPORT_COLS.map(function (c) { return sponsorReportCell(s, c); }));
+    }));
+    host.appendChild(el("h2", { text: "Sponsor Report" }));
+    host.appendChild(el("table", { class: "grid report-table" }, [thead, tbody]));
+    window.print();
   }
 
   // ---------- T-Shirt Purchases (full-page screen) ----------

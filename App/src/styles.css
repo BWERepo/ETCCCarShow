@@ -277,12 +277,17 @@ table.matrix td.z { color: #c2c8d0; }
 #printHost { display: none; }
 @media print {
   @page { size: landscape; margin: 0.3in; }
-  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .tshirt-view, .loadedinfo, footer.app-footer { display: none !important; }
+  header.app, .tabs, .toolbar, .no-print, .modal-backdrop, .changelog-page, .api-page, .loadedinfo, footer.app-footer, .splash-page { display: none !important; }
   .wrap { max-width: none; padding: 0; }
   .tablewrap { max-height: none; overflow: visible; border: none; }
   table.grid thead th { position: static; }
   table.grid th, table.grid td { white-space: normal; }
   .view { display: block !important; }
+  /* These two must come after ".view { display: block !important; }" above —
+     both are single-class selectors with equal specificity, so source order
+     decides the winner, and the tab-specific hide needs to beat the generic
+     "always show the current tab" rule. */
+  .view.tshirt-view, .view.reports-view { display: none !important; }
   body { background: #fff; }
   /* Registration tab: hide the on-screen (collapsed-columns) table and show the
      full-column print-only table built fresh by printRegistration() instead.
@@ -300,8 +305,31 @@ table.matrix td.z { color: #c2c8d0; }
     font-size: 6px; line-height: 1.25; padding: 2px 3px;
     white-space: normal; word-break: break-word; overflow-wrap: break-word;
   }
+  /* Registration/Sponsor/Summary Reports (Reports tab) only have a handful
+     of narrow columns, unlike the 47-column full Registration print above —
+     override its tiny fixed-width/6px styling with a narrower, more
+     readable table. */
+  #printHost table.report-table { table-layout: auto; width: auto; max-width: 100%; }
+  #printHost table.report-table th, #printHost table.report-table td {
+    font-size: 12px; line-height: 1.4; padding: 3px 10px; white-space: nowrap;
+  }
+  #printHost table.report-table th.shirtsum, #printHost table.report-table td.shirtsum { text-align: left; }
   /* Window cards (printWindowCards() in app.js) are no longer printed via
      this page's own @media print rules — they're generated as a real,
      separately-opened PDF (the uploaded fillable template, filled per
      registrant via pdf-lib) instead of an HTML/CSS overlay. */
 }
+
+/* ── Splash page — shown on every app load, before the tabs ── */
+.splash-page {
+  position: fixed; inset: 0; background: var(--bg); z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+}
+.splash-inner { display: flex; flex-direction: column; align-items: center; max-width: 760px; max-height: 90vh; overflow-y: auto; padding: 20px; text-align: center; }
+.splash-banner { width: 100%; max-width: 300px; height: auto; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+.reports-row { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; margin-top: 10px; }
+.reports-banner { display: block; max-width: 360px; width: 100%; height: auto; border-radius: 10px; flex-shrink: 0; }
+.splash-extra { min-height: 24px; text-align: left; }
+.splash-extra p { margin: 0 0 14px; line-height: 1.5; color: var(--ink); }
+.splash-extra p:last-child { margin-bottom: 0; }
+.splash-actions { display: flex; gap: 14px; margin-top: 24px; flex-shrink: 0; }

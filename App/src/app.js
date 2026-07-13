@@ -2626,9 +2626,13 @@
     row("Total Fee", feeField.wrap);
 
     // Same Payment Type (Cash/Check/Credit Card) + conditional Check # pattern
-    // as Buy T-Shirt and the Sponsors tab's payment forms.
+    // as Buy T-Shirt and the Sponsors tab's payment forms. "Unpaid" is the
+    // same escape hatch used by the Sponsors payment forms (see
+    // renderSponsorForm()) — it isn't a real payment method, it just means
+    // no payment has been collected yet; Status is derived from it below
+    // instead of showing its own separate field.
     var paymentTypeSel = el("select", {});
-    ["Cash", "Check", "Credit Card"].forEach(function (t) { paymentTypeSel.appendChild(el("option", { value: t, text: t })); });
+    ["Unpaid", "Cash", "Check", "Credit Card"].forEach(function (t) { paymentTypeSel.appendChild(el("option", { value: t, text: t })); });
     paymentTypeSel.addEventListener("change", function () {
       checkNumRow.style.display = paymentTypeSel.value === "Check" ? "" : "none";
     });
@@ -2639,10 +2643,6 @@
       el("span", { class: "form-label", text: "Check #" }), checkNumInput
     ]);
     body.appendChild(checkNumRow);
-
-    var statusSel = el("select", {});
-    ["Paid", "Not Paid"].forEach(function (v) { statusSel.appendChild(el("option", { value: v, text: v })); });
-    row("Status", statusSel);
 
     if (state.walkinSyncError) {
       body.appendChild(el("div", { class: "messages", style: "margin-bottom:10px" }, [state.walkinSyncError]));
@@ -2669,11 +2669,10 @@
       yearInput.value = "";
       modelInput.value = "";
       colorInput.value = "";
-      statusSel.value = "Paid";
       inCarShowSel.value = "No";
       syncVehicleFieldsVisibility();
       feeInput.value = String(state.appSettings.walkInNonCarShowFee);
-      paymentTypeSel.value = "Cash";
+      paymentTypeSel.value = "Unpaid";
       checkNumInput.value = "";
       checkNumRow.style.display = "none";
       errorMsg.textContent = "";
@@ -2692,6 +2691,10 @@
         errorMsg.textContent = "Check # is required for a Check payment.";
         return;
       }
+      // A $0 Total Fee (e.g. a Walk-In not entering the car show) has nothing
+      // to actually collect payment for — force Payment Type to Cash rather
+      // than leaving it on Unpaid, so it doesn't show as still owing money.
+      var effectivePaymentType = (LOGIC.toNum(feeInput.value.trim()) === 0) ? "Cash" : paymentTypeSel.value;
       var record = LOGIC.buildManualRegistration({
         id: "wk" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
         regType: regTypeSel.value,
@@ -2711,9 +2714,9 @@
         color: colorInput.value.trim(),
         inCarShow: inCarShowSel.value,
         totalFee: feeInput.value.trim(),
-        paymentType: paymentTypeSel.value,
+        paymentType: effectivePaymentType,
         checkNum: checkNumInput.value.trim(),
-        status: statusSel.value,
+        status: effectivePaymentType === "Unpaid" ? "Not Paid" : "Paid",
         regDate: fmtDate(new Date())
       }, CONFIG);
       upsertWalkin(record);

@@ -375,6 +375,8 @@
     rec["State"] = fields.state || "";
     rec["Zip"] = fields.zip || "";
     rec["Total Fee"] = toNum(fields.totalFee);
+    rec["Payment Type"] = fields.paymentType || "";
+    rec["Check #"] = fields.paymentType === "Check" ? (fields.checkNum || "") : "";
     rec["Status"] = fields.status || "Paid";
     var year = toInt(fields.year);
     rec["Year"] = year || "";

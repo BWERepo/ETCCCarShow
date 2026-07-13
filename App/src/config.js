@@ -134,7 +134,7 @@
     baseColumnOrder: [
       "Reg #", "Reg Type", "Last Name", "First Name", "Spouse First Name", "Reg Date",
       "#", "Club Name", "Phone", "Email", "Address", "City", "State",
-      "Zip", "Total Fee", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
+      "Zip", "Total Fee", "Payment Type", "Check #", "Individual Sponsorship", "Status", "Year", "Model", "Gen", "In Car Show?",
       "Color", "FreeTShirtSize", "FreeTShirtSize Comments"
     ],
 

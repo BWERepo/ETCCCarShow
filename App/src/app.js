@@ -490,8 +490,6 @@
   ];
 
   function buildSplashPage() {
-    var headerLogo = $("header.app img.hdr-logo");
-    var logoImg = headerLogo ? el("img", { src: headerLogo.src, style: "height:56px" }) : null;
     var bannerImg = window.__carshowSplashBanner
       ? el("img", { src: window.__carshowSplashBanner, class: "splash-banner", alt: "ETCC Car Show" })
       : null;
@@ -501,15 +499,14 @@
     var continueBtn = el("button", { class: "btn primary" }, ["Continue"]);
     continueBtn.addEventListener("click", function () { state.splashOpen = false; renderViews(); });
 
-    // Same logo + "Car Show Manager" title treatment every other full-page
-    // screen's banner uses (see buildPageBanner()), so the splash page reads
-    // as part of the same app rather than a standalone screen.
-    var kids = [];
-    var titleKids = [];
-    if (logoImg) titleKids.push(logoImg);
-    titleKids.push(el("h2", { text: "Car Show Manager", style: "margin: 0" }));
-    kids.push(el("div", { style: "display: flex; align-items: center; gap: 12px; margin-bottom: 20px" }, titleKids));
-    kids.push(el("h1", { text: "Welcome to the Car Show Manager", style: "margin: 0 0 16px; font-size: 28px; text-align: center" }));
+    // Same buildPageBanner() every other full-page screen (Change Log,
+    // T-Shirt Order Form, etc.) uses, so the splash page's heading matches
+    // theirs exactly — no Back button since splash has nothing to return to.
+    var head = buildPageBanner(null, "Welcome to the Car Show Manager");
+    head.style.alignSelf = "stretch";
+    head.style.marginBottom = "20px";
+
+    var kids = [head];
     if (bannerImg) kids.push(bannerImg);
     kids.push(el("div", { class: "splash-extra" }, SPLASH_COPY.map(function (p) { return el("p", { text: p }); })));
     kids.push(el("div", { class: "splash-actions" }, [cancelBtn, continueBtn]));
@@ -1001,7 +998,7 @@
   // Click any row to see every field for that one registration without scrolling —
   // grouped into readable sections instead of the table's 40+ side-by-side columns.
   var DETAIL_SECTIONS = [
-    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Individual Sponsorship", "Spouse First Name", "#"] },
+    { title: "Registration", cols: ["Reg Date", "Reg Type", "Status", "Total Fee", "Payment Type", "Check #", "Individual Sponsorship", "Spouse First Name", "#"] },
     { title: "Contact", cols: ["Phone", "Email", "Address", "City", "State", "Zip"] },
     { title: "Vehicle", cols: ["Year", "Model", "Color", "Gen", "In Car Show?"] }
   ];
@@ -1017,7 +1014,7 @@
   // tab's own Ind. Spon. Text column at sync time, just not a
   // baseColumnOrder column here.
   var EDITABLE_FIELDS = {
-    "Reg #": 1, "Last Name": 1, "First Name": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Individual Sponsorship": 1,
+    "Reg #": 1, "Last Name": 1, "First Name": 1, "Club Name": 1, "Status": 1, "Total Fee": 1, "Payment Type": 1, "Check #": 1, "Individual Sponsorship": 1,
     "Spouse First Name": 1, "#": 1,
     "Phone": 1, "Email": 1, "Address": 1, "City": 1, "State": 1, "Zip": 1,
     "Year": 1, "Model": 1, "Color": 1, "Gen": 1, "In Car Show?": 1
@@ -1045,6 +1042,14 @@
         ["No", "Yes"].forEach(function (v) {
           var o = el("option", { value: v, text: v });
           if (String(r[c]) === v) o.setAttribute("selected", "selected");
+          input.appendChild(o);
+        });
+      } else if (c === "Payment Type") {
+        var currentPT = r[c] == null ? "" : String(r[c]);
+        input = el("select", {});
+        [["", "— none —"], ["Cash", "Cash"], ["Check", "Check"], ["Credit Card", "Credit Card"]].forEach(function (pair) {
+          var o = el("option", { value: pair[0], text: pair[1] });
+          if (pair[0] === currentPT) o.setAttribute("selected", "selected");
           input.appendChild(o);
         });
       } else if (c === "Status") {
@@ -2499,10 +2504,12 @@
 
     var body = el("div", { class: "modal-body" });
     function row(label, input, required) {
-      body.appendChild(el("div", { class: "form-row" }, [
+      var div = el("div", { class: "form-row" }, [
         el("span", { class: "form-label", text: label + (required ? " *" : "") }),
         input
-      ]));
+      ]);
+      body.appendChild(div);
+      return div;
     }
 
     var regTypeSel = el("select", {});
@@ -2569,6 +2576,18 @@
     regTypeSel.addEventListener("change", syncRegNumberField);
     syncRegNumberField();
 
+    // In Car Show? lives right after Reg # since it gates both the fee
+    // default below and whether the Vehicle fields (Year/Model/Color) show
+    // at all — a walk-in who isn't entering the car show has no vehicle to
+    // record.
+    var inCarShowSel = el("select", {});
+    ["No", "Yes"].forEach(function (v) { inCarShowSel.appendChild(el("option", { value: v, text: v })); });
+    inCarShowSel.addEventListener("change", function () {
+      feeInput.value = String(inCarShowSel.value === "Yes" ? state.appSettings.walkInCarShowFee : state.appSettings.walkInNonCarShowFee);
+      syncVehicleFieldsVisibility();
+    });
+    row("In Car Show?", inCarShowSel);
+
     var clubNameInput = el("input", { type: "text" });
     row("Club Name", clubNameInput);
     var phoneInput = el("input", { type: "text" });
@@ -2584,31 +2603,42 @@
     var zipInput = el("input", { type: "text" });
     row("Zip", zipInput);
     var yearInput = el("input", { type: "text" });
-    row("Corvette Year", yearInput);
+    var yearRow = row("Corvette Year", yearInput);
     var modelInput = el("input", { type: "text" });
-    row("Model", modelInput);
+    var modelRow = row("Model", modelInput);
     var colorInput = el("input", { type: "text" });
-    row("Color", colorInput);
+    var colorRow = row("Color", colorInput);
+    function syncVehicleFieldsVisibility() {
+      var show = inCarShowSel.value === "Yes";
+      yearRow.style.display = show ? "" : "none";
+      modelRow.style.display = show ? "" : "none";
+      colorRow.style.display = show ? "" : "none";
+    }
+    syncVehicleFieldsVisibility();
 
     // Total Fee Collected is filled in from Developer > Settings' matching fee
     // whenever In Car Show? changes (still freely editable after that, e.g.
     // for a partial payment or a manually negotiated amount).
     var feeField = moneyInput({ type: "text" });
     var feeInput = feeField.input;
-    var inCarShowSel = el("select", {});
-    ["No", "Yes"].forEach(function (v) { inCarShowSel.appendChild(el("option", { value: v, text: v })); });
-    inCarShowSel.addEventListener("change", function () {
-      feeInput.value = String(inCarShowSel.value === "Yes" ? state.appSettings.walkInCarShowFee : state.appSettings.walkInNonCarShowFee);
-    });
-    row("In Car Show?", inCarShowSel);
     feeInput.value = String(state.appSettings.walkInNonCarShowFee); // matches inCarShowSel's default ("No")
 
-    var shirtSel = el("select", {});
-    shirtSel.appendChild(el("option", { value: "", text: "— none —" }));
-    Object.keys(CONFIG.freeSizeMap).forEach(function (sz) { shirtSel.appendChild(el("option", { value: sz, text: sz })); });
-    row("Free T-Shirt Size", shirtSel);
+    row("Total Fee", feeField.wrap);
 
-    row("Total Fee Collected", feeField.wrap);
+    // Same Payment Type (Cash/Check/Credit Card) + conditional Check # pattern
+    // as Buy T-Shirt and the Sponsors tab's payment forms.
+    var paymentTypeSel = el("select", {});
+    ["Cash", "Check", "Credit Card"].forEach(function (t) { paymentTypeSel.appendChild(el("option", { value: t, text: t })); });
+    paymentTypeSel.addEventListener("change", function () {
+      checkNumRow.style.display = paymentTypeSel.value === "Check" ? "" : "none";
+    });
+    row("Payment Type", paymentTypeSel);
+
+    var checkNumInput = el("input", { type: "text" });
+    var checkNumRow = el("div", { class: "form-row", style: "display:none" }, [
+      el("span", { class: "form-label", text: "Check #" }), checkNumInput
+    ]);
+    body.appendChild(checkNumRow);
 
     var statusSel = el("select", {});
     ["Paid", "Not Paid"].forEach(function (v) { statusSel.appendChild(el("option", { value: v, text: v })); });
@@ -2639,10 +2669,13 @@
       yearInput.value = "";
       modelInput.value = "";
       colorInput.value = "";
-      shirtSel.value = "";
       statusSel.value = "Paid";
       inCarShowSel.value = "No";
+      syncVehicleFieldsVisibility();
       feeInput.value = String(state.appSettings.walkInNonCarShowFee);
+      paymentTypeSel.value = "Cash";
+      checkNumInput.value = "";
+      checkNumRow.style.display = "none";
       errorMsg.textContent = "";
     }
     regTypeSel.addEventListener("change", clearOtherFields);
@@ -2653,6 +2686,10 @@
       if (!lastName) { errorMsg.textContent = "Last Name is required."; return; }
       if (regTypeSel.value === CONFIG.REG_TYPE.WALKIN_MEMBER && !regNumberInput.value.trim()) {
         errorMsg.textContent = "Reg # is required for a Walk-In Member.";
+        return;
+      }
+      if (paymentTypeSel.value === "Check" && !checkNumInput.value.trim()) {
+        errorMsg.textContent = "Check # is required for a Check payment.";
         return;
       }
       var record = LOGIC.buildManualRegistration({
@@ -2673,8 +2710,9 @@
         model: modelInput.value.trim(),
         color: colorInput.value.trim(),
         inCarShow: inCarShowSel.value,
-        freeTShirtSize: shirtSel.value,
         totalFee: feeInput.value.trim(),
+        paymentType: paymentTypeSel.value,
+        checkNum: checkNumInput.value.trim(),
         status: statusSel.value,
         regDate: fmtDate(new Date())
       }, CONFIG);
@@ -2722,7 +2760,7 @@
   // default appearance) — setFontSize() per field plus a single
   // form.updateFieldAppearances(boldFont) call (regenerates every field's
   // appearance stream using that font) right before flatten().
-  var WINDOW_CARD_FIELD_FONT_SIZE = 36;
+  var WINDOW_CARD_FIELD_FONT_SIZE = 39.6; // 36 + 10%
   function fillOneWindowCard(templateBytes, r) {
     var PDFLib = window.PDFLib;
     return PDFLib.PDFDocument.load(templateBytes).then(function (doc) {
@@ -3646,8 +3684,13 @@
   function buildPageBanner(closeCallback, pageTitle, printCallback) {
     var headerLogo = $("header.app img.hdr-logo");
     var logoImg = headerLogo ? el("img", { src: headerLogo.src, style: "height:40px" }) : null;
-    var closeBtn = el("button", { class: "btn" }, ["← Back"]);
-    closeBtn.addEventListener("click", closeCallback);
+    var leftKids = [];
+    if (closeCallback) {
+      var closeBtn = el("button", { class: "btn" }, ["← Back"]);
+      closeBtn.addEventListener("click", closeCallback);
+      leftKids.push(closeBtn);
+    }
+    if (logoImg) leftKids.push(logoImg);
     var centerKids = [el("h2", { text: "Car Show Manager", style: "margin: 0" })];
     if (pageTitle) centerKids.push(el("h3", { text: pageTitle, style: "margin: 4px 0 0; color: var(--muted); font-weight: 600" }));
     var rightKids = [];
@@ -3657,7 +3700,7 @@
       rightKids.push(printBtn);
     }
     return el("div", { class: "api-page-head", style: "display: grid; grid-template-columns: 1fr auto 1fr; align-items: center" }, [
-      el("div", { style: "display: flex; align-items: center; gap: 10px; justify-self: start" }, logoImg ? [closeBtn, logoImg] : [closeBtn]),
+      el("div", { style: "display: flex; align-items: center; gap: 10px; justify-self: start" }, leftKids),
       el("div", { style: "justify-self: center; text-align: center" }, centerKids),
       el("div", { style: "justify-self: end" }, rightKids)
     ]);

@@ -1,137 +1,152 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-13 (end of session). **Two new features shipped, deployed, and
-pushed this session**: a Reports tab and a splash welcome page. Git is caught up —
-commits `72f199ed` (the feature work) and `60eee296` (raw source images) are both
-pushed to `origin/main` as of this doc's own commit (check `git log` for the exact
-hash of that doc commit if picking this up cold). The live site was deployed via
-`ftp-deploy.sh` partway through the session (before the final polish commits below —
-see "Known follow-ups" for the one thing to double check) and again via `/BWECheckpoint`
-at the very end, so the deployed code matches `HEAD`.
+Last updated: 2026-07-13 (end of session, later). **Four things done this session**: the
+splash page's heading was unified with every other full-page screen's `buildPageBanner()`,
+a new fillable Window Card PDF template was built from fresh artwork, the Window Card's
+printed field text was bumped 10% larger, and the Add Registration form got three rounds
+of changes (Total Fee relabel, Free T-Shirt Size removal, a new Payment Type/Check #
+"how paid" field wired all the way through the schema, and an In Car Show?-gated Vehicle
+section). The live site was deployed twice via `/BWEDeploy` (both succeeded; the second
+is what's currently live). Everything below is committed and pushed as of this doc's own
+`/ETCCCarShowEnd` commit (check `git log` for the exact hash if picking this up cold).
 
-## This session's work (2026-07-13)
+## This session's work (2026-07-13, later session)
 
-**1. New "Reports" tab** (5th tab, after T-Shirts) — a launcher with four buttons that
-each go **straight to the browser's print dialog** (no intermediate on-screen page,
-per explicit user request partway through the session — the original design had each
-button open a full-page "preview" screen first, which was then deleted once the user
-said they just wanted print-preview directly):
-- **📊 Car Show Summary Report** — reuses `buildSummaryView()` verbatim (the same
-  panels the Summary tab renders on screen), cloned into `#printHost` so it can never
-  drift out of sync with the Summary tab.
-- **📋 Registration Report** — Last Name / First Name / Reg # / Shirts only, always
-  sorted by Last Name (regardless of the Registration tab's own current sort), scoped
-  to that tab's current search/status filters.
-- **🤝 Sponsor Report** — Sponsor Name / Member Name / Sponsor Type / Contact / Phone /
-  Email / Website, with Email/Website hotlinked (`mailto:`/`https://`) the same way the
-  Sponsors tab's own table already does.
-- **👕 T-Shirt Report** — reuses the same paid-registrations-by-shirt data as the
-  existing T-Shirts tab report (see below), now printing directly instead of opening
-  that tab's own full-page screen first.
+**1. Splash page heading unified with `buildPageBanner()`** — the splash page used to
+build its own bespoke logo+title row (56px logo, 12px gap, plain flex layout) instead of
+reusing the `buildPageBanner()` helper every other full-page screen (Change Log, T-Shirt
+Order Form, T-Shirt Report, Buy T-Shirt) already shares. User asked for the splash
+heading to "look exactly like the tab page heading" for spacing/contents; when asked to
+clarify via AskUserQuestion, chose "reuse buildPageBanner() as-is." Concretely:
+- `buildPageBanner(closeCallback, pageTitle, printCallback)` now treats `closeCallback`
+  as optional — when omitted, the "← Back" button is simply left out (every existing
+  call site still passes one, so no behavior change elsewhere).
+- `buildSplashPage()` now calls `buildPageBanner(null, "Welcome to the Car Show
+  Manager")` instead of hand-rolling its own header — same 40px logo, same grid
+  layout/spacing every other screen uses. The large 28px "Welcome to..." heading became
+  the small muted h3 subtitle style `buildPageBanner()` gives every other screen's page
+  title (a real visual downsize from before — confirmed as the intended outcome when
+  asked, not an accidental regression).
 
-A banner image (`Z:\Backup\Websites\CarShow\Images\Reports.png`, resized/compressed to
-700×560 JPEG at `App/assets/reports-banner.jpg`) sits centered on the tab next to the
-report buttons.
+**2. New Car Show Window Card fillable PDF template**, built from the user's new artwork
+at `Z:\Backup\Websites\CarShow\Images\WindowCard.png`:
+- The user asked to "replace the window card" with this PNG. Since the app's live
+  Window Card feature (Developer > Settings > Car Show Window Card) requires a
+  *fillable* PDF (5 AcroForm text fields: Owner/Generation/Year/Model/CarNumber — see
+  `deploy/window-card-pdf.php`/`deploy/README.md`'s "Car Show Window Card printing"
+  section), a flat PNG couldn't be uploaded directly.
+- Confirmed the new PNG is exactly 1536×1024 — the same page size as the existing
+  `Images/WindowCardFillable.pdf` template — so rebuilt `Images/WindowCardFillable.pdf`
+  with the new artwork as the page background, keeping the same 5 fields at their exact
+  original rects (verified by reading the old template's widget rectangles with
+  `pdf-lib` directly in Node before rebuilding).
+- **pdf-lib quirk found and fixed**: a text field's appearance always draws a border
+  stroke unless a `borderColor` is explicitly supplied — the PDF spec treats
+  `borderWidth: 0` as "thinnest renderable line" (a visible 1px hairline), not "no
+  border," and pdf-lib's default appearance provider falls back to solid black whenever
+  no border color is set. Fixed by sampling the actual background pixel color under each
+  field with Python's PIL (~`rgb(242,242,242)`, consistent across all 5 fields) and
+  setting `borderColor` to match, so the mandatory hairline blends in invisibly. Verified
+  by test-filling the rebuilt template with sample data and reading the resulting PDF
+  back (via the `Read` tool's native PDF rendering) before finalizing.
+- **Discovered the live print path ignores the template's own font entirely**:
+  `fillOneWindowCard()` in `app.js` already calls `form.updateFieldAppearances(boldFont)`
+  (`HelveticaBold`, fixed size) right before flattening every printed card, which
+  regenerates *every* field's appearance regardless of whatever font/size the uploaded
+  template itself has — so whatever font size gets baked into the template file during a
+  rebuild is cosmetically dead for the real feature. **Don't bother tuning field
+  font/size inside the PDF itself in a future rebuild — it's overridden unconditionally
+  at print time by `WINDOW_CARD_FIELD_FONT_SIZE`.**
+- Per a follow-up "make the text bold and larger by 10%" request: text was already bold
+  (see above); bumped `WINDOW_CARD_FIELD_FONT_SIZE` in `app.js` from `36` to `39.6`
+  (36 + 10%).
+- **Uploading to the live server needs the site password** (`window-card.pdf` is
+  server-side data, not code — not part of `ftp-deploy.sh`, same as every other
+  `*-data.json`/uploaded-template file). Offered to `curl` it directly if the user pasted
+  the password, or to do it via Developer > Settings themselves. **The user appears to
+  have already done this independently** — a later `/BWEDeploy` run's FTP file listing
+  showed `window-card.pdf` on the server already matching the new file's exact size
+  (1,602,629 bytes), dated before that deploy — so the new Window Card is confirmed live
+  already, no further action needed there.
 
-**Three print bugs found and fixed along the way** (all three affect every report that
-uses `#printHost`, so worth knowing if a future print regression shows up):
-- **CSS specificity bug**: `.reports-view { display: none !important; }` and
-  `.view { display: block !important; }` are both single-class selectors with equal
-  specificity — since `.view` was declared *after* `.reports-view` in `styles.css`, it
-  won, so the Reports tab's own banner image + buttons kept bleeding into every printed
-  report underneath the print dialog. Fixed by adding a **second**, more specific rule
-  *after* `.view`: `.view.reports-view, .view.tshirt-view { display: none !important; }`
-  (two-class selector beats one-class, and it's also now the last word in source order).
-  If a future report/tab has this same "extra stuff shows up in print" bug, check this
-  exact pattern first.
-- **Summary Report print bug**: its Print button originally just called
-  `clearPrintHost(); window.print();` without ever populating `#printHost` — printed a
-  blank page. Fixed by giving it a real `printSummaryReport()` that clones
-  `buildSummaryView()`'s panels into `#printHost` first.
-- **T-Shirt Report print bug**: `printTshirtReport()` used to prepend the club's round
-  logo image + a redundant "T-Shirt Report"/date header block before the table, which
-  pushed the table onto a second printed page (mostly-empty page 1, table starts on
-  page 2). Removed the logo/title/date block entirely — the table now starts
-  immediately, single-page for a typical roster.
+**3. Add Registration form — three rounds of changes**:
+- Renamed the "Total Fee Collected" label to "Total Fee" (the underlying record column
+  was already named `"Total Fee"`, so this was label-only).
+- Removed the "Free T-Shirt Size" field entirely (dropdown, its `clearOtherFields()`
+  reset, and its `freeTShirtSize` pass-through into `LOGIC.buildManualRegistration()`).
+  `logic.js` itself wasn't touched — it already treats a missing `freeTShirtSize` as
+  `""`, so no shirt bucket gets incremented for walk-ins added via this form anymore.
+- Added a new **"Payment Type" (Cash/Check/Credit Card) + conditional "Check #"** field,
+  matching the same show/hide pattern already used by Buy T-Shirt and the Sponsors tab's
+  payment forms. When asked how far this should go (there was no existing Payment
+  Type/Check # data on registrations at all — only Total Fee/Status), the user chose
+  **"Full column, everywhere"**, so this went all the way through the schema:
+  - `config.js`'s `baseColumnOrder` gained `"Payment Type"`/`"Check #"` (right after
+    `"Total Fee"`) — blank for CSV-imported rows (ClubExpress has no such columns), same
+    treatment as `"Spouse First Name"`.
+  - `logic.js`'s `buildManualRegistration()` now stores both (`Check #` only populated
+    when Payment Type is `"Check"`).
+  - The Registration tab's on-screen table, its print table, and the Excel export all
+    pick up the two new columns **automatically** — all three already iterate
+    generically over `state.result.columns`/`res.columns` rather than a separate
+    hardcoded column list. Added explicit Excel column widths (`"Payment Type": 14,
+    "Check #": 10`) so they don't render at cramped auto-widths.
+  - The detail modal also gained both fields — added to `DETAIL_SECTIONS`'s
+    "Registration" section and `EDITABLE_FIELDS`, with "Payment Type" rendered as a
+    select (blank/Cash/Check/Credit Card) using the same pattern as the existing
+    "Status" field.
+  - A "Check # is required for a Check payment" validation was added to the Add
+    Registration form's Save handler, matching Buy T-Shirt's same rule.
+- Moved **"In Car Show?"** from its old position (down near Total Fee) to right after
+  **"Reg #"**.
+- Made **Corvette Year / Model / Color** conditionally visible — hidden by default,
+  shown only when "In Car Show?" is "Yes" (a walk-in not entering the car show has no
+  vehicle to record). Required making the form's internal `row()` helper return its
+  wrapper `<div>` (a backward-compatible change — every other existing call site already
+  ignored the return value) so the three rows could be toggled; re-hidden automatically
+  if Reg Type changes and the form resets.
 
-**Print table styling**: Registration/Sponsor/T-Shirt Report print tables now use a new
-`.report-table` CSS class (auto-sized columns, 12px font, `nowrap` cells) instead of
-sharing the Registration tab's 47-column print table's tiny 6px/fixed-width styling —
-these reports have only 3-7 narrow columns and were unreadably cramped before. The
-Registration Report's Shirts column is explicitly left-aligned (`text-align: left`)
-inside `.report-table`, overriding the app-wide `.shirtsum` class's centered alignment.
+**Deployed twice this session** via `/BWEDeploy` (both succeeded — the second had one
+transient `curl exit 56` network hiccup on `app-bundle.html` that auto-retried and
+succeeded). The second deploy is what's currently live.
 
-**Print button repositioning**: moved the Registration and Sponsors tabs' own
-"🖨 Print" toolbar buttons to the end of their toolbars (rightmost/upper-right position)
-for consistency with the Reports tab's buttons.
-
-**2. New splash welcome page** — shown on **every** app load (not once-per-session),
-blocking the rest of the app until dismissed:
-- Standard logo + "Car Show Manager" title banner (same treatment `buildPageBanner()`
-  gives every other full-page screen), so it reads as part of the same app.
-- "Welcome to the Car Show Manager" heading.
-- A banner image (`Z:\Backup\Websites\CarShow\Images\Splash.png`, resized/compressed to
-  1000×667 JPEG at `App/assets/splash-banner.jpg`, shown at 300px display width — half
-  its original size, per an explicit "reduce size by 50%" request — positioned *below*
-  the heading, per an explicit reordering request).
-- Two paragraphs of descriptive copy (`SPLASH_COPY` array in `app.js` — originally four
-  paragraphs with `**bold**` markdown spans; both the bold formatting and the second two
-  paragraphs (sponsor management / reporting) were removed at the user's explicit
-  request, leaving just the app-overview and pre-registration/walk-in paragraphs).
-- **Cancel** button → `logout.php` (same destination as the hamburger menu's Logout).
-- **Continue** button → dismisses the splash (`state.splashOpen = false`) and shows the
-  app as normal.
-
-Both banner images started as much larger PNGs pasted/saved by the user (a ChatGPT-
-generated image fetched via its share-link URL for the first splash banner iteration,
-then replaced with `Images/Splash.png`; the Reports banner from `Images/Reports.png`)
-and were resized/compressed with Python's PIL (`im.thumbnail(...)` + JPEG `quality=82`)
-before embedding — the raw, uncompressed originals are also committed at
-`Z:\Backup\Websites\CarShow\Images\Reports.png` (2.0 MB) and `Images\Splash.png`
-(2.3 MB) as source material, separate from the small processed copies in `App/assets/`
-that the build actually embeds.
-
-**3. New Claude Code skill**: `/BWETest` ("Update regression tests") — created this
-session at the user's request, in the same global `ClaudeConfig` skills repo pattern as
-`/BWEDeploy`/`/BWECheckpoint`/etc. (`Z:\Backup\Websites\Claude\.claude\skills\BWETest\`,
-symlinked into `C:\Users\Admin\.claude\skills\`). Runs `node test/run-tests.js`,
-distinguishes stale assertions (update the test) from real bugs (fix the source), adds
-coverage for recent untested pure-logic changes, and re-runs until clean. Build/deploy/
-git actions are explicitly out of scope for it. **Not yet committed/pushed** in the
-`ClaudeConfig` repo — that repo already has unrelated uncommitted changes sitting there
-(`StandardCommands.md`/`StandardPrompts.md`) from outside this session that weren't
-touched; only `BWETest/SKILL.md` is new. If a future session needs `/BWETest` to persist
-across machines, commit+push just that new file in `Z:\Backup\Websites\Claude\`.
-
-Ran `/BWETest`'s own workflow once this session (all logic-layer test changes above are
-UI-only, so nothing needed updating): `node test/run-tests.js` → **60 passed, 0
-failed**, unchanged from before this session — none of this session's work touched
-`src/logic.js`/`src/config.js`/`src/excel.js`.
-
-**Commits this session**: `72f199ed` (Reports tab + splash page — 7 files,
-+447/−69) and `60eee296` (raw source images — 2 files). Both deployed live via
-`ftp-deploy.sh` multiple times during the session as work progressed (see the many
-`/BWEDeploy` invocations), then git-committed and pushed at the very end via this doc's
-own `/ETCCCarShowEnd` commit.
+**Files touched this session**: `App/src/app.js`, `App/src/config.js`,
+`App/src/logic.js`, `App/src/excel.js`, `App/ETCCCarShow.html` (build output),
+`App/version.json` (auto-bumped by `build.js`), `Images/WindowCardFillable.pdf`
+(rebuilt), `Images/WindowCard.png` (the user's new source artwork — was already sitting
+modified-but-uncommitted in the working tree from before this session; swept up into
+this session's commit since it's directly tied to the Window Card work above).
 
 ## Known follow-ups / things a new session might need to know (this session's additions)
 
-- **Reports tab and splash page have no automated test coverage** — same established
-  gap as every other DOM/UI feature in this app (see "Testing" below); verified only by
-  the user's own manual review of each screenshot/print-preview iteration during this
-  session.
-- **`/BWETest` skill is uncommitted in the `ClaudeConfig` repo** — see above. Low risk
-  (it's a new file, not a conflicting edit) but worth cleaning up in a future session if
-  it matters that the skill persists to a fresh machine.
-- **The splash page shows on every load, every session, no dismissal memory** — this
-  was an explicit design choice ("Every page load (Recommended)" was chosen over
-  "Once per session" when asked). If a future ask wants it to only show once, that's a
-  deliberate behavior change, not a bug fix.
-- If a future report or print screen shows unrelated page content bleeding into the
-  printed output, re-read the CSS specificity bug description above first — it's a
-  general trap (`.view { display: block !important; }` beats any single-class
-  `!important` hide rule declared before it in the stylesheet) that could recur for any
-  new tab added the same way Reports/T-Shirts were.
+- **Regression tests not updated** — per this project's rule, `test/run-tests.js`/
+  `src/regression-tests.js` are only touched on an explicit "test" ask, which didn't
+  happen this session. `buildManualRegistration()`'s Payment Type/Check # handling has
+  no regression coverage yet (only a manual Node sanity check during the session, not
+  committed as a test). If a future session runs `/BWETest`, expect it to add coverage
+  for this.
+- **Payment Type/Check # have no automated UI coverage either** — same established gap
+  as every other DOM/app.js-level feature (detail modal select, Add Registration
+  conditional rows) — see "Testing" section below.
+- **Splash page's "Welcome to the Car Show Manager" heading is now visually smaller**
+  (small muted h3 subtitle instead of a large 28px centered heading) as a direct
+  consequence of reusing `buildPageBanner()` — confirmed intended, but worth knowing if
+  a future session is asked to make the splash "more prominent" again.
+- **If a future template rebuild is needed for the Window Card**, remember
+  `WINDOW_CARD_FIELD_FONT_SIZE`/bold-ness in `app.js` overrides the template's own field
+  font entirely at print time (see above) — only the field *positions* (and the page's
+  pixel dimensions matching `Images/WindowCard.png`, currently 1536×1024) matter from the
+  template itself.
+- **If a future pdf-lib-based feature needs invisible/no field borders**, the fix is:
+  sample the background color under the field and set `borderColor` to match — there's
+  no way via pdf-lib's public API to omit a text field's border stroke entirely (see the
+  detailed explanation above).
+
+Previous session — last updated 2026-07-13 (earlier session, end). **Two new features
+shipped, deployed, and pushed that session**: a Reports tab and a splash welcome page
+(commits `72f199ed`/`60eee296`). See **"This session's work (2026-07-13)"** further below
+(now relocated past the reference sections, the newest entry in that historical stack)
+for the full detail.
 
 Previous session — last updated 2026-07-12 (later session, end). **No CarShow app code
 changed that session** — the CarShow git repo was already clean/caught-up at session
@@ -566,6 +581,130 @@ stored in this file, in git, or in Claude's memory system.
   plain text baseline at the same padding). Fixed with `vertical-align: middle` on
   `table.grid` cells and `display: block; margin: 0` on the checkbox inputs — both
   tables share the same `table.grid` CSS class, so this was the only real divergence.
+
+## This session's work (2026-07-13)
+
+**1. New "Reports" tab** (5th tab, after T-Shirts) — a launcher with four buttons that
+each go **straight to the browser's print dialog** (no intermediate on-screen page,
+per explicit user request partway through the session — the original design had each
+button open a full-page "preview" screen first, which was then deleted once the user
+said they just wanted print-preview directly):
+- **📊 Car Show Summary Report** — reuses `buildSummaryView()` verbatim (the same
+  panels the Summary tab renders on screen), cloned into `#printHost` so it can never
+  drift out of sync with the Summary tab.
+- **📋 Registration Report** — Last Name / First Name / Reg # / Shirts only, always
+  sorted by Last Name (regardless of the Registration tab's own current sort), scoped
+  to that tab's current search/status filters.
+- **🤝 Sponsor Report** — Sponsor Name / Member Name / Sponsor Type / Contact / Phone /
+  Email / Website, with Email/Website hotlinked (`mailto:`/`https://`) the same way the
+  Sponsors tab's own table already does.
+- **👕 T-Shirt Report** — reuses the same paid-registrations-by-shirt data as the
+  existing T-Shirts tab report (see below), now printing directly instead of opening
+  that tab's own full-page screen first.
+
+A banner image (`Z:\Backup\Websites\CarShow\Images\Reports.png`, resized/compressed to
+700×560 JPEG at `App/assets/reports-banner.jpg`) sits centered on the tab next to the
+report buttons.
+
+**Three print bugs found and fixed along the way** (all three affect every report that
+uses `#printHost`, so worth knowing if a future print regression shows up):
+- **CSS specificity bug**: `.reports-view { display: none !important; }` and
+  `.view { display: block !important; }` are both single-class selectors with equal
+  specificity — since `.view` was declared *after* `.reports-view` in `styles.css`, it
+  won, so the Reports tab's own banner image + buttons kept bleeding into every printed
+  report underneath the print dialog. Fixed by adding a **second**, more specific rule
+  *after* `.view`: `.view.reports-view, .view.tshirt-view { display: none !important; }`
+  (two-class selector beats one-class, and it's also now the last word in source order).
+  If a future report/tab has this same "extra stuff shows up in print" bug, check this
+  exact pattern first.
+- **Summary Report print bug**: its Print button originally just called
+  `clearPrintHost(); window.print();` without ever populating `#printHost` — printed a
+  blank page. Fixed by giving it a real `printSummaryReport()` that clones
+  `buildSummaryView()`'s panels into `#printHost` first.
+- **T-Shirt Report print bug**: `printTshirtReport()` used to prepend the club's round
+  logo image + a redundant "T-Shirt Report"/date header block before the table, which
+  pushed the table onto a second printed page (mostly-empty page 1, table starts on
+  page 2). Removed the logo/title/date block entirely — the table now starts
+  immediately, single-page for a typical roster.
+
+**Print table styling**: Registration/Sponsor/T-Shirt Report print tables now use a new
+`.report-table` CSS class (auto-sized columns, 12px font, `nowrap` cells) instead of
+sharing the Registration tab's 47-column print table's tiny 6px/fixed-width styling —
+these reports have only 3-7 narrow columns and were unreadably cramped before. The
+Registration Report's Shirts column is explicitly left-aligned (`text-align: left`)
+inside `.report-table`, overriding the app-wide `.shirtsum` class's centered alignment.
+
+**Print button repositioning**: moved the Registration and Sponsors tabs' own
+"🖨 Print" toolbar buttons to the end of their toolbars (rightmost/upper-right position)
+for consistency with the Reports tab's buttons.
+
+**2. New splash welcome page** — shown on **every** app load (not once-per-session),
+blocking the rest of the app until dismissed:
+- Standard logo + "Car Show Manager" title banner (same treatment `buildPageBanner()`
+  gives every other full-page screen), so it reads as part of the same app.
+- "Welcome to the Car Show Manager" heading.
+- A banner image (`Z:\Backup\Websites\CarShow\Images\Splash.png`, resized/compressed to
+  1000×667 JPEG at `App/assets/splash-banner.jpg`, shown at 300px display width — half
+  its original size, per an explicit "reduce size by 50%" request — positioned *below*
+  the heading, per an explicit reordering request).
+- Two paragraphs of descriptive copy (`SPLASH_COPY` array in `app.js` — originally four
+  paragraphs with `**bold**` markdown spans; both the bold formatting and the second two
+  paragraphs (sponsor management / reporting) were removed at the user's explicit
+  request, leaving just the app-overview and pre-registration/walk-in paragraphs).
+- **Cancel** button → `logout.php` (same destination as the hamburger menu's Logout).
+- **Continue** button → dismisses the splash (`state.splashOpen = false`) and shows the
+  app as normal.
+
+Both banner images started as much larger PNGs pasted/saved by the user (a ChatGPT-
+generated image fetched via its share-link URL for the first splash banner iteration,
+then replaced with `Images/Splash.png`; the Reports banner from `Images/Reports.png`)
+and were resized/compressed with Python's PIL (`im.thumbnail(...)` + JPEG `quality=82`)
+before embedding — the raw, uncompressed originals are also committed at
+`Z:\Backup\Websites\CarShow\Images\Reports.png` (2.0 MB) and `Images\Splash.png`
+(2.3 MB) as source material, separate from the small processed copies in `App/assets/`
+that the build actually embeds.
+
+**3. New Claude Code skill**: `/BWETest` ("Update regression tests") — created this
+session at the user's request, in the same global `ClaudeConfig` skills repo pattern as
+`/BWEDeploy`/`/BWECheckpoint`/etc. (`Z:\Backup\Websites\Claude\.claude\skills\BWETest\`,
+symlinked into `C:\Users\Admin\.claude\skills\`). Runs `node test/run-tests.js`,
+distinguishes stale assertions (update the test) from real bugs (fix the source), adds
+coverage for recent untested pure-logic changes, and re-runs until clean. Build/deploy/
+git actions are explicitly out of scope for it. **Not yet committed/pushed** in the
+`ClaudeConfig` repo — that repo already has unrelated uncommitted changes sitting there
+(`StandardCommands.md`/`StandardPrompts.md`) from outside this session that weren't
+touched; only `BWETest/SKILL.md` is new. If a future session needs `/BWETest` to persist
+across machines, commit+push just that new file in `Z:\Backup\Websites\Claude\`.
+
+Ran `/BWETest`'s own workflow once this session (all logic-layer test changes above are
+UI-only, so nothing needed updating): `node test/run-tests.js` → **60 passed, 0
+failed**, unchanged from before this session — none of this session's work touched
+`src/logic.js`/`src/config.js`/`src/excel.js`.
+
+**Commits this session**: `72f199ed` (Reports tab + splash page — 7 files,
++447/−69) and `60eee296` (raw source images — 2 files). Both deployed live via
+`ftp-deploy.sh` multiple times during the session as work progressed (see the many
+`/BWEDeploy` invocations), then git-committed and pushed at the very end via this doc's
+own `/ETCCCarShowEnd` commit.
+
+## Known follow-ups / things a new session might need to know (2026-07-13 Reports/splash session)
+
+- **Reports tab and splash page have no automated test coverage** — same established
+  gap as every other DOM/UI feature in this app (see "Testing" below); verified only by
+  the user's own manual review of each screenshot/print-preview iteration during this
+  session.
+- **`/BWETest` skill is uncommitted in the `ClaudeConfig` repo** — see above. Low risk
+  (it's a new file, not a conflicting edit) but worth cleaning up in a future session if
+  it matters that the skill persists to a fresh machine.
+- **The splash page shows on every load, every session, no dismissal memory** — this
+  was an explicit design choice ("Every page load (Recommended)" was chosen over
+  "Once per session" when asked). If a future ask wants it to only show once, that's a
+  deliberate behavior change, not a bug fix.
+- If a future report or print screen shows unrelated page content bleeding into the
+  printed output, re-read the CSS specificity bug description above first — it's a
+  general trap (`.view { display: block !important; }` beats any single-class
+  `!important` hide rule declared before it in the stylesheet) that could recur for any
+  new tab added the same way Reports/T-Shirts were.
 
 ## This session's work (chronological, commits `05525fa..7e66bf8`)
 

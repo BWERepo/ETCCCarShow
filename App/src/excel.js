@@ -94,7 +94,7 @@
       });
     });
     ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: n } };
-    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Spouse First Name": 14, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15 };
+    var widthFor = { "Reg Type": 18, "Email": 26, "Address": 22, "Club Name": 16, "Last Name": 14, "First Name": 12, "Spouse First Name": 14, "Status": 18, "Reg Date": 18, "FreeTShirtSize": 15, "FreeTShirtSize Comments": 16, "Phone": 15, "Payment Type": 14, "Check #": 10 };
     ws.columns.forEach(function (col, i) {
       var name = cols[i];
       col.width = widthFor[name] || (isShirt(res, name) ? 7 : Math.min(Math.max(name.length + 2, 8), 20));

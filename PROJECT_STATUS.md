@@ -1,14 +1,195 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-13 (end of session, later). **Four things done this session**: the
-splash page's heading was unified with every other full-page screen's `buildPageBanner()`,
-a new fillable Window Card PDF template was built from fresh artwork, the Window Card's
-printed field text was bumped 10% larger, and the Add Registration form got three rounds
-of changes (Total Fee relabel, Free T-Shirt Size removal, a new Payment Type/Check #
-"how paid" field wired all the way through the schema, and an In Car Show?-gated Vehicle
-section). The live site was deployed twice via `/BWEDeploy` (both succeeded; the second
-is what's currently live). Everything below is committed and pushed as of this doc's own
-`/ETCCCarShowEnd` commit (check `git log` for the exact hash if picking this up cold).
+Last updated: 2026-07-13 (end of session, latest). **This session's work spanned three
+commits** (`4abcc91e`, `cdc8aced`, `94c1d613`, all pushed) covering the Add Registration
+form (required fields, Payment Type/Status rework, a $0-fee rule, a narrower modal), the
+splash page (now reuses the real header bar instead of a rebuilt copy), the public
+sponsor sign-up form (`sponsor-form.php` — field reorder, a new required field, password
+gate removed, a Done-button navigation bug fixed), the Sponsors tab's "Record Payment"
+modal (now timestamps to the second), and a full print-report overhaul (shared logo/
+title/footer treatment across all 6 print reports, two bug fixes). The live site was
+deployed many times via `/BWEDeploy` throughout the session (each round of feedback was
+tested live) — the last deploy in the list below is what's currently live. `/BWETest`
+was run once (60/60 passed, unchanged — nothing pure-logic changed this session, see
+below). Everything is committed and pushed as of this doc's own `/ETCCCarShowEnd` commit
+(check `git log` for the exact hash if picking this up cold).
+
+## This session's work (2026-07-13, latest session)
+
+**1. Add Registration form** (`App/src/app.js`, `renderAddRegistrationModal()`) — several
+rounds of changes, each deployed live as it landed:
+- **Payment Type / Status rework**: Payment Type used to default to a blank option and
+  Status was its own separate Paid/Not Paid select defaulting to "Not Paid". Both were
+  replaced with a single field: Payment Type now offers **Unpaid/Cash/Check/Credit
+  Card** (defaulting to **Unpaid**) — the same "Unpaid is not a real payment method,
+  it's an escape hatch" convention the Sponsors tab's payment forms already used. Status
+  is now *derived* on Save (`Unpaid` → "Not Paid", anything else → "Paid") instead of
+  being asked separately; the standalone Status field/select was removed from the form
+  entirely.
+- **$0 Total Fee rule**: on Save, if Total Fee is `0`, Payment Type is forced to
+  **Cash** (and therefore Status to Paid) regardless of what was selected — a walk-in
+  not actually owing money shouldn't sit around showing "Unpaid".
+- **Required fields**: First Name, Reg #, In Car Show?, Phone, and Email are now marked
+  required (asterisk) and validated on Save (blank → inline error, same pattern Last
+  Name already used). Reg # was previously only required for Walk-In Member — now
+  required unconditionally (Walk-In Nonmember already auto-fills it, so this only
+  closes a real gap for Walk-In Member). In Car Show? can't actually be left blank
+  (it's a 2-option select defaulting to "No"), so its asterisk is informational only,
+  no extra validation code needed.
+- **Modal narrowed 30%**: `.modal.wide`'s `max-width` dropped from 980px to 686px (it's
+  only used by this one form, so the CSS change is scoped safely) — a better fit now
+  that the form has fewer fields (Status is gone).
+
+**2. Splash page — now reuses the real header bar instead of a rebuilt copy**
+(`App/src/app.js`'s `buildSplashPage()`, `App/src/styles.css`'s `.splash-page`):
+- Previously the splash was `position: fixed; inset: 0`, covering the *entire*
+  viewport including the real `header.app` bar (hamburger, logo, "Car Show Manager"),
+  and built its own separate centered banner via `buildPageBanner(null, "Welcome to
+  the Car Show Manager")` — a different look (h2/h3, no working hamburger) from every
+  tab's actual header. Per an explicit request to match the tab-page banner format
+  "exactly," and a follow-up AskUserQuestion choice ("reuse the real header bar
+  as-is"), the fix was to **stop covering the header at all**: `.splash-page` is no
+  longer `position: fixed`/`inset: 0` — it now renders in normal flow inside `#app`,
+  same as every tab's content, so the real `header.app` bar shows through above it
+  automatically. The redundant `buildPageBanner()` call was removed from
+  `buildSplashPage()` entirely.
+- **Top-aligned, not vertically centered**: a follow-up request ("move image and text
+  higher up to eliminate most empty lines") changed `.splash-page` from
+  `align-items: center` with a full-viewport `min-height` to `align-items: flex-start`
+  with a small 30px `padding-top` — the banner image/copy/buttons now sit right below
+  the header instead of floating in the vertical middle of a tall empty page.
+
+**3. Sponsor sign-up form** (`App/deploy/sponsor-form.php`) — several changes, each
+deployed live (this file isn't part of `build.js`'s pipeline — it deploys directly via
+`ftp-deploy.sh`, so no `node build.js` step is needed for changes here):
+- **ETCC Member Name moved under Sponsor Name and made required** — was previously
+  further down the form (after Website) and optional (blank meant "not a member"); now
+  it's the second field and required (`*` label, `required` HTML attribute, and
+  server-side validation rejects a blank submission with "ETCC Member Name is
+  required." instead of silently treating blank as valid).
+- **Sponsor Type moved to be the very first question** — was previously second-to-last
+  (right before T-Shirt Size); no other reordering.
+- **"Will appear on shirt" note added** — a small muted parenthetical next to the
+  Sponsor Name label itself: `Sponsor Name * (Will appear on shirt)` (tried once as a
+  separate line below the input first, then moved inline with the label per a
+  follow-up request).
+- **Password gate removed entirely** — this page used to require the same site
+  password/session as `index.php` (added in an earlier session). Per an explicit
+  request this session, the entire login POST handler and the "redirect to
+  `_login.html` if not authenticated" block were deleted, along with the now-unused
+  `session_start()`/`require secrets.php` (nothing else in the file needed them). The
+  form is public again, matching its original pre-gated behavior — no password to hand
+  out to sponsors/businesses.
+- **Bug found and fixed: Done button landed on the splash screen, not the Sponsors
+  tab.** After a successful submission from the app (`sponsor-form.php?from=app`), the
+  Done button already correctly linked to `index.php#sponsors` — but since the splash
+  page shows on *every* app load unconditionally (before any tab/hash logic runs), that
+  URL was landing on the splash instead of the Sponsors tab. Fixed in `app.js`'s
+  `init()`: the existing `if (location.hash === "#sponsors") state.tab = "sponsors";`
+  now also sets `state.splashOpen = false` in the same branch, so arriving via that
+  specific redirect skips the splash outright and lands directly on the Sponsors tab
+  showing the new submission.
+  - Confirmed already-correct and unchanged: the Done button's destination logic
+    itself (`$fromParam === 'app' ? 'index.php#sponsors' : 'https://www.etccwebsite.com/...'`)
+    was already exactly what was asked for — from the app, Done returns to the
+    Sponsors tab; from anywhere else (e.g. linked from ClubExpress), Done returns to
+    `etccwebsite.com`. No change was needed there, just the splash-skip fix above.
+
+**4. Sponsors tab — "Record Payment" modal now timestamps to the second.** The
+standalone modal opened via the Sponsors table's "Mark Paid…" button (distinct from the
+Edit Sponsor modal's own payment section) used to stamp its `date` field with just
+today's bare date (`new Date().toISOString().split("T")[0]`) when Record Payment was
+clicked. Changed to the full current ISO timestamp (`new Date().toISOString()`) so the
+recorded date reflects the actual time of day, not midnight — `recordedAt` (used for
+`pickLatestPayment()`'s same-day tie-break) was already a full timestamp and is
+unaffected.
+
+**5. Print reports — full overhaul, plus two real bugs found and fixed.** All 6 print
+reports (Registration, Sponsors, T-Shirt, and the Reports tab's Summary/Registration/
+Sponsor reports) now share a consistent look via two new helpers in `app.js`:
+- **`buildPrintHeader(title)`** — the same header logo image (read from
+  `header.app img.hdr-logo`) stacked above a centered `<h2>` title.
+- **`buildPrintFooter()`** — a centered "Report Date: <current date/time>" line.
+- Real **"Page n of m"** page numbering was explicitly requested but is **not
+  something the app can compute** — browsers don't expose a total page count to print
+  CSS/JS (confirmed via AskUserQuestion; the user chose to rely on the browser's own
+  print-dialog "Headers and footers" option for real page numbers instead, rather than
+  fake/always-"1 of 1" output).
+- **Registration Report and T-Shirt Report tables are horizontally centered** on the
+  printed page via a new `centered-report-table` CSS class (`margin: 0 auto`), scoped
+  to just those two tables' class lists — Sponsor/Summary reports unaffected.
+- **T-Shirts tab's own "T-Shirt Report" button reworked to go straight to print** —
+  after back-and-forth on what was wanted (initially removed the header/footer
+  thinking the tab's own on-screen preview page was sufficient, then the user
+  clarified the opposite: that on-screen preview page should be removed and the
+  button should go directly to the browser's print dialog, matching the Reports tab's
+  buttons, *with* the shared header/footer). The old `openTshirtReportPage()`/
+  `closeTshirtReportPage()`/`renderTshirtReportPage()` overlay screen (and its
+  `tshirtReportPageOpen` state flag, `#tshirtReportHost` div, and Escape-key handler)
+  were deleted as dead code — `printTshirtReport()` is now called directly from both
+  the T-Shirts tab's button and the Reports tab's button, and both are formatted
+  identically to the Registration Report (logo/title header, centered table,
+  report-date footer).
+- **Bug found and fixed: T-Shirts tab content bled into its own printed report.**
+  `buildTshirtView()`'s wrapper div only had `class: "tshirt-view"` — missing the
+  plain `view` class the print CSS rule `.view.tshirt-view { display: none !important; }`
+  actually keys off of (compare `buildReportsView()`, which correctly used
+  `class: "view reports-view"` from the start). Since the selector never matched,
+  the whole T-Shirts tab panel (the "Total Shirts Needed For Event" matrix + the
+  three navigation buttons) printed on top of/around the actual report table. Fixed
+  by changing the wrapper to `class: "view tshirt-view"`. **If a future tab/print
+  bug shows unrelated on-screen content bleeding into a printed report, check that
+  its view wrapper actually has the plain `view` class, not just its own specific
+  one** — this is the second time this exact class-name trap has bitten a report.
+
+**Tests**: `/BWETest` was run once this session — `node test/run-tests.js` → **60
+passed, 0 failed**, no assertions added or changed, since nothing in `src/logic.js`/
+`src/config.js`/`src/excel.js` changed this session (every change above was in
+`app.js`/`styles.css`/`sponsor-form.php` — DOM/UI-level, not feasible to cover from the
+Node CLI test).
+
+**Deployed many times this session** via `/BWEDeploy` as each round of feedback landed
+(all succeeded) — too many individual rounds to list, but every change above was live
+and manually verified/iterated on by the user between rounds. The very last deploy in
+the session is what's currently live.
+
+**Commits this session**: `4abcc91e` (Add Registration Payment Type/Status defaults,
+narrower modal), `cdc8aced` (splash page header reuse + top-align), `94c1d613` (Add
+Registration required fields + sponsor form updates + print-report overhaul — the
+bulk of the session's work, bundled into one commit at checkpoint time). All pushed to
+`origin/main`.
+
+## Known follow-ups / things a new session might need to know (2026-07-13 latest session)
+
+- **None of this session's changes have automated test coverage** — same established
+  gap as every other DOM/app.js-level feature in this app (Add Registration's new
+  required-field validation, the splash page's header reuse, the sponsor form's
+  reordering/required field, the Record Payment timestamp change, and the print-report
+  helpers all have zero Node-level or UI-level coverage). See "Testing" section below.
+- **"Page n of m" real page numbering is a known, permanent limitation**, not a bug to
+  revisit — browsers don't expose a total page count to print CSS/JS. If asked again,
+  point back to this explanation rather than re-investigating; the browser's own print
+  dialog "Headers and footers" option is the answer for real page numbers.
+- **`sponsor-form.php` is public again (no password)** — a deliberate reversal of an
+  earlier session's password-gating work. If a future ask wants it re-gated, that's a
+  new explicit decision, not a bug fix.
+- **Watch for the "view" class trap on any future tab/print work** — see the T-Shirts
+  tab bug write-up above. Any new tab's on-screen wrapper needs the plain `view` class
+  in addition to its own specific class, or print CSS's `.view.<name> { display: none
+  !important; }` hiding rule will silently never match it.
+
+Previous session — last updated 2026-07-13 (end of session, later). **Four things done
+that session**: the splash page's heading was unified with every other full-page
+screen's `buildPageBanner()`, a new fillable Window Card PDF template was built from
+fresh artwork, the Window Card's printed field text was bumped 10% larger, and the Add
+Registration form got three rounds of changes (Total Fee relabel, Free T-Shirt Size
+removal, a new Payment Type/Check # "how paid" field wired all the way through the
+schema, and an In Car Show?-gated Vehicle section). The live site was deployed twice via
+`/BWEDeploy` that session (both succeeded). See **"This session's work (2026-07-13,
+later session)"** immediately below for the full detail (note: several of that
+session's Payment Type/Status/Add-Registration-form decisions were subsequently
+superseded by the latest session above — e.g. the Status field it added was later
+removed entirely, and Payment Type's blank default became "Unpaid").
 
 ## This session's work (2026-07-13, later session)
 

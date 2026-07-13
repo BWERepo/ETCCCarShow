@@ -1,9 +1,142 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-12 (later session, end). **No CarShow app code changed this
-session** — the CarShow git repo was already clean/caught-up at session start (head
-`964d91a1`) and stayed that way throughout; this session's only work was in the
-**sibling global skills repo**, `Z:\Backup\Websites\Claude\.claude\skills\`
+Last updated: 2026-07-13 (end of session). **Two new features shipped, deployed, and
+pushed this session**: a Reports tab and a splash welcome page. Git is caught up —
+commits `72f199ed` (the feature work) and `60eee296` (raw source images) are both
+pushed to `origin/main` as of this doc's own commit (check `git log` for the exact
+hash of that doc commit if picking this up cold). The live site was deployed via
+`ftp-deploy.sh` partway through the session (before the final polish commits below —
+see "Known follow-ups" for the one thing to double check) and again via `/BWECheckpoint`
+at the very end, so the deployed code matches `HEAD`.
+
+## This session's work (2026-07-13)
+
+**1. New "Reports" tab** (5th tab, after T-Shirts) — a launcher with four buttons that
+each go **straight to the browser's print dialog** (no intermediate on-screen page,
+per explicit user request partway through the session — the original design had each
+button open a full-page "preview" screen first, which was then deleted once the user
+said they just wanted print-preview directly):
+- **📊 Car Show Summary Report** — reuses `buildSummaryView()` verbatim (the same
+  panels the Summary tab renders on screen), cloned into `#printHost` so it can never
+  drift out of sync with the Summary tab.
+- **📋 Registration Report** — Last Name / First Name / Reg # / Shirts only, always
+  sorted by Last Name (regardless of the Registration tab's own current sort), scoped
+  to that tab's current search/status filters.
+- **🤝 Sponsor Report** — Sponsor Name / Member Name / Sponsor Type / Contact / Phone /
+  Email / Website, with Email/Website hotlinked (`mailto:`/`https://`) the same way the
+  Sponsors tab's own table already does.
+- **👕 T-Shirt Report** — reuses the same paid-registrations-by-shirt data as the
+  existing T-Shirts tab report (see below), now printing directly instead of opening
+  that tab's own full-page screen first.
+
+A banner image (`Z:\Backup\Websites\CarShow\Images\Reports.png`, resized/compressed to
+700×560 JPEG at `App/assets/reports-banner.jpg`) sits centered on the tab next to the
+report buttons.
+
+**Three print bugs found and fixed along the way** (all three affect every report that
+uses `#printHost`, so worth knowing if a future print regression shows up):
+- **CSS specificity bug**: `.reports-view { display: none !important; }` and
+  `.view { display: block !important; }` are both single-class selectors with equal
+  specificity — since `.view` was declared *after* `.reports-view` in `styles.css`, it
+  won, so the Reports tab's own banner image + buttons kept bleeding into every printed
+  report underneath the print dialog. Fixed by adding a **second**, more specific rule
+  *after* `.view`: `.view.reports-view, .view.tshirt-view { display: none !important; }`
+  (two-class selector beats one-class, and it's also now the last word in source order).
+  If a future report/tab has this same "extra stuff shows up in print" bug, check this
+  exact pattern first.
+- **Summary Report print bug**: its Print button originally just called
+  `clearPrintHost(); window.print();` without ever populating `#printHost` — printed a
+  blank page. Fixed by giving it a real `printSummaryReport()` that clones
+  `buildSummaryView()`'s panels into `#printHost` first.
+- **T-Shirt Report print bug**: `printTshirtReport()` used to prepend the club's round
+  logo image + a redundant "T-Shirt Report"/date header block before the table, which
+  pushed the table onto a second printed page (mostly-empty page 1, table starts on
+  page 2). Removed the logo/title/date block entirely — the table now starts
+  immediately, single-page for a typical roster.
+
+**Print table styling**: Registration/Sponsor/T-Shirt Report print tables now use a new
+`.report-table` CSS class (auto-sized columns, 12px font, `nowrap` cells) instead of
+sharing the Registration tab's 47-column print table's tiny 6px/fixed-width styling —
+these reports have only 3-7 narrow columns and were unreadably cramped before. The
+Registration Report's Shirts column is explicitly left-aligned (`text-align: left`)
+inside `.report-table`, overriding the app-wide `.shirtsum` class's centered alignment.
+
+**Print button repositioning**: moved the Registration and Sponsors tabs' own
+"🖨 Print" toolbar buttons to the end of their toolbars (rightmost/upper-right position)
+for consistency with the Reports tab's buttons.
+
+**2. New splash welcome page** — shown on **every** app load (not once-per-session),
+blocking the rest of the app until dismissed:
+- Standard logo + "Car Show Manager" title banner (same treatment `buildPageBanner()`
+  gives every other full-page screen), so it reads as part of the same app.
+- "Welcome to the Car Show Manager" heading.
+- A banner image (`Z:\Backup\Websites\CarShow\Images\Splash.png`, resized/compressed to
+  1000×667 JPEG at `App/assets/splash-banner.jpg`, shown at 300px display width — half
+  its original size, per an explicit "reduce size by 50%" request — positioned *below*
+  the heading, per an explicit reordering request).
+- Two paragraphs of descriptive copy (`SPLASH_COPY` array in `app.js` — originally four
+  paragraphs with `**bold**` markdown spans; both the bold formatting and the second two
+  paragraphs (sponsor management / reporting) were removed at the user's explicit
+  request, leaving just the app-overview and pre-registration/walk-in paragraphs).
+- **Cancel** button → `logout.php` (same destination as the hamburger menu's Logout).
+- **Continue** button → dismisses the splash (`state.splashOpen = false`) and shows the
+  app as normal.
+
+Both banner images started as much larger PNGs pasted/saved by the user (a ChatGPT-
+generated image fetched via its share-link URL for the first splash banner iteration,
+then replaced with `Images/Splash.png`; the Reports banner from `Images/Reports.png`)
+and were resized/compressed with Python's PIL (`im.thumbnail(...)` + JPEG `quality=82`)
+before embedding — the raw, uncompressed originals are also committed at
+`Z:\Backup\Websites\CarShow\Images\Reports.png` (2.0 MB) and `Images\Splash.png`
+(2.3 MB) as source material, separate from the small processed copies in `App/assets/`
+that the build actually embeds.
+
+**3. New Claude Code skill**: `/BWETest` ("Update regression tests") — created this
+session at the user's request, in the same global `ClaudeConfig` skills repo pattern as
+`/BWEDeploy`/`/BWECheckpoint`/etc. (`Z:\Backup\Websites\Claude\.claude\skills\BWETest\`,
+symlinked into `C:\Users\Admin\.claude\skills\`). Runs `node test/run-tests.js`,
+distinguishes stale assertions (update the test) from real bugs (fix the source), adds
+coverage for recent untested pure-logic changes, and re-runs until clean. Build/deploy/
+git actions are explicitly out of scope for it. **Not yet committed/pushed** in the
+`ClaudeConfig` repo — that repo already has unrelated uncommitted changes sitting there
+(`StandardCommands.md`/`StandardPrompts.md`) from outside this session that weren't
+touched; only `BWETest/SKILL.md` is new. If a future session needs `/BWETest` to persist
+across machines, commit+push just that new file in `Z:\Backup\Websites\Claude\`.
+
+Ran `/BWETest`'s own workflow once this session (all logic-layer test changes above are
+UI-only, so nothing needed updating): `node test/run-tests.js` → **60 passed, 0
+failed**, unchanged from before this session — none of this session's work touched
+`src/logic.js`/`src/config.js`/`src/excel.js`.
+
+**Commits this session**: `72f199ed` (Reports tab + splash page — 7 files,
++447/−69) and `60eee296` (raw source images — 2 files). Both deployed live via
+`ftp-deploy.sh` multiple times during the session as work progressed (see the many
+`/BWEDeploy` invocations), then git-committed and pushed at the very end via this doc's
+own `/ETCCCarShowEnd` commit.
+
+## Known follow-ups / things a new session might need to know (this session's additions)
+
+- **Reports tab and splash page have no automated test coverage** — same established
+  gap as every other DOM/UI feature in this app (see "Testing" below); verified only by
+  the user's own manual review of each screenshot/print-preview iteration during this
+  session.
+- **`/BWETest` skill is uncommitted in the `ClaudeConfig` repo** — see above. Low risk
+  (it's a new file, not a conflicting edit) but worth cleaning up in a future session if
+  it matters that the skill persists to a fresh machine.
+- **The splash page shows on every load, every session, no dismissal memory** — this
+  was an explicit design choice ("Every page load (Recommended)" was chosen over
+  "Once per session" when asked). If a future ask wants it to only show once, that's a
+  deliberate behavior change, not a bug fix.
+- If a future report or print screen shows unrelated page content bleeding into the
+  printed output, re-read the CSS specificity bug description above first — it's a
+  general trap (`.view { display: block !important; }` beats any single-class
+  `!important` hide rule declared before it in the stylesheet) that could recur for any
+  new tab added the same way Reports/T-Shirts were.
+
+Previous session — last updated 2026-07-12 (later session, end). **No CarShow app code
+changed that session** — the CarShow git repo was already clean/caught-up at session
+start (head `964d91a1`) and stayed that way throughout; that session's only work was in
+the **sibling global skills repo**, `Z:\Backup\Websites\Claude\.claude\skills\`
 (`https://github.com/BWERepo/ClaudeConfig`, commit `a6680a4`, pushed): two new skills,
 **`/ETCCSAMBegin`** and **`/ETCCSAMEnd`**, created for the **SilentAuctionManager**
 project (`Z:\Backup\Websites\SilentAuctionManager\`) by copying the exact pattern of

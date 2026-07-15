@@ -25,6 +25,12 @@
 //  - tshirtEventPurchaseCost: reference figure for officers selling shirts at
 //    the event (Developer > Settings > T-Shirt Vendor) — not applied
 //    anywhere automatically.
+//  - sponsorEmailTo / sponsorEmailCc / sponsorEmailBcc / sponsorEmailSubject:
+//    New Sponsor Confirmation Email (Developer > Settings) — sponsor-form.php
+//    sends a professional HTML confirmation email here (best-effort, never
+//    blocks the actual submission) whenever a sponsorship is submitted.
+//    Leave sponsorEmailTo blank to disable sending entirely. To/CC/BCC each
+//    accept comma/semicolon-separated multiple addresses.
 //  - externalApiKey: credential for the EXTERNAL Paid Registrations API
 //    (paid-registrations-api.php) — a separate, narrower credential than
 //    this app's own site password, meant to be handed to another website's
@@ -73,7 +79,11 @@ $defaults = [
     'preregistrationFee' => 40,
     'windowCardPdf' => '',
     'tshirtVendorEmail' => '',
-    'tshirtEventPurchaseCost' => 0
+    'tshirtEventPurchaseCost' => 0,
+    'sponsorEmailTo' => '',
+    'sponsorEmailCc' => '',
+    'sponsorEmailBcc' => '',
+    'sponsorEmailSubject' => 'New Sponsor Submission'
 ];
 
 if ($action === 'get') {

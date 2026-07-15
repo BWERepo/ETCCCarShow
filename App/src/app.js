@@ -25,6 +25,7 @@
     payments: [],     // sponsor payment records
     menuOpen: false,      // hamburger dropdown
     settingsOpen: false,  // settings modal
+    testsPageOpen: false,  // Regression Tests full-page screen (Developer menu)
     testResults: null,    // { results: [{label, ok, expected, actual}], passed, failed } | null
     testRunning: false,
     testOnlyErrors: false,
@@ -70,7 +71,11 @@
       externalApiKey: "",
       windowCardPdf: "",
       tshirtVendorEmail: "",
-      tshirtEventPurchaseCost: 0
+      tshirtEventPurchaseCost: 0,
+      sponsorEmailTo: "",
+      sponsorEmailCc: "",
+      sponsorEmailBcc: "",
+      sponsorEmailSubject: "New Sponsor Submission"
     },
     appSettingsSaving: false,
     appSettingsError: null,   // set when a Settings save fails; shown in the Settings modal
@@ -2996,7 +3001,7 @@
       var settings = el("button", { class: "hdr-menu-item" }, ["⚙ Settings"]);
       settings.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
       var regTests = el("button", { class: "hdr-menu-item" }, ["🧪 Run Regression Tests"]);
-      regTests.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openSettings(); });
+      regTests.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openTestsPage(); });
       var changelog = el("button", { class: "hdr-menu-item" }, ["📋 Change Log"]);
       changelog.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openChangelog(); });
       var apiItem = el("button", { class: "hdr-menu-item" }, ["🔌 API"]);
@@ -3051,7 +3056,14 @@
     state.appSettingsSaving = true;
     state.appSettingsError = null;
     state.appSettingsSaved = false;
-    renderSettingsModal();
+    // Deliberately no renderSettingsModal() here: this fires on every field's
+    // blur, and a synchronous full re-render tears down and rebuilds every
+    // input element on the page — which steals focus mid-Tab when a user
+    // tabs quickly through several fields in the same card (e.g. New Sponsor
+    // Confirmation Email's To/CC/BCC/Subject), so keystrokes typed into the
+    // next field land on a DOM node the browser already forgot about and
+    // never make it into state. Only re-render once the request actually
+    // settles, when there's no in-progress keyboard interaction to disrupt.
     if (!SITE_CONFIG.appSettingsApiUrl) { state.appSettingsSaving = false; renderSettingsModal(); return; }
     fetch(SITE_CONFIG.appSettingsApiUrl, {
       method: "POST",
@@ -3108,11 +3120,11 @@
   function runRegressionTests() {
     if (!window.CarShowRegressionTests || !window.CarShowFixtures) {
       state.testResults = { results: [{ label: "Regression test module not available in this build", ok: false, expected: "available", actual: "missing" }], passed: 0, failed: 1 };
-      renderSettingsModal();
+      renderTestsPage();
       return;
     }
     state.testRunning = true;
-    renderSettingsModal();
+    renderTestsPage();
     var F = window.CarShowFixtures;
     var reg = Papa.parse(F.regCsv, { header: true, skipEmptyLines: true }).data;
     var act = Papa.parse(F.actCsv, { header: true, skipEmptyLines: true }).data;
@@ -3122,12 +3134,64 @@
       var passed = all.filter(function (r) { return r.ok; }).length;
       state.testResults = { results: all, passed: passed, failed: all.length - passed };
       state.testRunning = false;
-      renderSettingsModal();
+      renderTestsPage();
     }).catch(function (err) {
       state.testResults = { results: built.results.concat([{ label: "Excel round-trip threw", ok: false, expected: "no throw", actual: String(err && err.message || err) }]), passed: 0, failed: 1 };
       state.testRunning = false;
-      renderSettingsModal();
+      renderTestsPage();
     });
+  }
+
+  // ---------- Regression Tests (full-page screen) ----------
+  // Selecting "Run Regression Tests" from the Developer menu opens this page
+  // and immediately kicks off a run (rather than opening Settings and making
+  // the officer press a separate button) — see PROJECT_STATUS.md.
+  function openTestsPage() {
+    state.testsPageOpen = true;
+    runRegressionTests();
+  }
+  function closeTestsPage() { state.testsPageOpen = false; renderTestsPage(); }
+
+  function renderTestsPage() {
+    var host = $("#testsHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.testsPageOpen) return;
+
+    var head = buildPageBanner(closeTestsPage, "Regression Tests");
+
+    var runBtn = el("button", { class: "btn primary" }, [state.testRunning ? "Running…" : "Run Again"]);
+    if (state.testRunning) runBtn.setAttribute("disabled", "disabled");
+    runBtn.addEventListener("click", runRegressionTests);
+
+    var onlyErrCb = el("input", { type: "checkbox" });
+    onlyErrCb.checked = state.testOnlyErrors;
+    onlyErrCb.addEventListener("change", function () { state.testOnlyErrors = onlyErrCb.checked; renderTestsPage(); });
+    var onlyErrLabel = el("label", {}, [onlyErrCb, document.createTextNode(" Only show errors")]);
+
+    var body = el("div", { class: "api-page-inner" });
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" }, ["Runs this app's fixture-based test suite in this tab. It uses its own sample data and never touches whatever CSVs you currently have loaded."]));
+    body.appendChild(el("div", { class: "settings-actions" }, [runBtn, onlyErrLabel]));
+
+    if (state.testResults) {
+      var r = state.testResults;
+      var summaryCls = r.failed === 0 ? "good" : "warn";
+      body.appendChild(el("div", { class: "test-summary " + summaryCls }, [r.passed + " passed, " + r.failed + " failed"]));
+      var shown = state.testOnlyErrors ? r.results.filter(function (t) { return !t.ok; }) : r.results;
+      if (!shown.length) {
+        body.appendChild(el("div", { class: "hint" }, [state.testOnlyErrors ? "No errors — all checks passed." : "No results."]));
+      } else {
+        body.appendChild(el("ul", { class: "test-list" }, shown.map(function (t) {
+          var kids = [(t.ok ? "✓ " : "✗ ") + t.label];
+          if (!t.ok) kids.push(el("div", { class: "expect" }, ["expected " + JSON.stringify(t.expected) + " — got " + JSON.stringify(t.actual)]));
+          return el("li", { class: t.ok ? "pass" : "fail" }, kids);
+        })));
+      }
+    }
+
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
   }
 
   function renderSettingsModal() {
@@ -3136,20 +3200,9 @@
     host.innerHTML = "";
     if (!state.settingsOpen) return;
 
-    var closeBtn = el("button", { class: "btn" }, ["✕"]);
-    closeBtn.addEventListener("click", closeSettings);
-    var head = el("div", { class: "modal-head" }, [el("h3", { text: "Settings" }), el("span", { class: "spacer" }), closeBtn]);
+    var head = buildPageBanner(closeSettings, "Settings");
 
-    var runBtn = el("button", { class: "btn primary" }, [state.testRunning ? "Running…" : "Run Regression Tests"]);
-    if (state.testRunning) runBtn.setAttribute("disabled", "disabled");
-    runBtn.addEventListener("click", runRegressionTests);
-
-    var onlyErrCb = el("input", { type: "checkbox" });
-    onlyErrCb.checked = state.testOnlyErrors;
-    onlyErrCb.addEventListener("change", function () { state.testOnlyErrors = onlyErrCb.checked; renderSettingsModal(); });
-    var onlyErrLabel = el("label", {}, [onlyErrCb, document.createTextNode(" Only show errors")]);
-
-    var body = el("div", { class: "modal-body" });
+    var body = el("div", { class: "api-page-inner" });
 
     // ---- Walk-In Registration Settings ----
     body.appendChild(el("h4", { text: "Walk-In Registration Settings" }));
@@ -3177,14 +3230,13 @@
       body.appendChild(el("div", { class: "hint" }, ["No template uploaded yet."]));
     }
     var windowCardFileInput = el("input", { type: "file", accept: "application/pdf" });
-    var windowCardUploadBtn = el("button", { class: "btn" }, [state.windowCardUploading ? "Uploading…" : "Upload"]);
-    if (state.windowCardUploading) windowCardUploadBtn.setAttribute("disabled", "disabled");
-    windowCardUploadBtn.addEventListener("click", function () {
+    if (state.windowCardUploading) windowCardFileInput.setAttribute("disabled", "disabled");
+    windowCardFileInput.addEventListener("change", function () {
       var f = windowCardFileInput.files && windowCardFileInput.files[0];
-      if (!f) { state.windowCardError = "Choose a PDF first."; renderSettingsModal(); return; }
+      if (!f) return;
       uploadWindowCardPdf(f);
     });
-    body.appendChild(el("div", { class: "form-row" }, [windowCardFileInput, windowCardUploadBtn]));
+    body.appendChild(el("div", { class: "form-row" }, [windowCardFileInput, state.windowCardUploading ? el("span", { class: "count" }, ["Uploading…"]) : null].filter(Boolean)));
     if (state.windowCardError) body.appendChild(el("div", { class: "form-error" }, [state.windowCardError]));
 
     // ---- Registration Fees ----
@@ -3215,9 +3267,25 @@
     var tshirtPurchaseCostInput = tshirtPurchaseCostField.input;
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Cost to Purchase at Event" }), tshirtPurchaseCostField.wrap]));
 
-    var settingsSaveBtn = el("button", { class: "btn primary" }, [state.appSettingsSaving ? "Saving…" : "Save"]);
-    if (state.appSettingsSaving) settingsSaveBtn.setAttribute("disabled", "disabled");
-    settingsSaveBtn.addEventListener("click", function () {
+    // ---- New Sponsor Confirmation Email ----
+    body.appendChild(el("h4", { text: "New Sponsor Confirmation Email" }));
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
+      ["Sent whenever a sponsorship is submitted through the public sponsor sign-up form " +
+       "(sponsor-form.php). Leave To blank to disable. To/CC/BCC each accept multiple " +
+       "comma-separated addresses."]));
+    var sponsorEmailToInput = el("input", { type: "text", value: state.appSettings.sponsorEmailTo || "" });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "To" }), sponsorEmailToInput]));
+    var sponsorEmailCcInput = el("input", { type: "text", value: state.appSettings.sponsorEmailCc || "" });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "CC" }), sponsorEmailCcInput]));
+    var sponsorEmailBccInput = el("input", { type: "text", value: state.appSettings.sponsorEmailBcc || "" });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "BCC" }), sponsorEmailBccInput]));
+    var sponsorEmailSubjectInput = el("input", { type: "text", value: state.appSettings.sponsorEmailSubject || "" });
+    body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "Subject" }), sponsorEmailSubjectInput]));
+
+    // Auto-save: every field above saves itself (no Save button) as soon as
+    // it loses focus, validating and building the same full patch each time
+    // so unrelated fields stay in sync with whatever's currently on screen.
+    function autoSaveSettings() {
       var fields = [
         ["walkinFirstNonMember", firstNonMemberInput, "First NonMember Number"],
         ["walkInCarShowFee", carShowFeeInput, "Walk-In Car Show Registration"],
@@ -3243,41 +3311,41 @@
         return;
       }
       patch.tshirtVendorEmail = vendorEmail;
+
+      var sponsorEmailFields = [
+        ["sponsorEmailTo", sponsorEmailToInput, "To"],
+        ["sponsorEmailCc", sponsorEmailCcInput, "CC"],
+        ["sponsorEmailBcc", sponsorEmailBccInput, "BCC"]
+      ];
+      for (var j = 0; j < sponsorEmailFields.length; j++) {
+        var addrVal = sponsorEmailFields[j][1].value.trim();
+        if (addrVal && addrVal.split(/[,;]+/).some(function (a) { return a.trim() && a.trim().indexOf("@") === -1; })) {
+          state.appSettingsError = "New Sponsor Confirmation Email " + sponsorEmailFields[j][2] + " doesn't look like a valid email address.";
+          renderSettingsModal();
+          return;
+        }
+        patch[sponsorEmailFields[j][0]] = addrVal;
+      }
+      patch.sponsorEmailSubject = sponsorEmailSubjectInput.value.trim() || "New Sponsor Submission";
       saveAppSettings(patch);
-    });
-    var settingsActions = [settingsSaveBtn];
-    if (state.appSettingsSaved) settingsActions.push(el("span", { class: "count", style: "color:var(--good)" }, ["Saved."]));
-    body.appendChild(el("div", { class: "settings-actions" }, settingsActions));
+    }
+    [
+      firstNonMemberInput, carShowFeeInput, nonCarShowFeeInput, preregFeeInput,
+      tshirtVendorEmailInput, tshirtPurchaseCostInput,
+      sponsorEmailToInput, sponsorEmailCcInput, sponsorEmailBccInput, sponsorEmailSubjectInput
+    ].forEach(function (input) { input.addEventListener("blur", autoSaveSettings); });
+
+    var settingsStatus = [];
+    if (state.appSettingsSaving) settingsStatus.push(el("span", { class: "count" }, ["Saving…"]));
+    else if (state.appSettingsSaved) settingsStatus.push(el("span", { class: "count", style: "color:var(--good)" }, ["Saved."]));
+    if (settingsStatus.length) body.appendChild(el("div", { class: "settings-actions" }, settingsStatus));
     if (state.appSettingsError) {
       body.appendChild(el("div", { class: "form-error" }, [state.appSettingsError]));
     }
 
-    // ---- Regression Tests ----
-    body.appendChild(el("h4", { text: "Regression Tests" }));
-    body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" }, ["Runs this app's fixture-based test suite in this tab. It uses its own sample data and never touches whatever CSVs you currently have loaded."]));
-    body.appendChild(el("div", { class: "settings-actions" }, [runBtn, onlyErrLabel]));
-
-    if (state.testResults) {
-      var r = state.testResults;
-      var summaryCls = r.failed === 0 ? "good" : "warn";
-      body.appendChild(el("div", { class: "test-summary " + summaryCls }, [r.passed + " passed, " + r.failed + " failed"]));
-      var shown = state.testOnlyErrors ? r.results.filter(function (t) { return !t.ok; }) : r.results;
-      if (!shown.length) {
-        body.appendChild(el("div", { class: "hint" }, [state.testOnlyErrors ? "No errors — all checks passed." : "No results."]));
-      } else {
-        body.appendChild(el("ul", { class: "test-list" }, shown.map(function (t) {
-          var kids = [(t.ok ? "✓ " : "✗ ") + t.label];
-          if (!t.ok) kids.push(el("div", { class: "expect" }, ["expected " + JSON.stringify(t.expected) + " — got " + JSON.stringify(t.actual)]));
-          return el("li", { class: t.ok ? "pass" : "fail" }, kids);
-        })));
-      }
-    }
-
-    var modal = el("div", { class: "modal" }, [head, body]);
-    modal.addEventListener("click", function (e) { e.stopPropagation(); });
-    var backdrop = el("div", { class: "modal-backdrop" }, [modal]);
-    backdrop.addEventListener("click", closeSettings);
-    host.appendChild(backdrop);
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
   }
 
   // Change Log (Developer submenu) — modeled on
@@ -4104,6 +4172,7 @@
     document.body.appendChild(el("div", { id: "paymentHost" }));
     document.body.appendChild(el("div", { id: "addRegHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
+    document.body.appendChild(el("div", { id: "testsHost" }));
     // window.__carshowSite is set (by index.php, before this script runs) —
     // see the declaration comment near SITE_CONFIG above. Read it here, not
     // at module-load time, since init() is what's guaranteed to run after
@@ -4120,6 +4189,7 @@
     buildHeaderMenu();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
+      if (e.key === "Escape" && state.testsPageOpen) { closeTestsPage(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.apiPageOpen) { closeApiPage(); return; }
       if (e.key === "Escape" && state.tshirtOrderPageOpen) { closeTshirtOrderPage(); return; }

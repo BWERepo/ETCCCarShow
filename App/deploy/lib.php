@@ -83,7 +83,21 @@ function carshow_safe_inline_json($value) {
 // Credentials come from secrets.php's $SMTP_* vars; returns false (caller
 // should show an error) if they're not configured or sending fails at any
 // step of the conversation.
-function carshow_send_mail($to, $subject, $body, $cc = '', $bcc = '') {
+// Splits a comma/semicolon-separated string into validated email addresses,
+// silently dropping anything that fails FILTER_VALIDATE_EMAIL. Used for
+// settings-driven To/CC/BCC fields that may hold multiple addresses (e.g.
+// the New Sponsor Confirmation Email settings card).
+function carshow_parse_addr_list($raw) {
+    if (!is_string($raw) || trim($raw) === '') return [];
+    $out = [];
+    foreach (preg_split('/[,;]+/', $raw) as $part) {
+        $part = trim($part);
+        if ($part !== '' && filter_var($part, FILTER_VALIDATE_EMAIL)) $out[] = $part;
+    }
+    return $out;
+}
+
+function carshow_send_mail($to, $subject, $body, $cc = '', $bcc = '', $html = false) {
     // Plain require (not require_once): require_once tracks inclusion by
     // resolved file path regardless of scope, so if some other code in this
     // request already required secrets.php, require_once here would
@@ -137,8 +151,15 @@ function carshow_send_mail($to, $subject, $body, $cc = '', $bcc = '') {
 
     $write('MAIL FROM:<' . $from . '>');
     if (!$expect(250)) return $fail();
-    $write('RCPT TO:<' . $to . '>');
-    if (!$expect(250)) return $fail();
+    // $to may be a single address (every pre-existing caller) or a
+    // comma/semicolon-separated list (settings-driven callers).
+    $toList = carshow_parse_addr_list($to);
+    if (!$toList && filter_var(trim((string)$to), FILTER_VALIDATE_EMAIL)) $toList = [trim($to)];
+    if (!$toList) return $fail();
+    foreach ($toList as $toEmail) {
+        $write('RCPT TO:<' . $toEmail . '>');
+        if (!$expect(250)) return $fail();
+    }
 
     // Add CC recipients
     if (!empty($cc)) {
@@ -165,10 +186,11 @@ function carshow_send_mail($to, $subject, $body, $cc = '', $bcc = '') {
     $write('DATA');
     if (!$expect(354)) return $fail();
 
-    $headers = "From: {$from}\r\nTo: {$to}\r\n";
+    $headers = "From: {$from}\r\nTo: " . implode(', ', $toList) . "\r\n";
     if (!empty($cc)) $headers .= "Cc: {$cc}\r\n";
+    $contentType = $html ? 'text/html' : 'text/plain';
     $headers .= "Subject: {$subject}\r\n" .
-        "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n";
+        "MIME-Version: 1.0\r\nContent-Type: {$contentType}; charset=UTF-8\r\n";
     // Dot-stuffing: a line starting with "." in the body must be escaped to
     // ".." or the SMTP server reads it as the end-of-DATA terminator.
     $safeBody = preg_replace('/^\./m', '..', $body);

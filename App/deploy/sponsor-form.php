@@ -94,6 +94,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         $file = __DIR__ . '/sponsor-submissions.json';
         if (carshow_append_json_list($file, $record)) {
+            // Email a copy of this submission, in addition to the JSON save
+            // above, if configured (Developer > Settings > New Sponsor
+            // Confirmation Email). Best-effort — a failed send never blocks
+            // or fails the actual submission.
+            try {
+                // app-settings.json is a JSON object (not a list), so read it
+                // directly rather than via carshow_read_json_list().
+                $rawSettings = is_file(__DIR__ . '/app-settings.json') ? json_decode(file_get_contents(__DIR__ . '/app-settings.json'), true) : [];
+                $s = is_array($rawSettings) ? $rawSettings : [];
+                $emailTo = trim((string)($s['sponsorEmailTo'] ?? ''));
+                $emailCc = trim((string)($s['sponsorEmailCc'] ?? ''));
+                $emailBcc = trim((string)($s['sponsorEmailBcc'] ?? ''));
+                $emailSubject = trim((string)($s['sponsorEmailSubject'] ?? '')) ?: 'New Sponsor Submission';
+                if ($emailTo !== '' && carshow_parse_addr_list($emailTo)) {
+                    $logoUrl = 'https://etccapps.com/apps/carshow/ETCClogoWhiteBackground.png';
+                    $rows = [
+                        'Sponsor Type'     => $SPONSOR_TYPES[$record['sponsorType']] ?? $record['sponsorType'],
+                        'Sponsor Name'     => $record['name'],
+                        'ETCC Member Name' => $record['etccMemberName'],
+                        'Contact Person'   => $record['contactPerson'],
+                        'Phone'            => $record['phone'],
+                        'Email'            => $record['email'],
+                        'Address'          => $record['address'],
+                        'Website'          => $record['website'],
+                        'T-Shirt Size'     => $record['shirtSize'],
+                    ];
+                    $rowsHtml = '';
+                    foreach ($rows as $label => $value) {
+                        if ($value === '' || $value === null) continue;
+                        $rowsHtml .= '<tr>'
+                            . '<td style="padding:10px 16px;border-bottom:1px solid #e3e6ea;color:#667085;font-size:13px;font-weight:600;white-space:nowrap;vertical-align:top;">' . htmlspecialchars($label) . '</td>'
+                            . '<td style="padding:10px 16px;border-bottom:1px solid #e3e6ea;color:#1a1a1a;font-size:13px;">' . nl2br(htmlspecialchars((string)$value)) . '</td>'
+                            . '</tr>';
+                    }
+                    $html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
+                        . '<body style="margin:0;padding:0;background:#f4f6f8;font-family:\'Segoe UI\',Arial,sans-serif;">'
+                        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:28px 16px;">'
+                        . '<tr><td align="center">'
+                        . '<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;border:1px solid #e3e6ea;overflow:hidden;">'
+                        . '<tr><td style="padding:28px 24px 8px;text-align:center;">'
+                        . '<img src="' . htmlspecialchars($logoUrl) . '" alt="ETCC Logo" width="64" height="64" style="display:block;margin:0 auto 12px;border-radius:6px;">'
+                        . '<div style="font-size:20px;font-weight:700;color:#1a1a1a;">New Sponsor Submitted</div>'
+                        . '<div style="font-size:13px;color:#667085;margin-top:2px;">East Tennessee Corvette Club Car Show</div>'
+                        . '</td></tr>'
+                        . '<tr><td style="padding:16px 24px 4px;">'
+                        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e3e6ea;border-radius:8px;overflow:hidden;">' . $rowsHtml . '</table>'
+                        . '</td></tr>'
+                        . '<tr><td style="padding:20px 24px 24px;text-align:center;color:#667085;font-size:11px;">'
+                        . '&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN'
+                        . '</td></tr>'
+                        . '</table></td></tr></table></body></html>';
+                    carshow_send_mail($emailTo, $emailSubject, $html, $emailCc, $emailBcc, true);
+                }
+            } catch (Exception $e) { /* email is best-effort, submission already succeeded */ }
+
             // No payment is ever recorded from this form — a sponsorship
             // submitted here isn't actually paid yet; an officer records the
             // real payment later from the Sponsors tab's "Mark Paid…" modal.

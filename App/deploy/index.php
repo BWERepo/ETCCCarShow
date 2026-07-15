@@ -101,7 +101,11 @@ $appSettingsDefaults = [
     'preregistrationFee' => 40,
     'windowCardPdf' => '',
     'tshirtVendorEmail' => '',
-    'tshirtEventPurchaseCost' => 0
+    'tshirtEventPurchaseCost' => 0,
+    'sponsorEmailTo' => '',
+    'sponsorEmailCc' => '',
+    'sponsorEmailBcc' => '',
+    'sponsorEmailSubject' => 'New Sponsor Submission'
 ];
 $appSettings = array_merge($appSettingsDefaults, is_array($appSettingsRaw) ? $appSettingsRaw : []);
 // externalApiKey has no static default above — this file is committed to a

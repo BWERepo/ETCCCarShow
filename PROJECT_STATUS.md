@@ -1,22 +1,27 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-15 (end of session, latest). **This session's work spanned two
-checkpoint commits** (`7cff73ce`, `c51c1762`, both pushed) covering a new New Sponsor
-Confirmation Email feature (HTML email support added to `lib.php`, new Settings card,
-sent from `sponsor-form.php` on submit), Developer > Settings converted from a modal to
-a full-page screen with every field auto-saving (no Save button — and a real bug fixed
-along the way, see below), Regression Tests moved out of Settings into its own full-page
-screen that runs immediately when opened, the "Developer" hamburger menu item converted
-from a cramped inline password row into a full-page login screen with a "Forgot
-password?" link, a live site-password reset (new password supplied by the user, hash
-regenerated and uploaded), a new "Member Email" field on the public sponsor form
+Last updated: 2026-07-15 (end of session, latest). **This session's work spanned three
+checkpoint commits** (`7cff73ce`, `c51c1762`, `7648533f`, all pushed) covering a new New
+Sponsor Confirmation Email feature (HTML email support added to `lib.php`, new Settings
+card, sent from `sponsor-form.php` on submit), Developer > Settings converted from a
+modal to a full-page screen with every field auto-saving (no Save button — and a real
+bug fixed along the way, see below), Regression Tests moved out of Settings into its own
+full-page screen that runs immediately when opened, the "Developer" hamburger menu item
+converted from a cramped inline password row into a full-page login screen with a
+"Forgot password?" link, a live site-password reset (new password supplied by the user,
+hash regenerated and uploaded), a new "Member Email" field on the public sponsor form
 (auto-filled from the member roster, used as the confirmation email's default "To"
-address), and the T-Shirt Order Email's sponsor sections sorted by registration date
-within each type. Also **a large amount of Claude Code skill housekeeping**: all 13
+address), the T-Shirt Order Email's sponsor sections sorted by registration date within
+each type, **a real bug fixed where deleted CSV-auto-synced sponsors reappeared on every
+page reload** (new `deleted-sponsors.php` tombstone endpoint, mirroring the existing
+deleted-registrations pattern), a new Sponsors tab "🔄 Refresh" button that re-fetches
+in place instead of reloading the whole page (a first attempt using `location.reload()`
+was corrected — that shows the splash screen), and two Registration-tab toolbar
+reordering requests. Also **a large amount of Claude Code skill housekeeping**: all 13
 `BWE*`/`ETCC*` global skills were deleted at the user's explicit request, then most were
 recreated (some renamed/re-scoped) across this and four sibling projects — see "Claude
 Code skills" below, since none of that lives in this git repo. `/ETCCCarShowTest` was run
-twice this session (60/60 passed both times, unchanged — nothing in `logic.js`/
+three times this session (60/60 passed every time, unchanged — nothing in `logic.js`/
 `config.js`/`excel.js` changed this session, only `app.js`/PHP). Everything is committed
 and pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for the exact
 hash if picking this up cold).
@@ -159,28 +164,82 @@ changes what commands work going forward, so it's recorded here for continuity:
   `ClaudeConfig` repo as of this doc's writing — that's a standing gap, not specific to
   this session.
 
-**Checkpoints this session**: two full `/ETCCCarShowCheckpoint` runs, each doing
+**8. Sponsors tab — a real bug fixed (deleted CSV-synced sponsors reappeared on
+reload), plus a new Refresh button.** Reported by the user as "sponsor tab: when a row
+is deleted and the page is refreshed, the row reappears":
+- **Root cause**: sponsors auto-synced from a registration's "Individual Sponsorship"
+  fee (`syncSponsorsFromRegistrations()`, id shape `csvind_<csvRegKey>`) have no server
+  record of their own — deleting one only removed it from `sponsor-submissions.json`,
+  but the underlying registration's fee was still there, so the very next page load's
+  sync check just re-created the same row. This affected both the single-row delete
+  and "Remove All" — neither actually stuck for a CSV-synced sponsor.
+- **Fix**: mirrored the existing `deleted-registrations.php`/`deletedCsvKeys` tombstone
+  pattern (used for deleted CSV registration rows) for sponsors. New
+  **`App/deploy/deleted-sponsors.php`** (+ `deleted-sponsors.json`, list/add actions,
+  same auth/shape as its registration counterpart) tracks deleted `csvind_*` ids. New
+  `index.php` boot line `ingestDeletedSponsors(...)` runs **before** registrations are
+  ingested (which is what triggers the CSV→Sponsors sync) so it excludes tombstoned ids
+  from being re-created. `app.js`'s `removeSponsor()` and `clearAllSponsors()` both now
+  push newly-deleted `csvind_*` ids to this endpoint. **Don't forget**:
+  `deleted-sponsors.php` had to be added to `ftp-deploy.sh`'s hardcoded `upload "..."`
+  list too — it's easy to create a new deploy/ endpoint and forget that step, since the
+  deploy script doesn't glob the directory.
+- **New "🔄 Refresh" button** on the Sponsors tab toolbar. First attempt used
+  `location.reload()`, which the user pointed out re-shows the splash screen (every
+  full page load starts there) — not what was wanted for a quick "did someone else just
+  add a sponsor" check. Replaced with `refreshSponsorsFromServer()`, which re-fetches
+  just sponsors/deleted-sponsor-ids/payments in place via their existing `list` actions
+  (`sponsor-submissions.php`, `deleted-sponsors.php`, `sponsor-payments.php`), re-runs
+  `syncSponsorsFromRegistrations()` against the already-loaded CSV data, and
+  re-renders — no navigation, no splash screen. **If a future "refresh" feature is
+  requested anywhere else in this app, use this same in-place-refetch pattern, not
+  `location.reload()`** — the splash-screen side effect is easy to miss until a user
+  actually clicks it.
+
+**9. Toolbar reordering** (`App/src/app.js`), two explicit layout requests:
+- **Registration tab**: "+ Add Registration" moved to sit immediately after the search
+  box (was previously grouped with the other action buttons at the right end); "🖨
+  Print" moved to sit immediately after "🗑 Delete" (was previously last, after
+  Add Registration). Final order: Search → Add Registration → Status filters → count →
+  zoom → Print Window Cards → Delete → Print.
+- No change to the Sponsors tab's own toolbar order (Search → Type filters → Paid
+  filter → count → zoom → Delete → Add Sponsor → Refresh → Print) — only Registration
+  was asked for.
+
+**Checkpoints this session**: three full `/ETCCCarShowCheckpoint` runs, each doing
 build (version bump) → FTP deploy → commit → push:
 - `7cff73ce` — "Add New Sponsor Confirmation Email, auto-save Settings, and move
   Regression Tests to its own page" (7 files).
 - `c51c1762` — "Add a full-page Developer login, Member Email auto-fill on the sponsor
   form, and sponsor sort by reg date" (4 files).
+- `7648533f` — "Fix deleted sponsors reappearing on reload; add Sponsors tab Refresh;
+  reorder toolbars" (6 files, including the new `deleted-sponsors.php`).
 
-Both pushed to `origin/main`. The live site reflects everything through `c51c1762` as
-of this session's last deploy.
+All three pushed to `origin/main`. The live site reflects everything through
+`7648533f` as of this session's last deploy.
 
-**Tests**: `/ETCCCarShowTest` was run twice this session — `node test/run-tests.js` →
-**60 passed, 0 failed** both times, unchanged. Nothing in `src/logic.js`/`src/config.js`/
-`src/excel.js` changed this session (every change above was in `app.js`/PHP —
-DOM/server-level, not feasible to cover from the Node CLI test), so no assertions were
-added, changed, or need updating.
+**Tests**: `/ETCCCarShowTest` was run three times this session — `node test/run-tests.js`
+→ **60 passed, 0 failed** every time, unchanged. Nothing in `src/logic.js`/
+`src/config.js`/`src/excel.js` changed this session (every change above was in
+`app.js`/PHP — DOM/server-level, not feasible to cover from the Node CLI test), so no
+assertions were added, changed, or need updating.
 
 ## Known follow-ups / things a new session might need to know (2026-07-15 latest session)
 
 - **None of this session's app-level changes have automated test coverage** — same
   established gap as every other DOM/app.js-level feature in this app (the auto-save
   Settings fields, the Developer Login page, the Member Email auto-fill, the sponsor
-  email sort). See "Testing" section elsewhere in this doc.
+  email sort, the deleted-sponsor tombstoning fix, the Sponsors Refresh button). See
+  "Testing" section elsewhere in this doc.
+- **New `deploy/` endpoint files must be added to `ftp-deploy.sh`'s hardcoded upload
+  list by hand** — confirmed the hard way this session when `deleted-sponsors.php`
+  didn't actually reach the server on the first deploy attempt. If a future session
+  adds another new PHP endpoint, don't forget this step (it's easy to miss since
+  nothing errors — the file just silently isn't there).
+- **`location.reload()` shows the splash screen** — any future "refresh"/"reload" UI
+  request in this app should use an in-place re-fetch (see
+  `refreshSponsorsFromServer()` in `app.js` for the pattern), not a full page reload,
+  unless the splash screen is actually acceptable for that flow.
 - **`ETCCGetCarShowRegistrations` was not recreated** after this session's skill
   deletion — see item 7 above. If a future session needs to pull ClubExpress CSVs via
   that skill and it's missing, that's expected; rebuild it (check the `ClaudeConfig`

@@ -43,7 +43,8 @@
     clearSponsorsOpen: false, // "Remove All Sponsors" confirmation modal
     sponsorSelected: {},    // id -> true, for the Sponsors tab's row checkboxes
     deleteSelectedOpen: false, // "Delete selected sponsors" confirmation modal
-    developerOpen: false,      // hamburger's "Developer" password prompt expanded
+    developerLoginOpen: false, // "Developer Login" full-page screen (see openDeveloperLogin())
+    developerVerifying: false, // password check in flight
     developerUnlocked: false,  // password verified this page load — reveals Import Members/Registrations
     developerError: null,      // developer password error message, or null
     changelogOpen: false,      // "Change Log" full page (Developer submenu)
@@ -1511,7 +1512,10 @@
     });
   }
   function tshirtEmailSponsorList(typeKey) {
-    return state.sponsors.filter(function (sp) { return sp.sponsorType === typeKey; });
+    return state.sponsors
+      .filter(function (sp) { return sp.sponsorType === typeKey; })
+      .slice()
+      .sort(function (a, b) { return sponsorSortValue(a, "regDate") - sponsorSortValue(b, "regDate"); });
   }
   // Plain text (not HTML) — carshow_send_mail() only sends text/plain, and a
   // plain-text preview is trivially exact: what's shown is byte-for-byte
@@ -2959,10 +2963,8 @@
   }
   function toggleMenu() { state.menuOpen = !state.menuOpen; renderHeaderMenu(); }
   function closeMenu() {
-    if (!state.menuOpen && !state.developerOpen) return;
+    if (!state.menuOpen) return;
     state.menuOpen = false;
-    state.developerOpen = false;
-    state.developerError = null;
     renderHeaderMenu();
   }
   // Client-side gate reusing the site's existing login endpoint (action=login
@@ -2980,18 +2982,73 @@
       .then(function (r) {
         if (r.ok && r.data && r.data.success) {
           state.developerUnlocked = true;
-          state.developerOpen = false;
+          state.developerLoginOpen = false;
           state.developerError = null;
+          renderDeveloperLoginPage();
         } else {
           state.developerError = "Incorrect password.";
+          renderDeveloperLoginPage();
         }
         renderHeaderMenu();
       })
       .catch(function () {
         state.developerError = "Could not verify — check your connection and try again.";
-        renderHeaderMenu();
+        renderDeveloperLoginPage();
       });
   }
+  // ---------- Developer Login (full-page screen) ----------
+  // Was previously a cramped inline password row inside the hamburger
+  // dropdown, with no way to recover from a forgotten/wrong password short
+  // of guessing again. Now its own full page (same buildPageBanner pattern
+  // as Settings/Change Log/API) with a real "Forgot password?" link to the
+  // same reset flow the main login screen already has (forgot-password.php
+  // -> emails a time-limited reset link to the club's admin inbox — this
+  // site has one shared password, so Developer and the main login gate are
+  // literally the same credential; a reset there fixes both).
+  function openDeveloperLogin() {
+    state.developerLoginOpen = true;
+    state.developerError = null;
+    renderDeveloperLoginPage();
+  }
+  function closeDeveloperLogin() { state.developerLoginOpen = false; renderDeveloperLoginPage(); }
+
+  function renderDeveloperLoginPage() {
+    var host = $("#developerLoginHost");
+    if (!host) return;
+    host.innerHTML = "";
+    if (!state.developerLoginOpen) return;
+
+    var head = buildPageBanner(closeDeveloperLogin, "Developer Login");
+
+    var body = el("div", { class: "api-page-inner" });
+    body.appendChild(el("div", { class: "hint", style: "margin-bottom:12px" },
+      ["Unlocks Import Members, Import Registrations, Settings, Regression Tests, Change " +
+       "Log, and API — this is the same password as the main site login, not a separate one."]));
+
+    var pwInput = el("input", { type: "password", placeholder: "Developer password", style: "max-width:320px" });
+    var submit = function () {
+      if (!pwInput.value) return;
+      state.developerVerifying = true;
+      renderDeveloperLoginPage();
+      submitDeveloperPassword(pwInput.value).then(function () { state.developerVerifying = false; });
+    };
+    var goBtn = el("button", { class: "btn primary" }, [state.developerVerifying ? "Checking…" : "Unlock"]);
+    if (state.developerVerifying) goBtn.setAttribute("disabled", "disabled");
+    goBtn.addEventListener("click", submit);
+    pwInput.addEventListener("keydown", function (e) { if (e.key === "Enter") submit(); });
+    body.appendChild(el("div", { class: "form-row" }, [pwInput, goBtn]));
+    if (state.developerError) body.appendChild(el("div", { class: "form-error" }, [state.developerError]));
+
+    body.appendChild(el("div", { style: "margin-top:18px" }, [
+      el("a", { href: "forgot-password.php", target: "_blank", rel: "noopener" }, ["Forgot password?"])
+    ]));
+
+    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
+    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
+    host.appendChild(page);
+    pwInput.focus();
+  }
+
   function buildDeveloperMenuItems() {
     if (state.developerUnlocked) {
       var importMembers = el("a", { class: "hdr-menu-item", href: "members-import.php", target: "_blank", rel: "noopener" }, ["👥 Import Members"]);
@@ -3008,20 +3065,9 @@
       apiItem.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openApiPage(); });
       return [importMembers, importRegs, settings, regTests, changelog, apiItem];
     }
-    if (!state.developerOpen) {
-      var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
-      devBtn.addEventListener("click", function (e) { e.stopPropagation(); state.developerOpen = true; renderHeaderMenu(); });
-      return [devBtn];
-    }
-    var pwInput = el("input", { type: "password", class: "hdr-dev-pw", placeholder: "Developer password" });
-    var goBtn = el("button", { class: "btn" }, ["Unlock"]);
-    var submit = function () { submitDeveloperPassword(pwInput.value); };
-    goBtn.addEventListener("click", function (e) { e.stopPropagation(); submit(); });
-    pwInput.addEventListener("click", function (e) { e.stopPropagation(); });
-    pwInput.addEventListener("keydown", function (e) { e.stopPropagation(); if (e.key === "Enter") submit(); });
-    var out = [el("div", { class: "hdr-menu-item hdr-dev-row" }, [pwInput, goBtn])];
-    if (state.developerError) out.push(el("div", { class: "hdr-dev-error" }, [state.developerError]));
-    return out;
+    var devBtn = el("button", { class: "hdr-menu-item" }, ["🛠 Developer"]);
+    devBtn.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); openDeveloperLogin(); });
+    return [devBtn];
   }
   function renderHeaderMenu() {
     var menu = $("#hdrMenu");
@@ -3039,10 +3085,6 @@
     logoutItem.addEventListener("click", closeMenu);
     var items = [logoutItem].concat(buildDeveloperMenuItems());
     items.forEach(function (it) { menu.appendChild(it); });
-    if (state.menuOpen && state.developerOpen && !state.developerUnlocked) {
-      var pw = menu.querySelector(".hdr-dev-pw");
-      if (pw) pw.focus();
-    }
   }
 
   function openSettings() { state.settingsOpen = true; renderSettingsModal(); }
@@ -3271,8 +3313,9 @@
     body.appendChild(el("h4", { text: "New Sponsor Confirmation Email" }));
     body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
       ["Sent whenever a sponsorship is submitted through the public sponsor sign-up form " +
-       "(sponsor-form.php). Leave To blank to disable. To/CC/BCC each accept multiple " +
-       "comma-separated addresses."]));
+       "(sponsor-form.php). Leave To blank to default it to the Member Email entered on " +
+       "the form itself; sending is only skipped if both are blank. To/CC/BCC each accept " +
+       "multiple comma-separated addresses."]));
     var sponsorEmailToInput = el("input", { type: "text", value: state.appSettings.sponsorEmailTo || "" });
     body.appendChild(el("div", { class: "form-row" }, [el("span", { class: "form-label", text: "To" }), sponsorEmailToInput]));
     var sponsorEmailCcInput = el("input", { type: "text", value: state.appSettings.sponsorEmailCc || "" });
@@ -4173,6 +4216,7 @@
     document.body.appendChild(el("div", { id: "addRegHost" }));
     document.body.appendChild(el("div", { id: "confirmHost" }));
     document.body.appendChild(el("div", { id: "testsHost" }));
+    document.body.appendChild(el("div", { id: "developerLoginHost" }));
     // window.__carshowSite is set (by index.php, before this script runs) —
     // see the declaration comment near SITE_CONFIG above. Read it here, not
     // at module-load time, since init() is what's guaranteed to run after
@@ -4190,6 +4234,7 @@
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && state.settingsOpen) { closeSettings(); return; }
       if (e.key === "Escape" && state.testsPageOpen) { closeTestsPage(); return; }
+      if (e.key === "Escape" && state.developerLoginOpen) { closeDeveloperLogin(); return; }
       if (e.key === "Escape" && state.changelogOpen) { closeChangelog(); return; }
       if (e.key === "Escape" && state.apiPageOpen) { closeApiPage(); return; }
       if (e.key === "Escape" && state.tshirtOrderPageOpen) { closeTshirtOrderPage(); return; }

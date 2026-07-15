@@ -42,15 +42,19 @@ $SHIRT_SIZES = [
 // Member Name field below. Blocked from direct HTTP access by .htaccess.
 $members = carshow_read_json_list(__DIR__ . '/members-data.json');
 $memberNames = []; // lowercased name -> canonical display name, for case-insensitive validation
+$memberEmails = []; // canonical display name -> email, for the "Member Email" auto-fill below
 foreach ($members as $m) {
-    if (!empty($m['name'])) $memberNames[strtolower($m['name'])] = $m['name'];
+    if (!empty($m['name'])) {
+        $memberNames[strtolower($m['name'])] = $m['name'];
+        if (!empty($m['email'])) $memberEmails[$m['name']] = $m['email'];
+    }
 }
 
 $errors = [];
 $success = false;
 $values = [
     'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-    'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
+    'website' => '', 'etccMemberName' => '', 'memberEmail' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
 ];
 // See the post-submit redirect below for what this actually controls —
 // carried as a hidden form field (not just the URL's query string) so it
@@ -58,7 +62,7 @@ $values = [
 $fromParam = (string)($_POST['from'] ?? ($_GET['from'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website', 'etccMemberName'] as $f) {
+    foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website', 'etccMemberName', 'memberEmail'] as $f) {
         $values[$f] = trim((string)($_POST[$f] ?? ''));
     }
     $values['sponsorType'] = (string)($_POST['sponsorType'] ?? '');
@@ -88,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'address' => $values['address'],
             'website' => $values['website'],
             'etccMemberName' => $values['etccMemberName'],
+            'memberEmail' => $values['memberEmail'],
             'sponsorType' => $values['sponsorType'],
             'shirtSize' => $values['shirtSize'],
             'submittedAt' => gmdate('c'),
@@ -103,7 +108,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // directly rather than via carshow_read_json_list().
                 $rawSettings = is_file(__DIR__ . '/app-settings.json') ? json_decode(file_get_contents(__DIR__ . '/app-settings.json'), true) : [];
                 $s = is_array($rawSettings) ? $rawSettings : [];
+                // Settings > New Sponsor Confirmation Email's "To" is the override;
+                // if it's left blank, default to the member's own email from this
+                // submission instead of not sending at all.
                 $emailTo = trim((string)($s['sponsorEmailTo'] ?? ''));
+                if ($emailTo === '') $emailTo = $record['memberEmail'];
                 $emailCc = trim((string)($s['sponsorEmailCc'] ?? ''));
                 $emailBcc = trim((string)($s['sponsorEmailBcc'] ?? ''));
                 $emailSubject = trim((string)($s['sponsorEmailSubject'] ?? '')) ?: 'New Sponsor Submission';
@@ -113,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'Sponsor Type'     => $SPONSOR_TYPES[$record['sponsorType']] ?? $record['sponsorType'],
                         'Sponsor Name'     => $record['name'],
                         'ETCC Member Name' => $record['etccMemberName'],
+                        'Member Email'     => $record['memberEmail'],
                         'Contact Person'   => $record['contactPerson'],
                         'Phone'            => $record['phone'],
                         'Email'            => $record['email'],
@@ -159,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = true;
             $values = [
                 'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-                'website' => '', 'etccMemberName' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
+                'website' => '', 'etccMemberName' => '', 'memberEmail' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
             ];
         } else {
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
@@ -242,6 +252,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <?php endforeach; ?>
         </datalist>
       </div>
+      <div class="form-row">
+        <label for="f-member-email">Member Email</label>
+        <input type="email" id="f-member-email" name="memberEmail" value="<?php echo htmlspecialchars($values['memberEmail']); ?>">
+      </div>
+      <script>
+        (function () {
+          var memberEmails = <?php echo json_encode($memberEmails); ?>;
+          var nameInput = document.getElementById('f-member');
+          var emailInput = document.getElementById('f-member-email');
+          function fillEmail() {
+            var email = memberEmails[nameInput.value];
+            if (email) emailInput.value = email;
+          }
+          nameInput.addEventListener('input', fillEmail);
+          nameInput.addEventListener('change', fillEmail);
+        })();
+      </script>
       <div class="form-row">
         <label for="f-contact">Contact Person</label>
         <input type="text" id="f-contact" name="contactPerson" value="<?php echo htmlspecialchars($values['contactPerson']); ?>">

@@ -368,7 +368,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.212 &middot; Deployed 07/15/2026 05:52 PM</div>
+  <div>v2.217 &middot; Deployed 07/15/2026 06:49 PM</div>
   <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </footer>
@@ -1513,6 +1513,7 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     testRunning: false,
     testOnlyErrors: false,
     sponsors: [],          // filled by ingestSponsors(), called by index.php's boot script
+    sponsorsRefreshing: false, // Sponsors tab's "Refresh" button — a fetch in progress
     sponsorSearch: "",
     sponsorTypeFilter: { premier: true, corporate: true, individual: true },
     sponsorPaidFilter: "all", // "all" | "paid" | "unpaid"
@@ -1594,6 +1595,10 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
                                // Registration tab's checkbox/bulk-delete — filled by
                                // ingestDeletedRegistrations(); excluded from state.result.registrations
                                // in regenerate(), so they stay gone across reloads/re-imports too
+    deletedSponsorIds: {},    // csvSponsorId(rec) -> true, for CSV-auto-synced sponsor rows (Individual
+                               // Sponsorship activity) removed from the Sponsors tab — filled by
+                               // ingestDeletedSponsors(); checked by syncSponsorsFromRegistrations() so
+                               // a deleted sponsor doesn't just get re-created on the next page load
     regSelected: {},           // rowKey(r) -> true, for the Registration tab's row checkboxes
     deleteRegSelectedOpen: false, // "Delete selected registrations" confirmation modal
     regDeleteSyncError: null,  // set when persisting a CSV-row deletion fails
@@ -1861,6 +1866,7 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
       var fee = rec["Individual Sponsorship"];
       if (fee === "" || fee == null || Number(fee) <= 0) return;
       var id = csvSponsorId(rec);
+      if (state.deletedSponsorIds[id]) return;
       var existing = byId[id];
       if (existing) {
         // Backfill Reg Date / Ind. Spon. Text on sponsors synced before those
@@ -2043,12 +2049,13 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     var count = el("span", { class: "count", id: "rowcount" });
     var kids = [
       search,
+      addBtn,
       statusGroup,
       count,
       el("span", { class: "spacer" }),
       zoomGroup
     ];
-    kids.push(printCardsBtn, delBtn, addBtn, prn);
+    kids.push(printCardsBtn, delBtn, prn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
   function buildSummaryToolbar() {
@@ -3219,9 +3226,35 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     // already have a payment record, so this is safe to call unconditionally.
     backfillPaymentDefaults();
   }
+  // CSV-auto-synced sponsors (id shape "csvind_..." — see csvSponsorId()) have
+  // no server record of their own to delete; sponsor-submissions.php's
+  // "delete" is a no-op for them. Without also recording the id as deleted,
+  // syncSponsorsFromRegistrations() would just re-create the row on the very
+  // next page load, since the underlying registration's Individual
+  // Sponsorship fee is still there. Web-submitted/manually-added sponsors
+  // don't need this — they're never re-synced, so a plain server delete is
+  // permanent for them already.
   function removeSponsor(id) {
     state.sponsors = state.sponsors.filter(function (s) { return s.id !== id; });
     pushSponsorToServer("delete", { id: id });
+    if (String(id).indexOf("csvind_") === 0) {
+      state.deletedSponsorIds[id] = true;
+      pushDeletedSponsorsToServer([id]);
+    }
+  }
+  function pushDeletedSponsorsToServer(ids) {
+    if (!SITE_CONFIG.deletedSponsorsApiUrl) return;
+    fetch(SITE_CONFIG.deletedSponsorsApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add", ids: ids })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.sponsorSyncError = null;
+    }).catch(function () {
+      state.sponsorSyncError = "Could not save that deletion to the server — it'll reappear if the page is reloaded before this succeeds. Check your connection and try again.";
+      if (state.tab === "sponsors") renderViews();
+    });
   }
 
   // ---------- walk-in registrations (Registration tab's "+ Add Registration") ----------
@@ -3329,12 +3362,70 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     });
   }
 
+  // Re-fetches sponsors, their deleted-CSV-sponsor tombstones, and payments —
+  // the three pieces of server state the Sponsors tab depends on — and
+  // re-renders in place. Deliberately NOT a location.reload(): a full reload
+  // re-runs the whole app boot, which shows the splash screen first (see
+  // init()), which is jarring for what's meant to be a quick "did someone
+  // else just add a sponsor" check. Registrations/CSV data is NOT re-fetched
+  // here (there's no live endpoint for it — see index.php's boot script) so
+  // syncSponsorsFromRegistrations() re-runs against whatever CSV is already
+  // loaded in this tab, same as it would on a normal page load.
+  function refreshSponsorsFromServer() {
+    if (!SITE_CONFIG.sponsorsApiUrl) return;
+    state.sponsorsRefreshing = true;
+    state.sponsorSyncError = null;
+    renderViews();
+    var fetchJson = function (url, action) {
+      if (!url) return Promise.resolve(null);
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: action })
+      }).then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      });
+    };
+    Promise.all([
+      fetchJson(SITE_CONFIG.sponsorsApiUrl, "list"),
+      fetchJson(SITE_CONFIG.deletedSponsorsApiUrl, "list"),
+      fetchJson(SITE_CONFIG.sponsorPaymentsApiUrl, "list")
+    ]).then(function (results) {
+      var sponsorsRes = results[0], deletedRes = results[1], paymentsRes = results[2];
+      if (sponsorsRes && sponsorsRes.ok) state.sponsors = Array.isArray(sponsorsRes.sponsors) ? sponsorsRes.sponsors : [];
+      if (deletedRes && deletedRes.ok) {
+        state.deletedSponsorIds = {};
+        (Array.isArray(deletedRes.ids) ? deletedRes.ids : []).forEach(function (id) { state.deletedSponsorIds[id] = true; });
+      }
+      if (paymentsRes && paymentsRes.ok) state.payments = Array.isArray(paymentsRes.payments) ? paymentsRes.payments : [];
+      syncSponsorsFromRegistrations();
+      if (paymentsRes && paymentsRes.ok) backfillPaymentDefaults();
+      state.sponsorsRefreshing = false;
+      renderViews();
+    }).catch(function () {
+      state.sponsorsRefreshing = false;
+      state.sponsorSyncError = "Could not refresh from the server — check your connection and try again.";
+      renderViews();
+    });
+  }
+
   // ---------- remove all sponsors ----------
   function openClearSponsorsConfirm() { state.clearSponsorsOpen = true; renderClearSponsorsConfirm(); }
   function closeClearSponsorsConfirm() { state.clearSponsorsOpen = false; renderClearSponsorsConfirm(); }
   function clearAllSponsors() {
+    // Same csvind_-tombstoning removeSponsor() does for a single delete —
+    // otherwise every CSV-auto-synced sponsor would just reappear on the next
+    // page load (see removeSponsor()'s comment).
+    var csvIds = state.sponsors
+      .map(function (s) { return s.id; })
+      .filter(function (id) { return String(id).indexOf("csvind_") === 0; });
     state.sponsors = [];
     pushSponsorToServer("clear", {});
+    if (csvIds.length) {
+      csvIds.forEach(function (id) { state.deletedSponsorIds[id] = true; });
+      pushDeletedSponsorsToServer(csvIds);
+    }
     renderViews();
   }
   function renderClearSponsorsConfirm() {
@@ -3430,6 +3521,14 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     // ClubExpress/the club's main site) — see its post-submit redirect.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
     addBtn.addEventListener("click", function () { window.open("sponsor-form.php?from=app", "_blank", "noopener"); });
+    // Re-fetches just the sponsor-related data in place — NOT a page reload
+    // (that briefly shows the splash screen, since every full load starts
+    // there). Picks up whatever another officer (or the public sign-up form)
+    // has added/changed since this tab was opened.
+    var refreshBtn = el("button", { class: "btn", title: "Reload sponsor data from the server" },
+      [state.sponsorsRefreshing ? "Refreshing…" : "🔄 Refresh"]);
+    if (state.sponsorsRefreshing) refreshBtn.setAttribute("disabled", "disabled");
+    refreshBtn.addEventListener("click", refreshSponsorsFromServer);
     var prn = el("button", { class: "btn" }, ["🖨 Print"]);
     prn.addEventListener("click", printSponsors);
     var delBtn = el("button", { class: "btn", id: "sponsorDeleteBtn", disabled: "disabled" }, ["🗑 Delete"]);
@@ -3443,7 +3542,7 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     var zoomLabel = el("span", { class: "count", text: Math.round(state.sponsorZoom * 100) + "%" });
     var zoomGroup = el("span", { class: "zoomgroup" }, [zoomOut, zoomLabel, zoomIn, zoomFit]);
     var kids = [search, typeGroup, paidGroup, count, el("span", { class: "spacer" }), zoomGroup];
-    kids.push(delBtn, addBtn, prn);
+    kids.push(delBtn, addBtn, refreshBtn, prn);
     return el("div", { class: "toolbar no-print" }, kids);
   }
 
@@ -5751,6 +5850,13 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     ingestSponsors: function (list) {
       state.sponsors = Array.isArray(list) ? list : [];
       renderViews();
+    },
+    // Called by index.php's boot script, BEFORE ingestRows() (which triggers
+    // syncSponsorsFromRegistrations()), with the set of CSV-auto-synced
+    // sponsor ids previously deleted from the Sponsors tab.
+    ingestDeletedSponsors: function (ids) {
+      state.deletedSponsorIds = {};
+      (Array.isArray(ids) ? ids : []).forEach(function (id) { state.deletedSponsorIds[id] = true; });
     },
     // Called by index.php's boot script with the Walk-In registrations list
     // read fresh from the server on this page load.

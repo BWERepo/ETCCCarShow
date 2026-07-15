@@ -1,18 +1,203 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-13 (end of session, latest). **This session's work spanned three
-commits** (`4abcc91e`, `cdc8aced`, `94c1d613`, all pushed) covering the Add Registration
-form (required fields, Payment Type/Status rework, a $0-fee rule, a narrower modal), the
-splash page (now reuses the real header bar instead of a rebuilt copy), the public
-sponsor sign-up form (`sponsor-form.php` — field reorder, a new required field, password
-gate removed, a Done-button navigation bug fixed), the Sponsors tab's "Record Payment"
-modal (now timestamps to the second), and a full print-report overhaul (shared logo/
-title/footer treatment across all 6 print reports, two bug fixes). The live site was
-deployed many times via `/BWEDeploy` throughout the session (each round of feedback was
-tested live) — the last deploy in the list below is what's currently live. `/BWETest`
-was run once (60/60 passed, unchanged — nothing pure-logic changed this session, see
-below). Everything is committed and pushed as of this doc's own `/ETCCCarShowEnd` commit
-(check `git log` for the exact hash if picking this up cold).
+Last updated: 2026-07-15 (end of session, latest). **This session's work spanned two
+checkpoint commits** (`7cff73ce`, `c51c1762`, both pushed) covering a new New Sponsor
+Confirmation Email feature (HTML email support added to `lib.php`, new Settings card,
+sent from `sponsor-form.php` on submit), Developer > Settings converted from a modal to
+a full-page screen with every field auto-saving (no Save button — and a real bug fixed
+along the way, see below), Regression Tests moved out of Settings into its own full-page
+screen that runs immediately when opened, the "Developer" hamburger menu item converted
+from a cramped inline password row into a full-page login screen with a "Forgot
+password?" link, a live site-password reset (new password supplied by the user, hash
+regenerated and uploaded), a new "Member Email" field on the public sponsor form
+(auto-filled from the member roster, used as the confirmation email's default "To"
+address), and the T-Shirt Order Email's sponsor sections sorted by registration date
+within each type. Also **a large amount of Claude Code skill housekeeping**: all 13
+`BWE*`/`ETCC*` global skills were deleted at the user's explicit request, then most were
+recreated (some renamed/re-scoped) across this and four sibling projects — see "Claude
+Code skills" below, since none of that lives in this git repo. `/ETCCCarShowTest` was run
+twice this session (60/60 passed both times, unchanged — nothing in `logic.js`/
+`config.js`/`excel.js` changed this session, only `app.js`/PHP). Everything is committed
+and pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for the exact
+hash if picking this up cold).
+
+## This session's work (2026-07-15, latest session)
+
+**1. New Sponsor Confirmation Email** — a professional HTML email sent automatically
+whenever a sponsorship is submitted through the public sign-up form:
+- **`App/deploy/lib.php`**: `carshow_send_mail()` gained a backward-compatible trailing
+  `$html = false` param (switches `Content-Type` to `text/html`) and a new
+  `carshow_parse_addr_list()` helper (comma/semicolon-separated address lists, each
+  validated with `FILTER_VALIDATE_EMAIL`) — the `$to` param now also accepts a
+  comma-separated list, not just a single address, for every caller.
+- **`App/deploy/app-settings.php`** / **`index.php`**: new settings keys
+  `sponsorEmailTo`/`sponsorEmailCc`/`sponsorEmailBcc`/`sponsorEmailSubject` (default
+  subject: "New Sponsor Submission"). Both files' `$defaults` arrays were kept in sync
+  (index.php has its own duplicate list per an existing, pre-session convention — see
+  the comment there: "defaults here MUST match app-settings.php's $defaults").
+- **`App/deploy/sponsor-form.php`**: on a successful submission, if `sponsorEmailTo` is
+  configured (or, per a later change this session, the submitted Member Email — see
+  #4 below), sends an HTML email: centered 64×64 ETCC logo (absolute URL
+  `https://etccapps.com/apps/carshow/ETCClogoWhiteBackground.png` — a relative path
+  won't resolve in email clients), "New Sponsor Submitted" heading, a bordered details
+  table, and a footer. Best-effort — wrapped in try/catch so a failed send never blocks
+  the actual submission.
+- **`App/src/app.js`**: new "New Sponsor Confirmation Email" card in Developer >
+  Settings with To/CC/BCC/Subject fields, matching the pattern used for a very similar
+  feature already shipped in the sibling SilentAuctionManager project.
+
+**2. Settings — converted from a modal to a full-page screen, every field now
+auto-saves.**
+- The whole "Settings" panel (`renderSettingsModal()`) now uses `buildPageBanner()` +
+  the `.api-page`/`.api-page-body` classes (same pattern as Change Log/API/T-Shirt Order
+  Form) instead of a centered `.modal`/`.modal-backdrop` — per an explicit "settings
+  should be a full page screen" request.
+- The single "Save" button covering all fields was removed entirely — every field
+  (Walk-In Registration, Registration Fees, T-Shirt Vendor, New Sponsor Confirmation
+  Email) now saves itself on `blur` via a new `autoSaveSettings()` function, and the
+  Window Card PDF now uploads the instant a file is chosen (`change` event) instead of
+  requiring a separate "Upload" button click.
+- **Real bug found and fixed**: `saveAppSettings()` used to call `renderSettingsModal()`
+  *synchronously*, before the save request even started. Since a full re-render tears
+  down and rebuilds every input element on the page, this stole focus mid-Tab whenever
+  a user filled in several fields in the same card quickly (e.g. tabbing through the
+  New Sponsor Confirmation Email card's To/CC/BCC/Subject) — keystrokes typed into the
+  next field landed on a DOM node the browser had already forgotten about and never
+  made it into state, so the field silently stayed blank after saving. Root-caused
+  after the user reported "New Sponsor Confirmation Email: data not persisted." Fixed
+  by only calling `renderSettingsModal()` once the save request actually settles.
+  **If a future auto-save feature exhibits "typed but not saved" symptoms, check
+  whether a synchronous re-render is happening on every keystroke/blur before assuming
+  the bug is server-side.**
+
+**3. Regression Tests — moved out of Settings into its own full-page screen.**
+- Previously a "Regression Tests" section lived inside the Settings page with its own
+  Run button. Now the hamburger menu's "🧪 Run Regression Tests" item opens a dedicated
+  full page (`renderTestsPage()`, `#testsHost`, same `buildPageBanner()` pattern) and
+  **runs the suite immediately on open** (`openTestsPage()` calls `runRegressionTests()`
+  directly) — no extra button press needed. A "Run Again" button and the "Only show
+  errors" checkbox are still there for re-runs.
+
+**4. "Developer" hamburger item — converted to a full-page login screen with a
+password-reset path.** Prompted by the user reporting "developer password does not
+work. No way to reset it":
+- The old UI was a cramped inline password row that expanded inside the hamburger
+  dropdown itself (`state.developerOpen`), with no link to any recovery flow if the
+  password was wrong/forgotten.
+- Replaced with `openDeveloperLogin()`/`renderDeveloperLoginPage()` — a real full page
+  (`#developerLoginHost`, `buildPageBanner(closeDeveloperLogin, "Developer Login")`)
+  with a password field, an "Unlock" button, and a **"Forgot password?" link** to the
+  already-existing `forgot-password.php` reset flow. Clarified in the page's own hint
+  text that Developer and the main site login are literally the same password (same
+  `secrets.php` hash, same `action=login` check) — there's no separate credential to
+  reset.
+- **The live site password itself was reset this session** — the user supplied a new
+  password in chat; a new SHA-512-crypt hash was generated locally
+  (`openssl passwd -6 -salt "$(openssl rand -hex 8)" '<password>'`) and written into
+  the local (gitignored) `App/deploy/secrets.php`. Uploading it to the live server is
+  the one FTP action this project's safety classifier always blocks Claude from doing
+  directly (per established convention) — the user uploaded it manually themselves and
+  confirmed. SMTP settings in that file were left untouched.
+
+**5. Sponsor form — new "Member Email" field, auto-filled from the roster.**
+- **`App/deploy/members-import.php`**: already supported a CSV column named
+  `primary_email` before this session (its alias-normalization strips underscores, so
+  `primary_email` → `primaryemail`, which was already in the `email` field's alias
+  list) — confirmed working, no code change needed despite being asked for explicitly.
+- **`App/deploy/sponsor-form.php`**: new "Member Email" field directly under "ETCC
+  Member Name". A small inline `<script>` block auto-fills it from a
+  `{name: email}` map (built server-side from `members-data.json`, embedded via
+  `json_encode`) whenever the typed/selected member name matches a roster entry —
+  still manually editable for members with no email on file. Captured on submit as
+  `memberEmail`, saved in `sponsor-submissions.json`, and included as a row in the
+  confirmation email (see #1).
+- **Follow-up request**: the confirmation email's "To" address now **defaults to the
+  submitted Member Email** whenever Settings > New Sponsor Confirmation Email's own
+  "To" is left blank — sending is only skipped if *both* are empty. A configured
+  Settings "To" still takes priority when set.
+
+**6. T-Shirt Order Email — sponsor sections sorted by registration date.** The
+Premier/Corporate/Individual sponsor sections were already grouped by type; this
+session added a same-category sort by `regDate` (falling back to `submittedAt`),
+reusing the existing `sponsorSortValue()` helper the Sponsors table's own column
+sorting already relies on. A follow-up request to prefix each line with an "MM/DD — "
+date was implemented, then immediately reverted per an explicit "now remove the mm/dd
+prefix" — the sort-by-date behavior itself was kept, only the visible prefix was
+undone.
+
+**7. Claude Code skills — large-scale deletion, then selective recreation across five
+projects.** None of this is in this git repo (skills live in the separate
+`Z:\Backup\Websites\Claude\.claude\skills\` repo, symlinked into
+`C:\Users\Admin\.claude\skills\`), but it happened in this session and materially
+changes what commands work going forward, so it's recorded here for continuity:
+- **Deleted, at the user's explicit confirmation** (after Claude flagged that the scope
+  was broader than just CarShow): all 13 `BWE*`/`ETCC*` skills that existed at the
+  time — `BWEBegin`, `BWECheckpoint`, `BWEEnd`, `BWETest`, `ETCCCarShowBegin`,
+  `ETCCCarShowCheckpoint`, `ETCCCarShowDeploy`, `ETCCCarShowEnd`, `ETCCCarShowPush`,
+  `ETCCCheckpoint`, `ETCCGetCarShowRegistrations`, `ETCCSAMBegin`, `ETCCSAMEnd`. This
+  removed session-start/checkpoint automation for Business Web Express, Handmade
+  Designs By Suzi, and SilentAuctionManager, not just CarShow.
+- **Recreated for CarShow**: `ETCCCarShowBegin`, `ETCCCarShowEnd` (this skill),
+  `ETCCCarShowTest` (regression-suite-only, mirrors the deleted `BWETest`'s original
+  CarShow-specific content), `ETCCCarShowCheckpoint` (build/bump-version + FTP deploy +
+  commit + push — `ETCCCarShowDeploy`/`ETCCCarShowPush` were **not** recreated
+  separately, since Checkpoint now covers both). **`ETCCGetCarShowRegistrations` (the
+  ClubExpress CSV-export automation) was NOT recreated this session** — if a future
+  session needs to pull fresh registration data via that skill, it has to be rebuilt
+  from scratch or copied from git history (it was tracked in the `ClaudeConfig` repo
+  before deletion, so `git log` there has the old content).
+- **Recreated/created for other projects** (for context only — see each project's own
+  `PROJECT_STATUS.md`/`Claude.md` for detail, not tracked here): `ETCCSAMBegin`,
+  `ETCCSAMEnd`, `ETCCSAMTest`, `ETCCSAMCheckpoint` (SilentAuctionManager);
+  `BWEHDBSBegin`, `BWEHDBSEnd`, `BWEHDBSTest`, `BWEHDBSCheckpoint` (Handmade Designs By
+  Suzi — this project had no `PROJECT_STATUS.md` before this session; `BWEHDBSEnd` will
+  create one on first use); `BWEBegin`, `BWEEnd`, `BWETest`, `BWECheckpoint` (Business
+  Web Express); `BWEDeepSpringsBegin`, `BWEDeepSpringsEnd`, `BWEDeepSpringsTest`,
+  `BWEDeepSpringsCheckpoint` (DeepSprings — also had no `PROJECT_STATUS.md`, and no
+  test suite at all yet, so its Test skill will ask before inventing one).
+- None of these skill-file changes have been committed/pushed in the separate
+  `ClaudeConfig` repo as of this doc's writing — that's a standing gap, not specific to
+  this session.
+
+**Checkpoints this session**: two full `/ETCCCarShowCheckpoint` runs, each doing
+build (version bump) → FTP deploy → commit → push:
+- `7cff73ce` — "Add New Sponsor Confirmation Email, auto-save Settings, and move
+  Regression Tests to its own page" (7 files).
+- `c51c1762` — "Add a full-page Developer login, Member Email auto-fill on the sponsor
+  form, and sponsor sort by reg date" (4 files).
+
+Both pushed to `origin/main`. The live site reflects everything through `c51c1762` as
+of this session's last deploy.
+
+**Tests**: `/ETCCCarShowTest` was run twice this session — `node test/run-tests.js` →
+**60 passed, 0 failed** both times, unchanged. Nothing in `src/logic.js`/`src/config.js`/
+`src/excel.js` changed this session (every change above was in `app.js`/PHP —
+DOM/server-level, not feasible to cover from the Node CLI test), so no assertions were
+added, changed, or need updating.
+
+## Known follow-ups / things a new session might need to know (2026-07-15 latest session)
+
+- **None of this session's app-level changes have automated test coverage** — same
+  established gap as every other DOM/app.js-level feature in this app (the auto-save
+  Settings fields, the Developer Login page, the Member Email auto-fill, the sponsor
+  email sort). See "Testing" section elsewhere in this doc.
+- **`ETCCGetCarShowRegistrations` was not recreated** after this session's skill
+  deletion — see item 7 above. If a future session needs to pull ClubExpress CSVs via
+  that skill and it's missing, that's expected; rebuild it (check the `ClaudeConfig`
+  repo's git history for the old content) or ask the user how they want to proceed.
+- **The live site password was changed this session** — if a future session's login
+  attempt fails with a password that used to work, this is why; there's no way for
+  Claude to know or recover the new password (never stored in this file, git, or
+  Claude's memory system) — ask the user.
+- **Claude Code skill changes (item 7 above) are uncommitted in the separate
+  `ClaudeConfig` repo** (`Z:\Backup\Websites\Claude\`) — not this repo's concern
+  directly, but worth flagging if a future session is asked to "commit everything" and
+  wonders why that repo shows a large diff.
+- **Watch for the "view" class trap on any future tab/print work** (carried forward
+  from an earlier session, still valid — see the historical entry further below) — any
+  new tab's on-screen wrapper needs the plain `view` class in addition to its own
+  specific class, or print CSS's `.view.<name> { display: none !important; }` hiding
+  rule will silently never match it.
 
 ## This session's work (2026-07-13, latest session)
 

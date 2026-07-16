@@ -1,30 +1,153 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-15 (end of session, latest). **This session's work spanned three
-checkpoint commits** (`7cff73ce`, `c51c1762`, `7648533f`, all pushed) covering a new New
-Sponsor Confirmation Email feature (HTML email support added to `lib.php`, new Settings
-card, sent from `sponsor-form.php` on submit), Developer > Settings converted from a
-modal to a full-page screen with every field auto-saving (no Save button — and a real
-bug fixed along the way, see below), Regression Tests moved out of Settings into its own
-full-page screen that runs immediately when opened, the "Developer" hamburger menu item
-converted from a cramped inline password row into a full-page login screen with a
-"Forgot password?" link, a live site-password reset (new password supplied by the user,
-hash regenerated and uploaded), a new "Member Email" field on the public sponsor form
-(auto-filled from the member roster, used as the confirmation email's default "To"
-address), the T-Shirt Order Email's sponsor sections sorted by registration date within
-each type, **a real bug fixed where deleted CSV-auto-synced sponsors reappeared on every
-page reload** (new `deleted-sponsors.php` tombstone endpoint, mirroring the existing
-deleted-registrations pattern), a new Sponsors tab "🔄 Refresh" button that re-fetches
-in place instead of reloading the whole page (a first attempt using `location.reload()`
-was corrected — that shows the splash screen), and two Registration-tab toolbar
-reordering requests. Also **a large amount of Claude Code skill housekeeping**: all 13
-`BWE*`/`ETCC*` global skills were deleted at the user's explicit request, then most were
-recreated (some renamed/re-scoped) across this and four sibling projects — see "Claude
-Code skills" below, since none of that lives in this git repo. `/ETCCCarShowTest` was run
-three times this session (60/60 passed every time, unchanged — nothing in `logic.js`/
-`config.js`/`excel.js` changed this session, only `app.js`/PHP). Everything is committed
-and pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for the exact
-hash if picking this up cold).
+Last updated: 2026-07-16 (end of session, latest). **This session's work spanned one
+checkpoint commit** (`8b5f905c`, pushed) giving the "Developer" hamburger menu item its
+own **separate password** from the main site login — a new `$DEV_PASSWORD_HASH` in
+`secrets.php`, checked via a new `action=dev_login` on `index.php` that never touches
+the main login session. The Developer Login screen was redesigned twice on explicit
+feedback: first from the previous session's full-page-banner style down to a small
+modal (interrupted before finishing — see below), then to its final form, a full-screen
+gradient card matching the main site login's own look (`.dev-login-*` in `styles.css`)
+plus a close (✕) button. It also got its own **self-service "Forgot Developer password?"
+reset flow** (new `dev-forgot-password.php`/`dev-reset-password.php`, mirroring the main
+login's existing reset pair) after briefly shipping with no reset option at all, per an
+explicit follow-up request. Along the way, two real bugs were found and fixed:
+`reset-password.php` (the *main* login's reset) would have silently wiped out the new
+`$DEV_PASSWORD_HASH` on its next use, since it didn't know that variable existed; and
+`deleted-sponsors.json` (added last session) was never added to `.htaccess`'s deny list,
+so it was directly fetchable over HTTP. `/ETCCCarShowTest` was run once this session
+(60/60 passed, unchanged — nothing in `logic.js`/`config.js`/`excel.js` changed, only
+`app.js`/PHP). Everything is committed and pushed as of this doc's own `/ETCCCarShowEnd`
+commit (check `git log` for the exact hash if picking this up cold).
+
+## This session's work (2026-07-16, latest session)
+
+**1. Developer menu — a separate password from the main site login.** Prompted by "Lets
+have a different password for the developer than the main password":
+- **`App/deploy/secrets.php`** (gitignored, server-only): new `$DEV_PASSWORD_HASH`
+  variable, alongside the existing `$PASSWORD_HASH`. Generated the same way
+  (`openssl passwd -6 -salt "$(openssl rand -hex 8)" '<password>'`) — the user supplied
+  the new Developer password in chat, Claude generated the hash and updated the local
+  file, the user uploaded it to the live server manually (same credential-handling
+  convention as every prior password change this project — Claude cannot FTP
+  `secrets.php` directly, the safety classifier always blocks it).
+  **`App/deploy/secrets.example.php`** updated to document the new variable for anyone
+  setting up a fresh copy of this site.
+- **`App/deploy/index.php`**: new `action=dev_login` POST handler, separate from the
+  existing `action=login`. Checks the submitted password against `$DEV_PASSWORD_HASH`
+  and returns `{success: true/false}` — **does not** call `session_regenerate_id()` or
+  touch `$_SESSION['carshow_authenticated']`. It doesn't need to: every Import
+  Members/Registrations link is still independently gated by the *main* login's
+  session (you already have to be logged into the app with the main password to reach
+  the Developer prompt at all), so this endpoint's only job is deciding whether to
+  reveal the Developer submenu items client-side. Requires an existing authenticated
+  session to even attempt (401s otherwise), so it can't be used to brute-force the
+  Developer password from a logged-out state.
+- **`App/src/app.js`**: `submitDeveloperPassword()` now posts `action=dev_login`
+  instead of `action=login`.
+
+**2. Developer Login screen — redesigned twice this session, on two separate explicit
+corrections.**
+- Round 1 ("developer password screen should not be full page"): converted from the
+  previous session's `buildPageBanner()`/`.api-page` full-page-screen treatment toward
+  a smaller modal — this edit was interrupted by the user before the modal version was
+  finished/deployed (see the follow-up message that immediately redirected it, below).
+- Round 2 ("make it like the main password screen"): scrapped the in-progress modal
+  entirely in favor of matching **`_login.html`'s own visual design** exactly — a
+  full-viewport gradient background (`linear-gradient(135deg, #667eea 0%, #764ba2
+  100%)`) with a centered white card, the ETCC logo, and the same input/button styling.
+  New CSS block in `App/src/styles.css` (`.dev-login-screen`, `.dev-login-container`,
+  `.dev-login-logo`, `.dev-login-title`, `.dev-login-subtitle`, `.dev-login-input`,
+  `.dev-login-btn`, `.dev-login-error`, `.dev-login-hint`) and a rewritten
+  `renderDeveloperLoginPage()` in `app.js`. Added a `.dev-login-close` (✕) button in
+  the top-right corner — the real login screen doesn't need one (there's nothing to
+  "cancel" back to), but this overlay is reachable mid-session from inside the app, so
+  it needs an escape hatch beyond just the Escape key.
+- **If a future request says a screen "shouldn't be full page" without more detail,
+  don't assume "modal" — ask, or at least confirm the direction before investing much
+  work.** This session's first attempt guessed modal and was corrected to "match the
+  main login screen" instead, which turned out to be a different, more specific look
+  (full-viewport gradient overlay, not a centered dialog with backdrop).
+
+**3. Developer password — self-service "Forgot password?" reset flow added back.**
+The screen briefly shipped (still within this session) with the "Forgot password?"
+link removed entirely, replaced by a note saying there was no self-service reset for
+it — then the user asked for one ("developer password screen needs a forgot my
+password"). Added:
+- **`App/deploy/dev-forgot-password.php`** — mirrors `forgot-password.php` (emails a
+  1-hour reset link to the club's admin inbox, `etccwebsite.webmanager@gmail.com`) but
+  **gated behind an already-authenticated session** (unlike the main flow, which is
+  intentionally public since it's the only way to recover from being fully locked
+  out) — reaching this page already requires being logged into the app with the main
+  password, so there's no "locked out of everything" scenario to rescue here, and
+  gating it prevents random reset-email spam.
+- **`App/deploy/dev-reset-password.php`** — mirrors `reset-password.php`, validates the
+  emailed token against a new `dev-password-reset.json`, and rewrites only
+  `$DEV_PASSWORD_HASH` in `secrets.php` — preserving `$PASSWORD_HASH` and any SMTP
+  config already there.
+- The Developer Login screen's hint text now links to `dev-forgot-password.php` again
+  instead of the "ask whoever manages the site" note.
+
+**4. Two real bugs found and fixed while building the above:**
+- **`App/deploy/reset-password.php`** (the *main* login's reset, used via the public
+  "Forgot password?" flow) previously did a from-scratch rewrite of `secrets.php` that
+  only knew about `$PASSWORD_HASH` and the SMTP vars — it had no idea
+  `$DEV_PASSWORD_HASH` now exists, so completing a main-password reset would have
+  **silently deleted the Developer password** the next time someone used it. Fixed by
+  reading and re-preserving `$DEV_PASSWORD_HASH` the same way SMTP config was already
+  preserved. **Lesson for any future new `secrets.php` variable**: check both
+  `reset-password.php` and `dev-reset-password.php` (and each other) to make sure a
+  reset on one credential can't silently drop an unrelated one — this file is
+  rewritten from scratch each time, not patched.
+- **`App/deploy/.htaccess`** never got a deny block for `deleted-sponsors.json` when
+  that file was introduced last session (2026-07-15) — found while adding the new
+  `dev-password-reset.json` token file and double-checking the pattern. Fixed by adding
+  both. **`.htaccess` here is a list of individual `<Files "...">` blocks, not a
+  wildcard `*.json` rule** — any future new gitignored `.json` data file needs its own
+  block added by hand, or it's silently fetchable over HTTP.
+
+**Checkpoint this session**: one full `/ETCCCarShowCheckpoint` run (build/version bump →
+FTP deploy → commit → push):
+- `8b5f905c` — "Add a separate Developer password, full-screen login redesign, and
+  self-service reset" (11 files changed: `App/deploy/.htaccess`,
+  `App/deploy/dev-forgot-password.php` (new), `App/deploy/dev-reset-password.php`
+  (new), `App/deploy/ftp-deploy.sh`, `App/deploy/index.php`,
+  `App/deploy/reset-password.php`, `App/deploy/secrets.example.php`, `App/src/app.js`,
+  `App/src/styles.css`, plus the built `ETCCCarShow.html`/`version.json`).
+
+Pushed to `origin/main`. The live site reflects everything through `8b5f905c` as of
+this session's deploy.
+
+**Tests**: `/ETCCCarShowTest` was run once this session — `node test/run-tests.js` →
+**60 passed, 0 failed**, unchanged. Nothing in `src/logic.js`/`src/config.js`/
+`src/excel.js` changed this session (every change above was in `app.js`/PHP —
+DOM/server-level, not feasible to cover from the Node CLI test), so no assertions were
+added, changed, or need updating.
+
+## Known follow-ups / things a new session might need to know (2026-07-16 latest session)
+
+- **None of this session's app-level changes have automated test coverage** — same
+  established gap as every other DOM/app.js-level feature in this app (the Developer
+  Login redesign, the separate-password check, the two new reset-flow PHP pages).
+- **The Developer password was set this session** (separate from the main site
+  password, which was set in the prior session) — if a future session's Developer
+  unlock attempt fails with a password that used to work, this is why; there's no way
+  for Claude to know or recover it (never stored in this file, git, or Claude's memory
+  system) — ask the user. The self-service "Forgot Developer password?" link on that
+  screen is now the normal recovery path.
+- **Any future new gitignored `.json` data file needs its own `<Files "...">` block
+  added to `App/deploy/.htaccess` by hand** — see item 4 above. There's no wildcard
+  rule; it's easy to forget this step the same way `deleted-sponsors.json` was missed
+  last session.
+- **Any future new variable added to `secrets.php` needs to be explicitly preserved in
+  *every* file that rewrites that file from scratch** (`reset-password.php` and
+  `dev-reset-password.php` as of this session) — see item 4 above for the exact bug
+  this caused.
+- **Watch for the "view" class trap on any future tab/print work** (carried forward
+  from an earlier session, still valid — see the historical entry further below) — any
+  new tab's on-screen wrapper needs the plain `view` class in addition to its own
+  specific class, or print CSS's `.view.<name> { display: none !important; }` hiding
+  rule will silently never match it.
 
 ## This session's work (2026-07-15, latest session)
 

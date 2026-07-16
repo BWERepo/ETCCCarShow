@@ -1,15 +1,13 @@
 <?php
-// Reached via the link forgot-password.php emails to the admin address.
-// Validates the one-time token from password-reset.json (gitignored,
-// blocked from direct HTTP access by .htaccess), then lets the visitor set
-// a new password — writing a fresh SHA-512-crypt hash directly into
-// secrets.php, replacing it wholesale (same hash format `openssl passwd -6`
-// produces, so index.php's crypt() check keeps working unchanged). The
-// token is deleted after one use.
+// Reached via the link dev-forgot-password.php emails to the admin address.
+// Mirrors reset-password.php exactly, but validates against
+// dev-password-reset.json and rewrites $DEV_PASSWORD_HASH instead of
+// $PASSWORD_HASH — preserving that main password and any SMTP config already
+// in secrets.php, same reasoning as reset-password.php's own preservation.
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 require __DIR__ . '/lib.php';
 
-$RESET_FILE = __DIR__ . '/password-reset.json';
+$RESET_FILE = __DIR__ . '/dev-password-reset.json';
 $SECRETS_FILE = __DIR__ . '/secrets.php';
 
 $token = (string)($_GET['token'] ?? $_POST['token'] ?? '');
@@ -29,30 +27,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid) {
     } elseif ($pw1 !== $pw2) {
         $errors[] = 'Passwords do not match.';
     } else {
-        // Preserve any existing SMTP config (secrets.php also holds the
-        // credentials this very page's sibling, forgot-password.php, needs
-        // to send its emails via lib.php's carshow_send_mail()) instead of
-        // wiping it out — an earlier version of this file did a naive full
-        // rewrite with only $PASSWORD_HASH and silently broke reset-email
-        // delivery the first time someone completed a reset. Also preserve
-        // $DEV_PASSWORD_HASH (the separate Developer-menu password, see
-        // dev-reset-password.php) for the same reason — this reset flow only
-        // touches the main login password, not that one.
+        $PASSWORD_HASH = null;
         $SMTP_HOST = $SMTP_PORT = $SMTP_USER = $SMTP_PASS = $SMTP_FROM = null;
-        $DEV_PASSWORD_HASH = null;
         if (is_file($SECRETS_FILE)) require $SECRETS_FILE;
 
         $newHash = crypt($pw1, '$6$' . bin2hex(random_bytes(8)) . '$');
-        $lines = [
-            '<?php',
-            '// Not committed to git (see .gitignore) — the live site\'s actual password hash.',
-            '$PASSWORD_HASH = ' . var_export($newHash, true) . ';',
-        ];
-        if ($DEV_PASSWORD_HASH !== null) {
-            $lines[] = '';
-            $lines[] = '// Separate Developer password (hamburger > \xf0\x9f\x9b\xa0 Developer).';
-            $lines[] = '$DEV_PASSWORD_HASH = ' . var_export($DEV_PASSWORD_HASH, true) . ';';
+        $lines = ['<?php'];
+        if ($PASSWORD_HASH !== null) {
+            $lines[] = '// Not committed to git (see .gitignore) — the live site\'s actual password hash.';
+            $lines[] = '$PASSWORD_HASH = ' . var_export($PASSWORD_HASH, true) . ';';
         }
+        $lines[] = '';
+        $lines[] = '// Separate Developer password (hamburger > \xf0\x9f\x9b\xa0 Developer).';
+        $lines[] = '$DEV_PASSWORD_HASH = ' . var_export($newHash, true) . ';';
         if ($SMTP_HOST !== null) {
             $lines[] = '';
             $lines[] = '// SMTP credentials for forgot-password.php\'s reset emails (see lib.php\'s carshow_send_mail()).';
@@ -77,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ETCC Car Show — Reset Password</title>
+<title>ETCC Car Show — Reset Developer Password</title>
 <style>
   :root { --red:#b0141e; --red-dark:#7d0e15; --ink:#1a1a1a; --muted:#667085; --line:#e3e6ea; --bg:#f4f6f8; --panel:#fff; --good:#147d3a; }
   * { box-sizing: border-box; }
@@ -98,11 +85,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid) {
 </head>
 <body>
 <div class="wrap">
-  <h1>Reset Password</h1>
+  <h1>Reset Developer Password</h1>
   <div class="sub">East Tennessee Corvette Club — Car Show app</div>
   <div class="panel">
     <?php if ($done): ?>
-      <p class="success">Password changed. You can log in with it now.</p>
+      <p class="success">Developer password changed. You can use it now.</p>
     <?php elseif (!$valid): ?>
       <div class="errors"><p style="margin:0">This reset link is invalid or has expired. Request a new one.</p></div>
     <?php else: ?>
@@ -112,18 +99,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid) {
       <form method="post">
         <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
         <div class="form-row">
-          <label for="f-pw1">New Password</label>
+          <label for="f-pw1">New Developer Password</label>
           <input type="password" id="f-pw1" name="password" required minlength="8" autofocus>
         </div>
         <div class="form-row">
-          <label for="f-pw2">Confirm New Password</label>
+          <label for="f-pw2">Confirm New Developer Password</label>
           <input type="password" id="f-pw2" name="password2" required minlength="8">
         </div>
-        <button type="submit" class="btn">Set New Password</button>
+        <button type="submit" class="btn">Set New Developer Password</button>
       </form>
     <?php endif; ?>
   </div>
-  <a class="back" href="index.php">&larr; Back to login</a>
+  <a class="back" href="index.php">&larr; Back to the app</a>
 </div>
 </body>
 </html>

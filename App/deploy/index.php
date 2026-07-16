@@ -31,6 +31,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
     exit;
 }
 
+// Separate "Developer" password (app.js's Developer Login screen) — a
+// distinct credential from the main site login above, checked against
+// $DEV_PASSWORD_HASH (secrets.php). This purely reveals the Developer
+// submenu items client-side; it does NOT touch $_SESSION['carshow_authenticated']
+// — every Import Members/Registrations link is still independently
+// session-gated server-side using the MAIN login session (you already have
+// to be logged into the app to reach this prompt at all), so there's no
+// separate server session to grant here.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'dev_login') {
+    header('Content-Type: application/json');
+    if (empty($_SESSION['carshow_authenticated'])) {
+        http_response_code(401);
+        echo json_encode(['success' => false]);
+        exit;
+    }
+    $pw = (string)($_POST['password'] ?? '');
+    $ok = !empty($DEV_PASSWORD_HASH) && hash_equals($DEV_PASSWORD_HASH, crypt($pw, $DEV_PASSWORD_HASH));
+    echo json_encode(['success' => $ok]);
+    if (!$ok) http_response_code(401);
+    exit;
+}
+
 if (empty($_SESSION['carshow_authenticated'])) {
     readfile(__DIR__ . '/_login.html');
     exit;

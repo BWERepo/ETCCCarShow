@@ -176,6 +176,42 @@ th.pinned { z-index: 3; }
 .modal-section { margin-top: 14px; }
 .modal-section h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
+/* Developer login — same full-screen gradient-card look as _login.html's
+   #password-screen (the main site login gate), not the app's usual modal or
+   full-page-banner styles, since this is meant to feel like "the same kind
+   of password prompt," just for a different credential. */
+.dev-login-screen {
+  position: fixed; inset: 0; z-index: 200;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.dev-login-container {
+  position: relative;
+  background: #fff; border-radius: 12px; padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3); max-width: 400px; width: 100%; box-sizing: border-box;
+}
+.dev-login-close {
+  position: absolute; top: 12px; right: 12px; background: none; border: none;
+  font-size: 16px; color: #6e6e73; cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+.dev-login-close:hover { color: #1d1d1f; }
+.dev-login-logo { height: 60px; width: 60px; display: block; margin: 0 auto 20px; object-fit: contain; }
+.dev-login-title { text-align: center; font-size: 22px; font-weight: 600; color: #1d1d1f; margin: 0 0 10px; }
+.dev-login-subtitle { text-align: center; font-size: 13px; color: #6e6e73; margin: 0 0 22px; }
+.dev-login-input {
+  width: 100%; padding: 12px 14px; font-size: 14px; border: 2px solid #d2d2d7;
+  border-radius: 6px; box-sizing: border-box; font-family: inherit; color: #1d1d1f; background: #fff;
+}
+.dev-login-input:focus { outline: none; border-color: #0071e3; }
+.dev-login-btn {
+  width: 100%; padding: 12px; background: #0071e3; color: #fff; border: none; border-radius: 6px;
+  font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background .2s;
+}
+.dev-login-btn:hover { background: #0077ed; }
+.dev-login-btn:disabled { opacity: .6; cursor: default; }
+.dev-login-error { color: #c62828; font-size: 12px; margin: 8px 0 0; text-align: center; }
+.dev-login-hint { color: #6e6e73; font-size: 12px; text-align: center; margin-top: 18px; }
+
 /* sponsor form */
 .form-row { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
 .form-row .form-label { min-width: 140px; font-size: 13px; font-weight: 600; color: var(--ink); }
@@ -368,7 +404,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v2.217 &middot; Deployed 07/15/2026 06:49 PM</div>
+  <div>v2.221 &middot; Deployed 07/16/2026 07:34 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </footer>
@@ -4549,17 +4585,18 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     state.menuOpen = false;
     renderHeaderMenu();
   }
-  // Client-side gate reusing the site's existing login endpoint (action=login
-  // on location.pathname — the same request _login.html's JS makes) to check
-  // the entered password without ever exposing the hash to this script. Every
+  // Checks against a SEPARATE Developer password (index.php's action=dev_login,
+  // $DEV_PASSWORD_HASH in secrets.php) — a distinct credential from the main
+  // site login, without ever exposing either hash to this script. Every
   // Import Members/Registrations link is still independently session-gated
-  // server-side (see members-import.php/registrations-import.php) — this
-  // step is only about hiding those links from the menu until asked for.
+  // server-side using the MAIN login's session (see members-import.php/
+  // registrations-import.php) — this step is only about hiding those links
+  // from the menu until the Developer password is entered.
   function submitDeveloperPassword(password) {
     return fetch(location.pathname, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "action=login&password=" + encodeURIComponent(password)
+      body: "action=dev_login&password=" + encodeURIComponent(password)
     }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (r) {
         if (r.ok && r.data && r.data.success) {
@@ -4594,40 +4631,51 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
   }
   function closeDeveloperLogin() { state.developerLoginOpen = false; renderDeveloperLoginPage(); }
 
+  // Same full-screen gradient-card look as _login.html's main site login gate
+  // (see .dev-login-* in styles.css) — an in-app overlay, not the app's usual
+  // modal or full-page-banner treatment, plus a close (✕) button since this
+  // is reachable without leaving the app (the real login page has nothing to
+  // "close" back to).
   function renderDeveloperLoginPage() {
     var host = $("#developerLoginHost");
     if (!host) return;
     host.innerHTML = "";
     if (!state.developerLoginOpen) return;
 
-    var head = buildPageBanner(closeDeveloperLogin, "Developer Login");
+    var headerLogo = $("header.app img.hdr-logo");
+    var logoImg = headerLogo ? el("img", { src: headerLogo.src, class: "dev-login-logo", alt: "ETCC Logo" }) : null;
 
-    var body = el("div", { class: "api-page-inner" });
-    body.appendChild(el("div", { class: "hint", style: "margin-bottom:12px" },
-      ["Unlocks Import Members, Import Registrations, Settings, Regression Tests, Change " +
-       "Log, and API — this is the same password as the main site login, not a separate one."]));
+    var closeBtn = el("button", { class: "dev-login-close", title: "Cancel" }, ["✕"]);
+    closeBtn.addEventListener("click", closeDeveloperLogin);
 
-    var pwInput = el("input", { type: "password", placeholder: "Developer password", style: "max-width:320px" });
+    var pwInput = el("input", { type: "password", class: "dev-login-input", placeholder: "Enter Developer password" });
     var submit = function () {
       if (!pwInput.value) return;
       state.developerVerifying = true;
       renderDeveloperLoginPage();
       submitDeveloperPassword(pwInput.value).then(function () { state.developerVerifying = false; });
     };
-    var goBtn = el("button", { class: "btn primary" }, [state.developerVerifying ? "Checking…" : "Unlock"]);
+    var goBtn = el("button", { class: "dev-login-btn" }, [state.developerVerifying ? "Checking…" : "Unlock"]);
     if (state.developerVerifying) goBtn.setAttribute("disabled", "disabled");
     goBtn.addEventListener("click", submit);
     pwInput.addEventListener("keydown", function (e) { if (e.key === "Enter") submit(); });
-    body.appendChild(el("div", { class: "form-row" }, [pwInput, goBtn]));
-    if (state.developerError) body.appendChild(el("div", { class: "form-error" }, [state.developerError]));
 
-    body.appendChild(el("div", { style: "margin-top:18px" }, [
-      el("a", { href: "forgot-password.php", target: "_blank", rel: "noopener" }, ["Forgot password?"])
+    var kids = [closeBtn];
+    if (logoImg) kids.push(logoImg);
+    kids.push(el("h1", { class: "dev-login-title", text: "Developer Login" }));
+    kids.push(el("p", { class: "dev-login-subtitle" },
+      ["Unlocks Import Members, Import Registrations, Settings, Regression Tests, " +
+       "Change Log, and API — a separate password from the main site login."]));
+    kids.push(pwInput);
+    if (state.developerError) kids.push(el("div", { class: "dev-login-error" }, [state.developerError]));
+    kids.push(goBtn);
+    kids.push(el("div", { class: "dev-login-hint" }, [
+      el("a", { href: "dev-forgot-password.php", target: "_blank", rel: "noopener" }, ["Forgot Developer password?"])
     ]));
 
-    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
-    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
-    host.appendChild(page);
+    var container = el("div", { class: "dev-login-container" }, kids);
+    var screen = el("div", { class: "dev-login-screen" }, [container]);
+    host.appendChild(screen);
     pwInput.focus();
   }
 

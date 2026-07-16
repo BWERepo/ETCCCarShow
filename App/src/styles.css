@@ -169,6 +169,42 @@ th.pinned { z-index: 3; }
 .modal-section { margin-top: 14px; }
 .modal-section h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
+/* Developer login — same full-screen gradient-card look as _login.html's
+   #password-screen (the main site login gate), not the app's usual modal or
+   full-page-banner styles, since this is meant to feel like "the same kind
+   of password prompt," just for a different credential. */
+.dev-login-screen {
+  position: fixed; inset: 0; z-index: 200;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.dev-login-container {
+  position: relative;
+  background: #fff; border-radius: 12px; padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3); max-width: 400px; width: 100%; box-sizing: border-box;
+}
+.dev-login-close {
+  position: absolute; top: 12px; right: 12px; background: none; border: none;
+  font-size: 16px; color: #6e6e73; cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+.dev-login-close:hover { color: #1d1d1f; }
+.dev-login-logo { height: 60px; width: 60px; display: block; margin: 0 auto 20px; object-fit: contain; }
+.dev-login-title { text-align: center; font-size: 22px; font-weight: 600; color: #1d1d1f; margin: 0 0 10px; }
+.dev-login-subtitle { text-align: center; font-size: 13px; color: #6e6e73; margin: 0 0 22px; }
+.dev-login-input {
+  width: 100%; padding: 12px 14px; font-size: 14px; border: 2px solid #d2d2d7;
+  border-radius: 6px; box-sizing: border-box; font-family: inherit; color: #1d1d1f; background: #fff;
+}
+.dev-login-input:focus { outline: none; border-color: #0071e3; }
+.dev-login-btn {
+  width: 100%; padding: 12px; background: #0071e3; color: #fff; border: none; border-radius: 6px;
+  font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background .2s;
+}
+.dev-login-btn:hover { background: #0077ed; }
+.dev-login-btn:disabled { opacity: .6; cursor: default; }
+.dev-login-error { color: #c62828; font-size: 12px; margin: 8px 0 0; text-align: center; }
+.dev-login-hint { color: #6e6e73; font-size: 12px; text-align: center; margin-top: 18px; }
+
 /* sponsor form */
 .form-row { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
 .form-row .form-label { min-width: 140px; font-size: 13px; font-weight: 600; color: var(--ink); }

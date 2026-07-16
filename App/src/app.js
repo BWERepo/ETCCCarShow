@@ -3066,17 +3066,18 @@
     state.menuOpen = false;
     renderHeaderMenu();
   }
-  // Client-side gate reusing the site's existing login endpoint (action=login
-  // on location.pathname — the same request _login.html's JS makes) to check
-  // the entered password without ever exposing the hash to this script. Every
+  // Checks against a SEPARATE Developer password (index.php's action=dev_login,
+  // $DEV_PASSWORD_HASH in secrets.php) — a distinct credential from the main
+  // site login, without ever exposing either hash to this script. Every
   // Import Members/Registrations link is still independently session-gated
-  // server-side (see members-import.php/registrations-import.php) — this
-  // step is only about hiding those links from the menu until asked for.
+  // server-side using the MAIN login's session (see members-import.php/
+  // registrations-import.php) — this step is only about hiding those links
+  // from the menu until the Developer password is entered.
   function submitDeveloperPassword(password) {
     return fetch(location.pathname, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "action=login&password=" + encodeURIComponent(password)
+      body: "action=dev_login&password=" + encodeURIComponent(password)
     }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (r) {
         if (r.ok && r.data && r.data.success) {
@@ -3111,40 +3112,51 @@
   }
   function closeDeveloperLogin() { state.developerLoginOpen = false; renderDeveloperLoginPage(); }
 
+  // Same full-screen gradient-card look as _login.html's main site login gate
+  // (see .dev-login-* in styles.css) — an in-app overlay, not the app's usual
+  // modal or full-page-banner treatment, plus a close (✕) button since this
+  // is reachable without leaving the app (the real login page has nothing to
+  // "close" back to).
   function renderDeveloperLoginPage() {
     var host = $("#developerLoginHost");
     if (!host) return;
     host.innerHTML = "";
     if (!state.developerLoginOpen) return;
 
-    var head = buildPageBanner(closeDeveloperLogin, "Developer Login");
+    var headerLogo = $("header.app img.hdr-logo");
+    var logoImg = headerLogo ? el("img", { src: headerLogo.src, class: "dev-login-logo", alt: "ETCC Logo" }) : null;
 
-    var body = el("div", { class: "api-page-inner" });
-    body.appendChild(el("div", { class: "hint", style: "margin-bottom:12px" },
-      ["Unlocks Import Members, Import Registrations, Settings, Regression Tests, Change " +
-       "Log, and API — this is the same password as the main site login, not a separate one."]));
+    var closeBtn = el("button", { class: "dev-login-close", title: "Cancel" }, ["✕"]);
+    closeBtn.addEventListener("click", closeDeveloperLogin);
 
-    var pwInput = el("input", { type: "password", placeholder: "Developer password", style: "max-width:320px" });
+    var pwInput = el("input", { type: "password", class: "dev-login-input", placeholder: "Enter Developer password" });
     var submit = function () {
       if (!pwInput.value) return;
       state.developerVerifying = true;
       renderDeveloperLoginPage();
       submitDeveloperPassword(pwInput.value).then(function () { state.developerVerifying = false; });
     };
-    var goBtn = el("button", { class: "btn primary" }, [state.developerVerifying ? "Checking…" : "Unlock"]);
+    var goBtn = el("button", { class: "dev-login-btn" }, [state.developerVerifying ? "Checking…" : "Unlock"]);
     if (state.developerVerifying) goBtn.setAttribute("disabled", "disabled");
     goBtn.addEventListener("click", submit);
     pwInput.addEventListener("keydown", function (e) { if (e.key === "Enter") submit(); });
-    body.appendChild(el("div", { class: "form-row" }, [pwInput, goBtn]));
-    if (state.developerError) body.appendChild(el("div", { class: "form-error" }, [state.developerError]));
 
-    body.appendChild(el("div", { style: "margin-top:18px" }, [
-      el("a", { href: "forgot-password.php", target: "_blank", rel: "noopener" }, ["Forgot password?"])
+    var kids = [closeBtn];
+    if (logoImg) kids.push(logoImg);
+    kids.push(el("h1", { class: "dev-login-title", text: "Developer Login" }));
+    kids.push(el("p", { class: "dev-login-subtitle" },
+      ["Unlocks Import Members, Import Registrations, Settings, Regression Tests, " +
+       "Change Log, and API — a separate password from the main site login."]));
+    kids.push(pwInput);
+    if (state.developerError) kids.push(el("div", { class: "dev-login-error" }, [state.developerError]));
+    kids.push(goBtn);
+    kids.push(el("div", { class: "dev-login-hint" }, [
+      el("a", { href: "dev-forgot-password.php", target: "_blank", rel: "noopener" }, ["Forgot Developer password?"])
     ]));
 
-    var bodyWrap = el("div", { class: "api-page-body" }, [body]);
-    var page = el("div", { class: "api-page" }, [head, bodyWrap]);
-    host.appendChild(page);
+    var container = el("div", { class: "dev-login-container" }, kids);
+    var screen = el("div", { class: "dev-login-screen" }, [container]);
+    host.appendChild(screen);
     pwInput.focus();
   }
 

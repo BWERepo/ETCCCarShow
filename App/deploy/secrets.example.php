@@ -4,6 +4,12 @@
 //   openssl passwd -6 -salt "$(openssl rand -hex 8)" 'the-actual-password'
 $PASSWORD_HASH = '$6$replace-with-real-salt$replaceWithRealHashXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.';
 
+// Separate "Developer" password (app.js's Developer Login screen, hamburger
+// menu > 🛠 Developer) — a distinct credential from $PASSWORD_HASH above.
+// Same generation command, different password. If left empty/unset, the
+// Developer prompt always rejects (see index.php's action=dev_login check).
+$DEV_PASSWORD_HASH = '$6$replace-with-real-salt$replaceWithRealHashXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.';
+
 // SMTP credentials used by forgot-password.php (via carshow_send_mail() in
 // lib.php) to send the reset email reliably — PHP's raw mail() was observed
 // silently failing to deliver to Gmail from this Hostinger account (no

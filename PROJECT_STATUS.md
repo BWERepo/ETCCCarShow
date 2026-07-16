@@ -1,26 +1,143 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-16 (end of session, latest). **This session's work spanned one
-checkpoint commit** (`8b5f905c`, pushed) giving the "Developer" hamburger menu item its
-own **separate password** from the main site login — a new `$DEV_PASSWORD_HASH` in
-`secrets.php`, checked via a new `action=dev_login` on `index.php` that never touches
-the main login session. The Developer Login screen was redesigned twice on explicit
-feedback: first from the previous session's full-page-banner style down to a small
-modal (interrupted before finishing — see below), then to its final form, a full-screen
-gradient card matching the main site login's own look (`.dev-login-*` in `styles.css`)
-plus a close (✕) button. It also got its own **self-service "Forgot Developer password?"
-reset flow** (new `dev-forgot-password.php`/`dev-reset-password.php`, mirroring the main
-login's existing reset pair) after briefly shipping with no reset option at all, per an
-explicit follow-up request. Along the way, two real bugs were found and fixed:
+Last updated: 2026-07-16 (end of session, latest). **This session's work covered the
+Sponsors tab's "T-Shirt Text" field** (renamed from "Individual Sponsorship Text",
+defaulting to the Sponsor Name), **the T-Shirt Order Form** (now shows every sponsor
+type's T-Shirt Text, not just Individual, with the website suffix dropped entirely), and
+**a Sponsor Report rework** (Email/Website columns removed; T-Shirt Text and the four
+payment fields added; rows now grouped by Sponsor Type then sorted by Payment Date).
+Two full `/ETCCCarShowCheckpoint` runs (build/version bump → FTP deploy → commit → push):
+`b34f0f6e` and `30f301b7`, both pushed to `origin/main` — the live site reflects
+everything through `30f301b7`. `/ETCCCarShowTest` was run once at the end of the session
+— 60/60 passed, unchanged (all of this session's changes are DOM/print-report-level in
+`app.js`, nothing in `logic.js`/`config.js`/`excel.js`, so no new pure-logic behavior for
+the Node CLI suite to cover — same established gap as always for this class of change).
+Also this session: verified (on request, no code changes needed) that the main site
+login password and the Developer menu password added last session are fully
+independent — separate hashes, separate auth checks, and each reset flow (main vs. Dev)
+explicitly preserves the other's hash instead of wiping it. Everything is committed and
+pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for the exact hash
+if picking this up cold).
+
+## This session's work (2026-07-16, later session)
+
+**0. Verified the main site password and Developer password are fully independent** — a
+request to double-check last session's work, not a new feature. Confirmed (no code
+changes): `secrets.php` holds two distinct SHA-512-crypt hashes (`$PASSWORD_HASH` /
+`$DEV_PASSWORD_HASH`); `index.php`'s `action=login` only ever checks `$PASSWORD_HASH`
+and `action=dev_login` only ever checks `$DEV_PASSWORD_HASH` (and the latter requires an
+existing main-login session just to attempt it, so it can't be used to brute-force the
+Dev password from a logged-out state); and both reset flows
+(`reset-password.php`/`dev-reset-password.php`) `require` the current `secrets.php` and
+explicitly re-write the *other* credential's hash + the SMTP vars verbatim before
+overwriting their own, so completing one reset can never silently wipe the other. Each
+reset token is also stored in its own file (`password-reset.json` vs
+`dev-password-reset.json`), so a valid link for one can't be replayed against the
+other's endpoint.
+
+**1. Sponsors tab — "Individual Sponsorship Text" renamed to "T-Shirt Text", now
+defaults to the Sponsor Name.** Both places this field's label appears —
+`SPONSOR_COLS` (the Sponsors table column, `App/src/app.js` ~line 1591) and
+`SPONSOR_FORM_FIELDS` (the Add/Edit Sponsor modal, ~line 2164) — were retitled. The
+field itself now defaults to the Sponsor Name:
+- `buildSponsorRecord()` saves `fieldEls.individualSponsorshipText.value.trim() || name`
+  — an empty field is saved as the Sponsor Name, matching the existing display fallback
+  already used elsewhere (`sp.individualSponsorshipText || sp.name`, e.g. the T-Shirt
+  Order Email's Individual Sponsors section).
+- The form's T-Shirt Text input now shows the current Sponsor Name as a live-updating
+  **placeholder** while left blank (`renderSponsorFormModal()`'s `SPONSOR_FORM_FIELDS`
+  loop, plus a new `input` listener on the Name field that keeps the placeholder in
+  sync as the user types) — so the intended default is visible before saving, not just
+  applied silently afterward.
+
+**2. T-Shirt Order Form (`buildTshirtOrderEmailBody()`, `App/src/app.js` ~line 1521) —
+now shows T-Shirt Text for every sponsor section, and only the T-Shirt Text.** Two
+rounds of explicit follow-up requests this session:
+- Round 1 ("display the t-shirt text"): Premier and Corporate sponsor lines used to
+  show `sp.name + (website ? " — " + website : "")`; Individual already showed
+  `sp.individualSponsorshipText || sp.name`. Changed Premier/Corporate to the same
+  `individualSponsorshipText || name` fallback, initially keeping the website suffix.
+- Round 2 ("display only the t-shirt text"): removed the website suffix entirely from
+  Premier/Corporate too, so all three sections now show exactly one line per sponsor —
+  T-Shirt Text (or Sponsor Name if blank) — nothing else. This also drives the T-Shirt
+  Order Form's on-screen "Message Body" preview, since that textarea is populated
+  directly from this same function.
+
+**3. Sponsor Report (Reports tab, `printSponsorReport()`/`SPONSOR_REPORT_COLS`,
+`App/src/app.js` ~line 4113) — column set and sort order reworked**, per an explicit
+"remove email & website. add t-shirt text and payment fields, sort by sponsor type and
+payment date" request:
+- **Removed**: Email, Website columns (and the now-dead `mailto:`/`https://` link-cell
+  logic in `sponsorReportCell()`, simplified back to a plain text cell for every
+  column).
+- **Added**: T-Shirt Text (`individualSponsorshipText`), Payment Date
+  (`lastPaymentDate`), Payment Type (`lastPaymentType`), Check # (`lastPaymentCheckNum`),
+  Paid (`lastPaymentAmount`) — all four payment fields already had `sponsorFieldText()`
+  support (used elsewhere by the Sponsors tab's own table), so no new field-formatting
+  code was needed.
+- **Sort order**: new `sponsorReportSorted()` helper groups by Sponsor Type first (in
+  `CONFIG.SPONSOR_TYPES`' own display order — Premier, Corporate, Individual), then
+  sorts by Payment Date within each type, reusing the existing `sponsorSortValue()`
+  helper the Sponsors table's own column-header sorting already relies on.
+  `printSponsorReport()` now builds its table body from `sponsorReportSorted()` instead
+  of the unsorted `visibleSponsors()`.
+
+**Checkpoints this session**: two full `/ETCCCarShowCheckpoint` runs (build/version bump
+→ FTP deploy → commit → push):
+- `b34f0f6e` — "Rename Individual Sponsorship Text to T-Shirt Text, default to sponsor
+  name, and show it for all sponsor types on the T-Shirt Order Form" (3 files:
+  `App/ETCCCarShow.html`, `App/src/app.js`, `App/version.json`).
+- `30f301b7` — "Rework Sponsor Report columns and sort order" (same 3 files).
+
+Both pushed to `origin/main`. The live site reflects everything through `30f301b7` as of
+this session's last deploy.
+
+**Tests**: `/ETCCCarShowTest` was run once this session — `node test/run-tests.js` →
+**60 passed, 0 failed**, unchanged. Nothing in `src/logic.js`/`src/config.js`/
+`src/excel.js` changed this session (every change above was in `app.js` — DOM rendering
+and print-report column/sort config, not feasible to cover from the Node CLI test), so
+no assertions were added, changed, or need updating.
+
+## Known follow-ups / things a new session might need to know (2026-07-16 later session)
+
+- **None of this session's changes have automated test coverage** — same established gap
+  as every other DOM/app.js-level feature in this app (the T-Shirt Text rename/default,
+  the T-Shirt Order Form's sponsor-section display change, the Sponsor Report's
+  column/sort rework).
+- **If a future ask wants the Sponsor Report's grouping/sort changed again**, the logic
+  lives entirely in `sponsorReportSorted()` (`App/src/app.js`) — it's independent of the
+  Sponsors tab's own on-screen sort state (`state.sponsorSortCol`/`sponsorSortDir`),
+  which is untouched by this report.
+- **T-Shirt Text's "default to Sponsor Name" is a save-time fallback, not a stored
+  copy** — an existing sponsor whose T-Shirt Text was left blank has `""` stored in
+  `individualSponsorshipText` until the next time that sponsor record is saved (Add/Edit
+  Sponsor form), at which point `buildSponsorRecord()` fills in the current Sponsor Name.
+  Every *display* path already falls back to `sp.name` when the field is blank, so this
+  is invisible to users either way — just worth knowing if a future change needs to
+  distinguish "explicitly blank" from "defaulted."
+
+Previous session — last updated 2026-07-16 (end of session, earlier). **That session's
+work spanned one checkpoint commit** (`8b5f905c`, pushed) giving the "Developer"
+hamburger menu item its own **separate password** from the main site login — a new
+`$DEV_PASSWORD_HASH` in `secrets.php`, checked via a new `action=dev_login` on
+`index.php` that never touches the main login session. The Developer Login screen was
+redesigned twice on explicit feedback: first from the previous session's
+full-page-banner style down to a small modal (interrupted before finishing — see
+below), then to its final form, a full-screen gradient card matching the main site
+login's own look (`.dev-login-*` in `styles.css`) plus a close (✕) button. It also got
+its own **self-service "Forgot Developer password?" reset flow** (new
+`dev-forgot-password.php`/`dev-reset-password.php`, mirroring the main login's existing
+reset pair) after briefly shipping with no reset option at all, per an explicit
+follow-up request. Along the way, two real bugs were found and fixed:
 `reset-password.php` (the *main* login's reset) would have silently wiped out the new
 `$DEV_PASSWORD_HASH` on its next use, since it didn't know that variable existed; and
 `deleted-sponsors.json` (added last session) was never added to `.htaccess`'s deny list,
-so it was directly fetchable over HTTP. `/ETCCCarShowTest` was run once this session
+so it was directly fetchable over HTTP. `/ETCCCarShowTest` was run once that session
 (60/60 passed, unchanged — nothing in `logic.js`/`config.js`/`excel.js` changed, only
-`app.js`/PHP). Everything is committed and pushed as of this doc's own `/ETCCCarShowEnd`
-commit (check `git log` for the exact hash if picking this up cold).
+`app.js`/PHP). See **"This session's work (2026-07-16, earlier session)"** immediately
+below for the full detail.
 
-## This session's work (2026-07-16, latest session)
+## This session's work (2026-07-16, earlier session)
 
 **1. Developer menu — a separate password from the main site login.** Prompted by "Lets
 have a different password for the developer than the main password":

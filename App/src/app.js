@@ -1539,10 +1539,10 @@
       lines.push("");
     }
     section("PREMIER SPONSORS", tshirtEmailSponsorList("premier"), function (sp) {
-      return sp.name + (sp.website ? " — " + sp.website : "");
+      return sp.individualSponsorshipText || sp.name;
     });
     section("CORPORATE SPONSORS", tshirtEmailSponsorList("corporate"), function (sp) {
-      return sp.name + (sp.website ? " — " + sp.website : "");
+      return sp.individualSponsorshipText || sp.name;
     });
     section("INDIVIDUAL SPONSORS", tshirtEmailSponsorList("individual"), function (sp) {
       return sp.individualSponsorshipText || sp.name;
@@ -1588,7 +1588,7 @@
     { key: "email", label: "Email" },
     { key: "address", label: "Address" },
     { key: "website", label: "Website" },
-    { key: "individualSponsorshipText", label: "Individual Sponsorship Text" },
+    { key: "individualSponsorshipText", label: "T-Shirt Text" },
     { key: "shirtSize", label: "T-Shirt" }
   ];
   function sponsorTypeLabel(key) {
@@ -2161,7 +2161,7 @@
     { key: "address", label: "Address" },
     { key: "website", label: "Website" },
     { key: "etccMemberName", label: "Member" },
-    { key: "individualSponsorshipText", label: "Individual Sponsorship Text" }
+    { key: "individualSponsorshipText", label: "T-Shirt Text" }
   ];
   function blankSponsor() {
     return {
@@ -2193,7 +2193,7 @@
       address: fieldEls.address.value.trim(),
       website: fieldEls.website.value.trim(),
       etccMemberName: fieldEls.etccMemberName.value.trim(),
-      individualSponsorshipText: fieldEls.individualSponsorshipText.value.trim(),
+      individualSponsorshipText: fieldEls.individualSponsorshipText.value.trim() || name,
       sponsorType: typeSel.value,
       shirtSize: shirtSel.value
     };
@@ -2217,11 +2217,15 @@
     var fieldEls = {};
     SPONSOR_FORM_FIELDS.forEach(function (f) {
       var input = el("input", { type: "text", value: editing[f.key] || "" });
+      if (f.key === "individualSponsorshipText") input.setAttribute("placeholder", editing.name || "");
       fieldEls[f.key] = input;
       body.appendChild(el("div", { class: "form-row" }, [
         el("span", { class: "form-label", text: f.label + (f.required ? " *" : "") }),
         input
       ]));
+    });
+    fieldEls.name.addEventListener("input", function () {
+      fieldEls.individualSponsorshipText.setAttribute("placeholder", fieldEls.name.value.trim());
     });
 
     var regDateText = editing.regDate || (editing.submittedAt ? fmtDate(editing.submittedAt) : "") || "—";

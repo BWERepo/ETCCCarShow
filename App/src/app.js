@@ -4108,36 +4108,42 @@
   }
 
   // ---------- Sponsor Report (full-page screen) ----------
-  // Sponsor Name / Member Name / Sponsor Type / Contact / Phone / Website only
-  // — a narrower column set than the Sponsors tab's own SPONSOR_COLS/printSponsors().
+  // Sponsor Name / Member Name / Sponsor Type / Contact / Phone / T-Shirt Text /
+  // payment fields — a narrower column set than the Sponsors tab's own
+  // SPONSOR_COLS/printSponsors(). Email/Website are intentionally omitted here.
   var SPONSOR_REPORT_COLS = [
     { key: "name", label: "Sponsor Name" },
     { key: "etccMemberName", label: "Member Name" },
     { key: "sponsorType", label: "Sponsor Type" },
     { key: "contactPerson", label: "Contact" },
     { key: "phone", label: "Phone" },
-    { key: "email", label: "Email" },
-    { key: "website", label: "Website" }
+    { key: "individualSponsorshipText", label: "T-Shirt Text" },
+    { key: "lastPaymentDate", label: "Payment Date" },
+    { key: "lastPaymentType", label: "Payment Type" },
+    { key: "lastPaymentCheckNum", label: "Check #" },
+    { key: "lastPaymentAmount", label: "Paid" }
   ];
-  // Email/Website cells render as clickable mailto:/https:// links (same
-  // treatment the Sponsors tab's own table already gives those two columns —
-  // see renderSponsorsBody()'s c.key === "email"/"website" branches).
   function sponsorReportCell(s, c) {
-    if (c.key === "email" && s.email) {
-      return el("td", {}, [el("a", { href: "mailto:" + s.email, text: s.email })]);
-    }
-    if (c.key === "website" && s.website) {
-      var websiteHref = /^https?:\/\//i.test(s.website) ? s.website : "https://" + s.website;
-      return el("td", {}, [el("a", { href: websiteHref, target: "_blank", rel: "noopener", text: s.website })]);
-    }
     return el("td", { text: sponsorFieldText(s, c.key) });
+  }
+  // Grouped by Sponsor Type (in CONFIG.SPONSOR_TYPES' own order), then by
+  // Payment Date within each type — same sortValue helper the Sponsors table's
+  // own column sorting already relies on.
+  function sponsorReportSorted() {
+    var typeOrder = {};
+    CONFIG.SPONSOR_TYPES.forEach(function (t, i) { typeOrder[t.key] = i; });
+    return visibleSponsors().slice().sort(function (a, b) {
+      var at = typeOrder[a.sponsorType], bt = typeOrder[b.sponsorType];
+      if (at !== bt) return at - bt;
+      return sponsorSortValue(a, "lastPaymentDate") - sponsorSortValue(b, "lastPaymentDate");
+    });
   }
   function printSponsorReport() {
     if (!visibleSponsors().length) return;
     var host = $("#printHost");
     host.innerHTML = "";
     var thead = el("thead", {}, [el("tr", {}, SPONSOR_REPORT_COLS.map(function (c) { return el("th", { text: c.label }); }))]);
-    var tbody = el("tbody", {}, visibleSponsors().map(function (s) {
+    var tbody = el("tbody", {}, sponsorReportSorted().map(function (s) {
       return el("tr", {}, SPONSOR_REPORT_COLS.map(function (c) { return sponsorReportCell(s, c); }));
     }));
     host.appendChild(buildPrintHeader("Sponsor Report"));

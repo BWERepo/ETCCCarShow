@@ -1,23 +1,143 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-16 (end of session, latest). **This session's work covered the
-Sponsors tab's "T-Shirt Text" field** (renamed from "Individual Sponsorship Text",
-defaulting to the Sponsor Name), **the T-Shirt Order Form** (now shows every sponsor
-type's T-Shirt Text, not just Individual, with the website suffix dropped entirely), and
-**a Sponsor Report rework** (Email/Website columns removed; T-Shirt Text and the four
-payment fields added; rows now grouped by Sponsor Type then sorted by Payment Date).
-Two full `/ETCCCarShowCheckpoint` runs (build/version bump → FTP deploy → commit → push):
-`b34f0f6e` and `30f301b7`, both pushed to `origin/main` — the live site reflects
-everything through `30f301b7`. `/ETCCCarShowTest` was run once at the end of the session
-— 60/60 passed, unchanged (all of this session's changes are DOM/print-report-level in
-`app.js`, nothing in `logic.js`/`config.js`/`excel.js`, so no new pure-logic behavior for
-the Node CLI suite to cover — same established gap as always for this class of change).
-Also this session: verified (on request, no code changes needed) that the main site
-login password and the Developer menu password added last session are fully
-independent — separate hashes, separate auth checks, and each reset flow (main vs. Dev)
-explicitly preserves the other's hash instead of wiping it. Everything is committed and
-pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for the exact hash
-if picking this up cold).
+Last updated: 2026-07-17 (end of session, latest). **This session added a brand-new
+standalone public "Sponsor List" page** (`App/deploy/sponsor-list.php`, live at
+`https://etccapps.com/apps/carshow/sponsor-list.php`) — no login required, built to
+match SilentAuctionManager's `starting-bid-list.php` pattern exactly (card layout,
+Print/Done buttons, print CSS). It lists every sponsor's Name, Type, Website, and
+T-Shirt Text, grouped by Sponsor Type then sorted by name, reading
+`sponsor-submissions.json` directly. Several rounds of explicit follow-up polish: all
+four columns forced to `white-space: nowrap` (no mid-cell wrapping), wrapped in a
+horizontally-scrollable container plus landscape print orientation (to stop nowrap
+columns clipping past the card/page edge), Website values turned into clickable links
+(auto-prefixed `https://` for bare domains, `target="_blank"`) that revert to plain
+unstyled text when printed. Also this session: the site version was explicitly reset
+to **3.0** (a deliberate major-version bump, not an accidental one — `version.json`'s
+`major` field was manually changed from 2 to 3 before the next build/checkpoint, which
+then auto-bumped `minor` back to 1 as usual). One full `/ETCCCarShowCheckpoint` run
+(build/version bump → FTP deploy → commit → push): `61fdc8f4`, pushed to `origin/main`
+— the live site reflects everything through `61fdc8f4`. `/ETCCCarShowTest` was run once
+this session — 60/60 passed, unchanged (all of this session's work is a new
+deploy/-level PHP page plus print CSS, nothing in `logic.js`/`config.js`/`excel.js`, so
+no new pure-logic behavior for the Node CLI suite to cover — same established gap as
+always for this class of change). Everything is committed and pushed as of this doc's
+own `/ETCCCarShowEnd` commit (check `git log` for the exact hash if picking this up
+cold).
+
+## This session's work (2026-07-17)
+
+**1. New standalone "Sponsor List" page** — a public, bookmarkable, no-login page
+(`App/deploy/sponsor-list.php`), explicitly requested as "using the same pattern as
+https://etccapps.com/apps/sam/starting-bid-list.php" (the sibling SilentAuctionManager
+project's equivalent public list page):
+- **Structure mirrors `starting-bid-list.php` exactly**: a centered white `.card` on a
+  light-gray background, a header row with the page title/subtitle on the left and
+  Print/Done buttons on the right, a bordered striped table, and the same print CSS
+  reset (`button { display: none }`, `.card` loses its shadow/rounding/max-width when
+  printing).
+- **Data source**: reads `sponsor-submissions.json` directly via `lib.php`'s
+  `carshow_read_json_list()` helper — no password/session check at all (same
+  public-page convention as `sponsor-form.php`). This file is already the single
+  always-current sponsor list (see that file's own header comment) since every
+  CSV-synced sponsor gets upserted into it client-side via `syncSponsorsFromRegistrations()`
+  the first time the app loads after new registration data appears — so this standalone
+  page doesn't need to duplicate any of that sync logic itself, it just reads the
+  end result.
+- **Columns**: Sponsor Name, Sponsor Type (looked up against a local copy of
+  `SPONSOR_TYPES` labels, matching `config.js`'s canonical list — this file isn't part
+  of `build.js`'s pipeline, so if `SPONSOR_TYPES` ever changes in `config.js`, this
+  page's local copy needs a matching manual update, same caveat `sponsor-form.php`
+  already carries for its own local copy), Website, T-Shirt Text (falls back to
+  Sponsor Name when blank, matching every other display path in the app).
+- **Sort order**: grouped by Sponsor Type (Premier → Corporate → Individual, hardcoded
+  order matching `config.js`'s `SPONSOR_TYPES` array order) then alphabetically by name
+  within each group.
+- **New deploy/ file — added to `ftp-deploy.sh`'s hardcoded upload list** (`upload
+  "sponsor-list.php"`, alongside the existing `sponsor-form.php`/`sponsor-submissions.php`
+  lines) — this project's established gotcha (new `deploy/` endpoints are silently never
+  uploaded unless added here by hand) was avoided proactively this time.
+- **No new `.htaccess` deny rule needed** — `sponsor-submissions.json` (the file this
+  page reads) already had a `<Files>` block from an earlier session.
+
+**2. Print polish — three explicit follow-up rounds**, each deployed live as it landed:
+- **"print each column on one line"**: added `white-space: nowrap` to every `td`/`th`
+  (previously only one column had it via an inline style) so no cell wraps to a second
+  line, on screen or in print.
+- **"eliminate clipping"**: the nowrap change above meant the table could exceed the
+  700px `.card` width. Fixed by wrapping the `<table>` in a new `.table-wrap` div with
+  `overflow-x: auto` (horizontal scrollbar appears on screen instead of hard-clipping
+  text at the card edge), plus switching the print `@page` rule from `size: portrait`
+  to `size: landscape` (more horizontal room reduces the odds of a real printer/PDF
+  clipping wide nowrap rows) and setting `.table-wrap { overflow-x: visible }` inside
+  `@media print` so the scroll container doesn't hide anything when printed.
+- **"make website hot links"**: Website cells now render as `<a href target="_blank"
+  rel="noopener">`, auto-prefixing `https://` onto bare domains (anything not already
+  starting with `http://`/`https://`, via a `preg_match` check) so entries like
+  `www.bcipkg.com` become clickable without the sponsor having needed to type a full
+  URL when their record was created.
+- **"remove hot link from print"** (immediate follow-up to the above): added
+  `@media print { td a { color: inherit; text-decoration: none; } }` so the link stays
+  fully clickable on screen but renders as plain black text with no underline when
+  printed — the anchor tag itself is untouched, only its print appearance changes.
+
+**3. Version bumped to 3.0.** Explicit request ("change version to 3.0") — this is a
+manual major-version reset, distinct from `build.js`'s normal auto-increment-the-minor-
+number behavior. `App/version.json`'s `major` was hand-edited from `2` to `3` and
+`minor` from `228` to `0`, then `node build.js` was run once to bake "v3.0" into the
+built HTML's footer — that same build run then auto-bumped `minor` to `1` per its usual
+logic (`version.major + "." + version.minor` is read *before* incrementing, so the
+build that produces "v3.0" in its own output always leaves `version.json` one minor
+number ahead for next time — this is normal, not a bug). **If a future session sees
+`version.json` reading `3.1` or higher while the live footer still shows `3.0`, that's
+expected** — the footer reflects whatever was baked in at the *last* build, not
+`version.json`'s current (already-incremented-for-next-time) value.
+
+**Checkpoint this session**: one full `/ETCCCarShowCheckpoint` run (build/version bump
+→ FTP deploy → commit → push):
+- `61fdc8f4` — "Add standalone public Sponsor List page, bump version to 3.0" (4 files:
+  `App/ETCCCarShow.html`, `App/deploy/ftp-deploy.sh`, `App/version.json`,
+  `App/deploy/sponsor-list.php` (new)).
+
+Pushed to `origin/main`. The live site reflects everything through `61fdc8f4` as of
+this session's deploy. Note: several of this session's intermediate edits (the nowrap
+CSS, the scroll-wrap/landscape fix, the hotlink addition, the print-hotlink removal)
+were each deployed live individually via `bash deploy/ftp-deploy.sh` as they landed
+(per this project's standing "always deploy any changes" rule — see
+`App/deploy/ftp-deploy.sh` usage pattern / Claude's own memory notes on this repo), but
+only the final state was committed/pushed to git at checkpoint time — git history for
+this session is a single squashed-in-effect commit, not one per intermediate deploy.
+
+**Tests**: `/ETCCCarShowTest` was run once this session — `node test/run-tests.js` →
+**60 passed, 0 failed**, unchanged. Nothing in `src/logic.js`/`src/config.js`/
+`src/excel.js` changed this session (every change above was a new `App/deploy/*.php`
+page plus its own inline print CSS — not feasible to cover from the Node CLI test), so
+no assertions were added, changed, or need updating.
+
+## Known follow-ups / things a new session might need to know (2026-07-17 session)
+
+- **None of this session's changes have automated test coverage** — same established
+  gap as every other deploy/-level or DOM/app.js-level feature in this app (the new
+  Sponsor List page, its print CSS, the hotlink behavior).
+- **`sponsor-list.php`'s `$SPONSOR_TYPES` array is a local hand-copy of
+  `config.js`'s `SPONSOR_TYPES`** (labels only, not fees) — this file isn't part of
+  `build.js`'s `src/` pipeline, so if a future session changes the canonical
+  `SPONSOR_TYPES` list in `config.js` (e.g. new sponsor tier, renamed label, fee
+  change), remember to update the copy in `sponsor-list.php` too, the same caveat
+  `sponsor-form.php` already documents for its own local copy of the same list.
+  Sort order (Premier → Corporate → Individual) is also hardcoded there separately
+  from `config.js`'s array order — same caveat applies if that order ever changes.
+- **The live site's version display is now 3.0** as of this session's deploy — if a
+  future session is asked to "bump the version" normally (not another explicit
+  major-version reset), the usual `node build.js` auto-increment path continues from
+  wherever `version.json`'s current `minor` sits (3.1 as of this write-up), it does
+  not need to be told 3.0 again.
+- **Watch for the "view" class trap on any future tab/print work** (carried forward
+  from an earlier session, still valid — see the historical entry further below) — any
+  new tab's on-screen wrapper needs the plain `view` class in addition to its own
+  specific class, or print CSS's `.view.<name> { display: none !important; }` hiding
+  rule will silently never match it. (Not directly relevant to `sponsor-list.php` since
+  that page isn't part of the main app's tab system at all — it's a fully standalone
+  PHP page with its own `<html>`/`<head>`/print CSS, not a `.view` inside the SPA.)
 
 ## This session's work (2026-07-16, later session)
 

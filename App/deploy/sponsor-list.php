@@ -64,7 +64,7 @@ usort($sponsors, function ($a, $b) {
   </div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Sponsor Name</th><th>Sponsor Type</th><th>Website</th><th>T-Shirt Text</th></tr></thead>
+    <thead><tr><th>Sponsor Name</th><th>Sponsor Type</th><th>T-Shirt Text</th><th>Website</th></tr></thead>
     <tbody>
 <?php foreach ($sponsors as $sponsor):
     $type = (string)($sponsor['sponsorType'] ?? '');
@@ -78,8 +78,8 @@ usort($sponsors, function ($a, $b) {
     <tr>
       <td><?= htmlspecialchars($name) ?></td>
       <td><?= htmlspecialchars($typeLabel) ?></td>
-      <td><?php if ($website !== ''): ?><a href="<?= htmlspecialchars($websiteHref) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($website) ?></a><?php endif; ?></td>
       <td><?= htmlspecialchars($shirtText) ?></td>
+      <td><?php if ($website !== ''): ?><a href="<?= htmlspecialchars($websiteHref) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($website) ?></a><?php endif; ?></td>
     </tr>
 <?php endforeach; ?>
     </tbody>

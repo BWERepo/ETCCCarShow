@@ -1,17 +1,93 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-19 (end of session, latest). **This was a short session**: picked
-up via `/ETCCCarShowBegin` with one already-pending, uncommitted local change sitting in
-the working tree from a prior session that never reached a checkpoint —
-`App/deploy/sponsor-list.php`'s table columns had been reordered (T-Shirt Text moved
-before Website) but never built/deployed/committed. Confirmed with the user
-("deploy/commit") and shipped it: `node build.js` → `ftp-deploy.sh` → commit `13cda96c`
-("Reorder Sponsor List columns: T-Shirt Text before Website") → pushed to `origin/main`.
-Working tree is clean as of that commit. **One open question raised, not yet acted
-on**: the user reported "i cannot find the details for the walk-in tshirt purchases" —
-see "Known follow-ups" below, this needs picking up next session. Everything is
-committed and pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for
-the exact hash if picking this up cold).
+Last updated: 2026-07-19 (end of session, latest — second session today). Resolved the
+open question left by the earlier 2026-07-19 session (see that section below): the user
+chose "link to the existing Buy T-Shirt list" for the Walk-In T-Shirt Purchases detail
+question, so a new "📋 Walk-In Purchase Details" button was added to the **T-Shirts tab**
+(not the Summary tab — an inline-button-on-Summary-card attempt was built first, then
+explicitly reverted per "remove button from summary tab. add button to t-shirts tab").
+Also fixed a real bug: the Registration tab's Reg Date column sorted as a plain
+lowercase string, not a date, so dates were out of chronological order across month
+boundaries. Full checkpoint run (`/ETCCCarShowCheckpoint`): build → deploy → commit
+`01f88ef4` → push. Working tree is clean as of that commit.
+
+## This session's work (2026-07-19, later session)
+
+**1. T-Shirts tab — new "📋 Walk-In Purchase Details" button.** Resolves the open
+question carried over from the earlier session today (see the 2026-07-19 section below
+for the original investigation): the Summary tab's "Walk-In T-Shirt Purchases" card had
+no way to reach the per-purchase detail list that already existed inside T-Shirts → Buy
+T-Shirt. Asked the user via `AskUserQuestion` how to expose it; they picked **"Link to
+Buy T-Shirt list"** over an inline expandable table on the Summary card.
+- **First attempt (reverted)**: added a "View Purchase Details →" button directly on the
+  Summary tab's Walk-In T-Shirt Purchases card (`buildSummaryView()`, `App/src/app.js`
+  ~line 1310), calling the existing `openTshirtPurchasePage()`. The user then said
+  "remove button from summary tab. add button to t-shirts tab" — so this was undone.
+- **Final placement**: a new button in `buildTshirtView()` (`App/src/app.js` ~line
+  3909–3941), alongside the existing "📧 T-Shirt Order Form" / "📊 T-Shirt Report" /
+  "🛒 Buy T-Shirt" buttons in that tab's action row. Labeled "📋 Walk-In Purchase
+  Details", it calls the same `openTshirtPurchasePage()` function the existing "🛒 Buy
+  T-Shirt" button already uses — both buttons now open the identical full-page purchase
+  list/form screen; this one exists as a more discoverable, explicitly-labeled entry
+  point for "I just want to see past purchases" versus "I want to ring up a new sale."
+  No new screen/function was built — this is purely a second navigation entry point into
+  `openTshirtPurchasePage()`/`renderTshirtPurchasePage()`, which already had the full
+  per-purchase list (time, name, cost, size, payment type, check #, Delete button,
+  newest-first).
+- **Gotcha hit while building this**: the `el()` DOM helper (`App/src/app.js` ~line 222)
+  does **not** support an `onclick` key in its attrs object — passing one calls
+  `setAttribute("onclick", <function>)`, which stringifies the function instead of
+  wiring up a real event handler. This repo's established pattern (seen throughout
+  `buildTshirtView()` and elsewhere) is: create the button with `el("button", {class:
+  "btn"}, [...])`, then call `.addEventListener("click", handler)` on it separately.
+  Also worth noting: this app has no `btn-link` CSS class — every action button in this
+  codebase uses the plain `btn` class (or `btn primary` for the emphasized one), so a
+  first-draft `class: "btn-link"` had to be swapped to `class: "btn"` to match.
+
+**2. Registration tab — Reg Date column now sorts correctly.** Reported as "reg date
+column on registration tab does not sort by date and time correctly." Root cause:
+`sortedRows()` (`App/src/app.js` ~line 923–940) only had two sort modes — numeric
+(`isNumericCol()`) or lowercase-string comparison — and Reg Date fell into the string
+branch. Since ClubExpress's raw CSV "Reg Date" values are unpadded strings like
+"7/8/2026 7:55:00 AM" (see the existing `DATE_COLS`/`fmtCsvDate()` comment just above,
+~line 161), a plain string compare put "10/1/2026" before "2/1/2026" (character-by-
+character, "1" < "2") — clicking the Reg Date header never actually produced
+chronological order once registrations spanned more than one single-digit month.
+**Fix**: `sortedRows()` now checks `DATE_COLS[c]` (the same lookup table
+`fmtCsvDate()` already used for display formatting) and, when true, parses both values
+with `new Date(...).getTime()` and compares timestamps instead of strings (blank/
+unparseable values sort as `-Infinity`, same convention the numeric branch already
+used for blank/null). Only `"Reg Date"` is in `DATE_COLS` today, so this fix applies
+there specifically, but it's driven by the existing shared lookup table, so any future
+column added to `DATE_COLS` for display purposes will automatically also sort correctly
+— no separate registration needed.
+
+**Checkpoint this session**: one full `/ETCCCarShowCheckpoint` run (build/version bump →
+FTP deploy → commit → push):
+- `01f88ef4` — "Add T-Shirts tab Walk-In Purchase Details button, fix Reg Date sort" (3
+  files: `App/ETCCCarShow.html`, `App/src/app.js`, `App/version.json`).
+
+Pushed to `origin/main`. The live site reflects everything through `01f88ef4` as of this
+session's deploy (an earlier, separate `bash deploy/ftp-deploy.sh` run also happened
+mid-session, before the checkpoint, per this project's standing "always deploy any
+changes" rule — the checkpoint's own deploy re-confirmed the same final state).
+
+**Tests**: not run this session (no test/`/ETCCCarShowTest` request was made). Nothing
+in `src/logic.js`/`src/config.js`/`src/excel.js` changed — both changes above were in
+`app.js` only (DOM button wiring and table sort comparison logic), so no assertions were
+added, changed, or need updating, but the existing 60-test suite was not re-verified.
+
+## Known follow-ups / things a new session might need to know (2026-07-19 later session)
+
+- **None of this session's changes have automated test coverage** — same established gap
+  as every other DOM/app.js-level feature in this app (the new T-Shirts tab button, the
+  Reg Date sort fix). The Reg Date sort fix in particular would be a good candidate for
+  a future `/ETCCCarShowTest` pass if `sortedRows()`'s logic is ever exposed/refactored
+  to be unit-testable outside the DOM.
+- **The Walk-In T-Shirt Purchases open question from the earlier 2026-07-19 session is
+  now resolved** — no further action needed there. If a future session sees the older
+  "This session's work (2026-07-19)" entry below referencing this as still-open, that's
+  now stale; this later session's work supersedes it.
 
 ## This session's work (2026-07-19)
 

@@ -1,28 +1,57 @@
 # ETCC Car Show App — Project Status
 
-Last updated: 2026-07-17 (end of session, latest). **This session added a brand-new
-standalone public "Sponsor List" page** (`App/deploy/sponsor-list.php`, live at
-`https://etccapps.com/apps/carshow/sponsor-list.php`) — no login required, built to
-match SilentAuctionManager's `starting-bid-list.php` pattern exactly (card layout,
-Print/Done buttons, print CSS). It lists every sponsor's Name, Type, Website, and
-T-Shirt Text, grouped by Sponsor Type then sorted by name, reading
-`sponsor-submissions.json` directly. Several rounds of explicit follow-up polish: all
-four columns forced to `white-space: nowrap` (no mid-cell wrapping), wrapped in a
-horizontally-scrollable container plus landscape print orientation (to stop nowrap
-columns clipping past the card/page edge), Website values turned into clickable links
-(auto-prefixed `https://` for bare domains, `target="_blank"`) that revert to plain
-unstyled text when printed. Also this session: the site version was explicitly reset
-to **3.0** (a deliberate major-version bump, not an accidental one — `version.json`'s
-`major` field was manually changed from 2 to 3 before the next build/checkpoint, which
-then auto-bumped `minor` back to 1 as usual). One full `/ETCCCarShowCheckpoint` run
-(build/version bump → FTP deploy → commit → push): `61fdc8f4`, pushed to `origin/main`
-— the live site reflects everything through `61fdc8f4`. `/ETCCCarShowTest` was run once
-this session — 60/60 passed, unchanged (all of this session's work is a new
-deploy/-level PHP page plus print CSS, nothing in `logic.js`/`config.js`/`excel.js`, so
-no new pure-logic behavior for the Node CLI suite to cover — same established gap as
-always for this class of change). Everything is committed and pushed as of this doc's
-own `/ETCCCarShowEnd` commit (check `git log` for the exact hash if picking this up
-cold).
+Last updated: 2026-07-19 (end of session, latest). **This was a short session**: picked
+up via `/ETCCCarShowBegin` with one already-pending, uncommitted local change sitting in
+the working tree from a prior session that never reached a checkpoint —
+`App/deploy/sponsor-list.php`'s table columns had been reordered (T-Shirt Text moved
+before Website) but never built/deployed/committed. Confirmed with the user
+("deploy/commit") and shipped it: `node build.js` → `ftp-deploy.sh` → commit `13cda96c`
+("Reorder Sponsor List columns: T-Shirt Text before Website") → pushed to `origin/main`.
+Working tree is clean as of that commit. **One open question raised, not yet acted
+on**: the user reported "i cannot find the details for the walk-in tshirt purchases" —
+see "Known follow-ups" below, this needs picking up next session. Everything is
+committed and pushed as of this doc's own `/ETCCCarShowEnd` commit (check `git log` for
+the exact hash if picking this up cold).
+
+## This session's work (2026-07-19)
+
+**1. Deployed/committed a pending Sponsor List column reorder.** `App/deploy/
+sponsor-list.php`'s table header/row cells had `<th>`/`<td>` order changed so **T-Shirt
+Text now comes before Website** (previously Website came before T-Shirt Text) — this
+edit already existed uncommitted in the working tree at the start of the session (from
+before `/ETCCCarShowBegin` was invoked), not something written this session. Built,
+deployed live, and committed as `13cda96c`.
+
+**2. Open question raised — Walk-In T-Shirt Purchases has no detail view from the
+Summary tab.** The user shared a screenshot of the Summary tab's "Walk-In T-Shirt
+Purchases" card (`buildSummaryView()`, `App/src/app.js` ~line 1310) and said "i cannot
+find the details for the walk-in tshirt purchases." Investigated but did not yet fix
+(interrupted mid-investigation by this End invocation) — the facts found so far:
+- The Summary tab's card only shows aggregate stats: purchase count, dollar total, and
+  a size-breakdown matrix (`state.tshirtPurchases.reduce(...)` at ~line 1252,
+  render around ~line 1310–1415). There's no per-purchase list and no link/button on
+  that card to get to one.
+- A real per-purchase detail list **does already exist**, but only inside the T-Shirts
+  tab's "🛒 Buy T-Shirt" full-page form (`App/src/app.js` ~line 4281–4299) — it shows
+  time, name, cost, size, payment type, check #, and a Delete button per purchase,
+  sorted newest-first. An officer has to know to navigate to T-Shirts → Buy T-Shirt to
+  find this; there's no path to it from the Summary card itself.
+- **Next session should ask the user what they actually want**: a link/button from the
+  Summary card to the existing Buy T-Shirt purchase list, or a new inline expandable
+  detail table right on the Summary card itself, or something else — don't just guess
+  and implement one direction.
+
+**No build/deploy/test beyond item 1 above** — this was a short pickup-and-ship session,
+not a full feature session.
+
+## Known follow-ups / things a new session might need to know (2026-07-19 session)
+
+- **Walk-In T-Shirt Purchases has no detail view reachable from the Summary tab** — see
+  item 2 above. The user wants to find per-purchase detail (who bought what, when) and
+  currently can't from the Summary card; a detail list already exists but only inside
+  T-Shirts → Buy T-Shirt. **Ask the user what they want** (link from Summary card to
+  the existing list, an inline expandable table, etc.) before implementing — this was
+  raised but not designed or built yet.
 
 ## This session's work (2026-07-17)
 

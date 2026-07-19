@@ -404,7 +404,7 @@ table.matrix td.z { color: #c2c8d0; }
   <div id="app"></div>
 </div>
 <footer class="app-footer">
-  <div>v3.2 &middot; Deployed 07/19/2026 10:06 AM</div>
+  <div>v3.4 &middot; Deployed 07/19/2026 10:34 AM</div>
   <div class="footer-credit">Website by Business Web Express &middot; <a href="mailto:info@businesswebexpress.com">info@businesswebexpress.com</a></div>
   <div class="footer-credit">&copy; 2026 East Tennessee Corvette Club &middot; Knoxville, TN &middot; <a href="mailto:etccwebsite.webmanager@gmail.com">etccwebsite.webmanager@gmail.com</a></div>
 </footer>
@@ -2448,9 +2448,15 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
         return rows;
       }
       var num = isNumericCol(c);
+      var isDate = !!DATE_COLS[c];
       rows.sort(function (a, b) {
         var av = a[c], bv = b[c];
         if (num) { av = av === "" || av == null ? -Infinity : Number(av); bv = bv === "" || bv == null ? -Infinity : Number(bv); return (av - bv) * dir; }
+        if (isDate) {
+          var ad = av ? new Date(av).getTime() : NaN, bd = bv ? new Date(bv).getTime() : NaN;
+          ad = isNaN(ad) ? -Infinity : ad; bd = isNaN(bd) ? -Infinity : bd;
+          return (ad - bd) * dir;
+        }
         av = String(av == null ? "" : av).toLowerCase(); bv = String(bv == null ? "" : bv).toLowerCase();
         return (av < bv ? -1 : av > bv ? 1 : 0) * dir;
       });
@@ -5442,8 +5448,10 @@ window.__carshowReportsBanner = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
     reportBtn.addEventListener("click", printTshirtReport);
     var purchaseBtn = el("button", { class: "btn" }, ["🛒 Buy T-Shirt"]);
     purchaseBtn.addEventListener("click", openTshirtPurchasePage);
+    var purchaseDetailsBtn = el("button", { class: "btn" }, ["📋 Walk-In Purchase Details"]);
+    purchaseDetailsBtn.addEventListener("click", openTshirtPurchasePage);
     wrap.appendChild(el("div", { class: "panel" }, [
-      el("div", { class: "settings-actions" }, [orderBtn, reportBtn, purchaseBtn])
+      el("div", { class: "settings-actions" }, [orderBtn, reportBtn, purchaseBtn, purchaseDetailsBtn])
     ]));
 
     return wrap;

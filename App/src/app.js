@@ -929,9 +929,15 @@
         return rows;
       }
       var num = isNumericCol(c);
+      var isDate = !!DATE_COLS[c];
       rows.sort(function (a, b) {
         var av = a[c], bv = b[c];
         if (num) { av = av === "" || av == null ? -Infinity : Number(av); bv = bv === "" || bv == null ? -Infinity : Number(bv); return (av - bv) * dir; }
+        if (isDate) {
+          var ad = av ? new Date(av).getTime() : NaN, bd = bv ? new Date(bv).getTime() : NaN;
+          ad = isNaN(ad) ? -Infinity : ad; bd = isNaN(bd) ? -Infinity : bd;
+          return (ad - bd) * dir;
+        }
         av = String(av == null ? "" : av).toLowerCase(); bv = String(bv == null ? "" : bv).toLowerCase();
         return (av < bv ? -1 : av > bv ? 1 : 0) * dir;
       });
@@ -3923,8 +3929,10 @@
     reportBtn.addEventListener("click", printTshirtReport);
     var purchaseBtn = el("button", { class: "btn" }, ["🛒 Buy T-Shirt"]);
     purchaseBtn.addEventListener("click", openTshirtPurchasePage);
+    var purchaseDetailsBtn = el("button", { class: "btn" }, ["📋 Walk-In Purchase Details"]);
+    purchaseDetailsBtn.addEventListener("click", openTshirtPurchasePage);
     wrap.appendChild(el("div", { class: "panel" }, [
-      el("div", { class: "settings-actions" }, [orderBtn, reportBtn, purchaseBtn])
+      el("div", { class: "settings-actions" }, [orderBtn, reportBtn, purchaseBtn, purchaseDetailsBtn])
     ]));
 
     return wrap;

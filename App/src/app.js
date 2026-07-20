@@ -153,7 +153,7 @@
   // function generate() already runs CSV/manual registration phones
   // through — instead of a separate app.js copy, so there's one
   // implementation and one regression-tested set of rules for both.
-  // Sponsors' phones (CSV auto-sync, sponsor-form.php submissions) never
+  // Sponsors' phones (CSV auto-sync, member-sponsor-form.php submissions) never
   // flow through generate(), so this call is still needed for those; for
   // Registration rows it's a harmless no-op re-format of an already-
   // formatted value.
@@ -1684,7 +1684,7 @@
     // came from: the CSV auto-sync stores the registration's own "Reg Date"
     // (already a formatted string, see syncSponsorsFromRegistrations), while
     // a "Become a Car Show Sponsor" web submission has no CSV row at all, so
-    // it uses sponsor-form.php's submittedAt (ISO string) instead, formatted
+    // it uses member-sponsor-form.php's submittedAt (ISO string) instead, formatted
     // to match. Manually-added sponsors with neither show blank.
     if (colKey === "regDate") {
       if (s.regDate) return fmtCsvDate(s.regDate);
@@ -1744,7 +1744,7 @@
     if (idx === -1) state.sponsors.push(record); else state.sponsors[idx] = record;
     pushSponsorToServer("upsert", { sponsor: record });
     // Covers a brand-new Individual Sponsorship added directly (Edit Sponsor
-    // modal's Save, or a sponsor-form.php submission ingested via
+    // modal's Save, or a member-sponsor-form.php submission ingested via
     // ingestSponsors) — backfillPaymentDefaults() no-ops for sponsors that
     // already have a payment record, so this is safe to call unconditionally.
     backfillPaymentDefaults();
@@ -2037,13 +2037,13 @@
     var paidGroup = el("label", { class: "statusgroup" }, [document.createTextNode("Paid: "), paidSelect]);
     var count = el("span", { class: "count", id: "sponsorcount" });
     // Adding a sponsor goes through the same public "Become a Car Show
-    // Sponsor" form (sponsor-form.php) anyone else uses, instead of the
+    // Sponsor" form (member-sponsor-form.php) anyone else uses, instead of the
     // in-app modal — keeps one path for entries to land in
     // sponsor-submissions.json. The from=app marker tells that page a
     // successful submission came from inside this app (vs. a link on
     // ClubExpress/the club's main site) — see its post-submit redirect.
     var addBtn = el("button", { class: "btn primary" }, ["+ Add Sponsor"]);
-    addBtn.addEventListener("click", function () { window.open("sponsor-form.php?from=app", "_blank", "noopener"); });
+    addBtn.addEventListener("click", function () { window.open("member-sponsor-form.php?from=app", "_blank", "noopener"); });
     // Re-fetches just the sponsor-related data in place — NOT a page reload
     // (that briefly shows the splash screen, since every full load starts
     // there). Picks up whatever another officer (or the public sign-up form)
@@ -2506,7 +2506,7 @@
 
   // Same fallback sponsorFieldText() uses for the "Reg Date" column: sponsors
   // synced from a CSV registration have a real regDate string; sponsors added
-  // via the external sponsor-form.php (or the in-app Add flow) only ever get
+  // via the external member-sponsor-form.php (or the in-app Add flow) only ever get
   // submittedAt, so fall back to that (formatted to match) rather than
   // silently skipping the backfill for them.
   function sponsorRegDateForPayment(sponsor) {
@@ -2661,7 +2661,7 @@
     // roster (state.members, from Developer > Import Members) to auto-fill
     // the whole form — Last/First Name, Reg #, and whichever contact
     // fields that roster entry has — same "Last, First" datalist pattern
-    // sponsor-form.php's "ETCC Member Name" field uses. Manual entry still
+    // member-sponsor-form.php's "ETCC Member Name" field uses. Manual entry still
     // works if the person isn't in the roster, or the last import didn't
     // include a given field (left untouched in that case).
     var lookupList = el("datalist", { id: "addRegMemberList" });
@@ -3434,7 +3434,7 @@
     body.appendChild(el("h4", { text: "New Sponsor Confirmation Email" }));
     body.appendChild(el("div", { class: "hint", style: "margin-bottom:4px" },
       ["Sent whenever a sponsorship is submitted through the public sponsor sign-up form " +
-       "(sponsor-form.php). Leave To blank to default it to the Member Email entered on " +
+       "(member-sponsor-form.php). Leave To blank to default it to the Member Email entered on " +
        "the form itself; sending is only skipped if both are blank. To/CC/BCC each accept " +
        "multiple comma-separated addresses."]));
     var sponsorEmailToInput = el("input", { type: "text", value: state.appSettings.sponsorEmailTo || "" });
@@ -3523,7 +3523,7 @@
   // Basenames ftp-deploy.sh actually uploads (see that file) — used to count
   // "Files Deployed" out of the repo's full file tree.
   var CHANGELOG_DEPLOYED_FILES = [
-    "ETCCCarShow.html", "_login.html", "index.php", "lib.php", "sponsor-form.php",
+    "ETCCCarShow.html", "_login.html", "index.php", "lib.php", "member-sponsor-form.php",
     "sponsor-submissions.php", "registrations-upload.php", "members-import.php",
     "registrations-import.php", "forgot-password.php", "reset-password.php",
     "logout.php", "ETCClogoWhiteBackground.png", ".htaccess"
@@ -4351,7 +4351,7 @@
     // at module-load time, since init() is what's guaranteed to run after
     // every inline script in the document.
     SITE_CONFIG = window.__carshowSite || {};
-    // sponsor-form.php redirects here with #sponsors after a successful
+    // member-sponsor-form.php redirects here with #sponsors after a successful
     // submission (opened in its own tab from the Sponsors tab's "+ Add
     // Sponsor" button) — land on a fresh Sponsors tab, already showing the
     // new submission, instead of the default Summary tab. Also skip the

@@ -17,12 +17,12 @@
 // This page isn't part of build.js's src/ pipeline, so if those config
 // lists change, update the two arrays below to match.
 //
-// ETCC Member Name is a required free-text field constrained by a <datalist>
-// and validated server-side against members-data.json (imported via
-// members-import.php from a club membership CSV) — not a boolean checkbox.
-// It must match the roster exactly (case-insensitively) or the submission
-// is rejected.
-
+// This is a "public" variant of sponsor-form.php (copied from it, then
+// customized) with no ETCC Member Name / Member Email fields at all — this
+// version is meant for non-member businesses/sponsors with no club roster
+// membership to validate against, so submitted records simply have no
+// etccMemberName/memberEmail keys (sponsor-submissions.json tolerates that;
+// every reader in the app already treats those fields as optional).
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 require __DIR__ . '/lib.php';
@@ -37,24 +37,11 @@ $SHIRT_SIZES = [
     "Women's Small", "Women's Medium", "Women's Large", "Women's Extra Large", "Women's 2XL", "Women's 3XL",
 ];
 
-// Member roster (gitignored, contains member PII — see members-import.php)
-// used only to populate the datalist suggestions and validate the ETCC
-// Member Name field below. Blocked from direct HTTP access by .htaccess.
-$members = carshow_read_json_list(__DIR__ . '/members-data.json');
-$memberNames = []; // lowercased name -> canonical display name, for case-insensitive validation
-$memberEmails = []; // canonical display name -> email, for the "Member Email" auto-fill below
-foreach ($members as $m) {
-    if (!empty($m['name'])) {
-        $memberNames[strtolower($m['name'])] = $m['name'];
-        if (!empty($m['email'])) $memberEmails[$m['name']] = $m['email'];
-    }
-}
-
 $errors = [];
 $success = false;
 $values = [
     'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-    'website' => '', 'etccMemberName' => '', 'memberEmail' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
+    'website' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
 ];
 // See the post-submit redirect below for what this actually controls —
 // carried as a hidden form field (not just the URL's query string) so it
@@ -62,7 +49,7 @@ $values = [
 $fromParam = (string)($_POST['from'] ?? ($_GET['from'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website', 'etccMemberName', 'memberEmail'] as $f) {
+    foreach (['name', 'contactPerson', 'phone', 'email', 'address', 'website'] as $f) {
         $values[$f] = trim((string)($_POST[$f] ?? ''));
     }
     $values['sponsorType'] = (string)($_POST['sponsorType'] ?? '');
@@ -71,16 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($values['name'] === '') $errors[] = 'Sponsor Name is required.';
     if (!array_key_exists($values['sponsorType'], $SPONSOR_TYPES)) $errors[] = 'Choose a valid sponsor type.';
     if ($values['shirtSize'] !== '' && !in_array($values['shirtSize'], $SHIRT_SIZES, true)) $errors[] = 'Choose a valid T-shirt size.';
-    if ($values['etccMemberName'] === '') {
-        $errors[] = 'ETCC Member Name is required.';
-    } else {
-        $matched = $memberNames[strtolower($values['etccMemberName'])] ?? null;
-        if ($matched === null) {
-            $errors[] = 'ETCC Member Name not found in the roster — pick a name from the suggestions.';
-        } else {
-            $values['etccMemberName'] = $matched; // normalize to the roster's canonical casing
-        }
-    }
 
     if (!$errors) {
         $record = [
@@ -91,8 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'email' => $values['email'],
             'address' => $values['address'],
             'website' => $values['website'],
-            'etccMemberName' => $values['etccMemberName'],
-            'memberEmail' => $values['memberEmail'],
             'sponsorType' => $values['sponsorType'],
             'shirtSize' => $values['shirtSize'],
             'submittedAt' => gmdate('c'),
@@ -109,10 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rawSettings = is_file(__DIR__ . '/app-settings.json') ? json_decode(file_get_contents(__DIR__ . '/app-settings.json'), true) : [];
                 $s = is_array($rawSettings) ? $rawSettings : [];
                 // Settings > New Sponsor Confirmation Email's "To" is the override;
-                // if it's left blank, default to the member's own email from this
-                // submission instead of not sending at all.
+                // if it's left blank, default to the sponsor's own submitted email
+                // instead of not sending at all (this form has no ETCC Member Name/
+                // Member Email fields — see the header comment — so there's no
+                // separate member email to fall back to like sponsor-form.php has).
                 $emailTo = trim((string)($s['sponsorEmailTo'] ?? ''));
-                if ($emailTo === '') $emailTo = $record['memberEmail'];
+                if ($emailTo === '') $emailTo = $record['email'];
                 $emailCc = trim((string)($s['sponsorEmailCc'] ?? ''));
                 $emailBcc = trim((string)($s['sponsorEmailBcc'] ?? ''));
                 $emailSubject = trim((string)($s['sponsorEmailSubject'] ?? '')) ?: 'New Sponsor Submission';
@@ -121,8 +98,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $rows = [
                         'Sponsor Type'     => $SPONSOR_TYPES[$record['sponsorType']] ?? $record['sponsorType'],
                         'Sponsor Name'     => $record['name'],
-                        'ETCC Member Name' => $record['etccMemberName'],
-                        'Member Email'     => $record['memberEmail'],
                         'Contact Person'   => $record['contactPerson'],
                         'Phone'            => $record['phone'],
                         'Email'            => $record['email'],
@@ -169,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = true;
             $values = [
                 'name' => '', 'contactPerson' => '', 'phone' => '', 'email' => '', 'address' => '',
-                'website' => '', 'etccMemberName' => '', 'memberEmail' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
+                'website' => '', 'sponsorType' => 'premier', 'shirtSize' => '',
             ];
         } else {
             $errors[] = 'Could not save your submission right now — please try again in a moment.';
@@ -216,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="wrap">
   <img src="ETCClogoWhiteBackground.png" alt="ETCC Logo" class="logo">
   <h1>Become a Car Show Sponsor</h1>
-  <div class="sub">East Tennessee Corvette Club</div>
+  <div class="sub">East Tennessee Corvette Club - Public Version</div>
   <div class="panel">
     <?php if ($success): ?>
       <div class="success">Thanks! The sponsorship was submitted successfully. You can add another below.</div>
@@ -240,35 +215,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <label for="f-name">Sponsor Name * <small style="font-weight:normal;color:var(--muted)">(Will appear on shirt)</small></label>
         <input type="text" id="f-name" name="name" required value="<?php echo htmlspecialchars($values['name']); ?>">
       </div>
-      <div class="form-row">
-        <label for="f-member">ETCC Member Name *</label>
-        <input type="text" id="f-member" name="etccMemberName" list="etcc-members" autocomplete="off" required
-          placeholder="Start typing your last name…" value="<?php echo htmlspecialchars($values['etccMemberName']); ?>">
-        <datalist id="etcc-members">
-          <?php foreach ($members as $m): ?>
-            <?php if (!empty($m['name'])): ?>
-              <option value="<?php echo htmlspecialchars($m['name']); ?>">
-            <?php endif; ?>
-          <?php endforeach; ?>
-        </datalist>
-      </div>
-      <div class="form-row">
-        <label for="f-member-email">Member Email</label>
-        <input type="email" id="f-member-email" name="memberEmail" value="<?php echo htmlspecialchars($values['memberEmail']); ?>">
-      </div>
-      <script>
-        (function () {
-          var memberEmails = <?php echo json_encode($memberEmails); ?>;
-          var nameInput = document.getElementById('f-member');
-          var emailInput = document.getElementById('f-member-email');
-          function fillEmail() {
-            var email = memberEmails[nameInput.value];
-            if (email) emailInput.value = email;
-          }
-          nameInput.addEventListener('input', fillEmail);
-          nameInput.addEventListener('change', fillEmail);
-        })();
-      </script>
       <div class="form-row">
         <label for="f-contact">Contact Person</label>
         <input type="text" id="f-contact" name="contactPerson" value="<?php echo htmlspecialchars($values['contactPerson']); ?>">

@@ -1,6 +1,7 @@
 <?php
-// Shared helpers for the deploy/ PHP endpoints (index.php, sponsor-form.php,
-// sponsor-submissions.php, registrations-upload.php). Centralizes the auth
+// Shared helpers for the deploy/ PHP endpoints (index.php,
+// member-sponsor-form.php, public-sponsor-form.php, sponsor-submissions.php,
+// registrations-upload.php). Centralizes the auth
 // check, lock-guarded JSON read/write, and safe-inline-script-embedding
 // logic that would otherwise be copy-pasted across four files.
 

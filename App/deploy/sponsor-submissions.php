@@ -3,9 +3,9 @@
 // This is the single always-current sponsor list: the hosted index.php
 // reads it fresh on every page load, and the Sponsors tab reads it on load
 // and pushes every add/edit/delete (and the bulk-delete/"Remove All"
-// actions) here immediately. sponsor-form.php (gated by the same shared
-// password as index.php) only ever appends to this same file directly
-// (see that file), not through this API.
+// actions) here immediately. member-sponsor-form.php / public-sponsor-form.php
+// only ever append to this same file directly (see those files), not
+// through this API.
 //
 // Actions: list (default), upsert, delete, clear.
 //

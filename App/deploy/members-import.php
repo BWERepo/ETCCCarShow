@@ -3,8 +3,10 @@
 // last_name/first_name columns — spacing/underscore/case-insensitive, so
 // "Last Name" or "LastName" work too) into members-data.json (gitignored,
 // contains member PII, blocked from direct HTTP access by .htaccess).
-// sponsor-form.php reads that file to populate the ETCC Member Name
-// datalist/autocomplete and to validate submissions against it. If the CSV
+// member-sponsor-form.php reads that file to populate the ETCC Member Name
+// datalist/autocomplete and to validate submissions against it (that field
+// doesn't exist on public-sponsor-form.php, which doesn't touch this file).
+// If the CSV
 // also has a member number, contact, vehicle, and/or spouse-first-name
 // columns (Member Number, Phone, Email, Address, City, State, Zip, Year,
 // Model, Color, Spouse First Name — same normalized, case/space/underscore-
